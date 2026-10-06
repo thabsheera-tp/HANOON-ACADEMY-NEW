@@ -1,0 +1,13 @@
+{
+  "appId": "com.hanoon.academy",
+  "appName": "Hanoon Academy",
+  "webDir": "out",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "backgroundColor": "#F0FDF4",
+    "allowMixedContent": true
+  }
+}

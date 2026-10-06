@@ -1,0 +1,71 @@
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+
+export function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  const isAdminRoute = pathname.startsWith("/admin");
+  const isTeacherRoute = pathname.startsWith("/teacher");
+
+  // Only protect /admin and /teacher routes
+  if (!isAdminRoute && !isTeacherRoute) {
+    return NextResponse.next();
+  }
+
+  // In development / demo mode, allow direct access so users can evaluate dashboards without being bounced
+  if (process.env.NODE_ENV !== "production") {
+    return NextResponse.next();
+  }
+
+  const sessionCookie = request.cookies.get("hanoon_auth_session")?.value;
+
+  // 1. Unauthenticated users -> Redirect to /login
+  if (!sessionCookie) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("redirect", pathname);
+    loginUrl.searchParams.set("reason", "unauthenticated");
+    return NextResponse.redirect(loginUrl);
+  }
+
+  try {
+    const sessionData = JSON.parse(decodeURIComponent(sessionCookie));
+    const role = sessionData?.user?.role;
+    const expiresAt = sessionData?.expiresAt;
+
+    // Check session expiry
+    if (expiresAt && expiresAt < Date.now()) {
+      const loginUrl = new URL("/login", request.url);
+      loginUrl.searchParams.set("reason", "expired");
+      return NextResponse.redirect(loginUrl);
+    }
+
+    // 2. Protect /admin route: strictly accessible by role === 'admin'
+    if (isAdminRoute) {
+      if (role !== "admin") {
+        if (role === "teacher") {
+          return NextResponse.redirect(new URL("/teacher", request.url));
+        }
+        return NextResponse.redirect(new URL("/login?error=admin_only", request.url));
+      }
+    }
+
+    // 3. Protect /teacher route: accessible by role === 'teacher' or 'admin'
+    if (isTeacherRoute) {
+      if (role !== "teacher" && role !== "admin") {
+        return NextResponse.redirect(new URL("/login?error=teacher_only", request.url));
+      }
+    }
+
+    return NextResponse.next();
+  } catch {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("reason", "invalid_session");
+    return NextResponse.redirect(loginUrl);
+  }
+}
+
+export default proxy;
+
+export const config = {
+  matcher: ["/admin/:path*", "/teacher/:path*"],
+};
