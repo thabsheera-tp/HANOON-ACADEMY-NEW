@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import MobileHeader from "@/components/mobile/MobileHeader";
 import MobileBottomNav from "@/components/mobile/MobileBottomNav";
 import ScreenSplash from "@/components/mobile/ScreenSplash";
@@ -18,6 +19,7 @@ interface MobileAppShellProps {
 }
 
 export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}) {
+  const router = useRouter();
   // 6-Step Workflow:
   // Step 1: "splash" -> Welcome Screen
   // Step 2: "courses" -> Course Selection View
@@ -229,11 +231,10 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
 
         {/* Scrollable Viewport */}
         <div className="flex-1 overflow-y-auto flex flex-col relative z-10 bg-white">
-          {/* Step 1: Welcome Screen */}
+          {/* Step 1: Welcome Screen (Ultra-minimalist branding & direct route to /login) */}
           {currentScreen === "splash" && (
             <ScreenSplash
-              onEnterPortal={handleExploreCourses}
-              onExploreCourses={handleExploreCourses}
+              onGetStarted={() => router.push("/login")}
             />
           )}
 
