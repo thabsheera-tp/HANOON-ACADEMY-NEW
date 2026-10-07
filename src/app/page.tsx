@@ -151,6 +151,9 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
             status: "pending_verification",
           });
           setCurrentScreen("dashboard");
+        } else {
+          // If student is authenticated but has not paid yet, route to Course Selection
+          setCurrentScreen("courses");
         }
       };
 

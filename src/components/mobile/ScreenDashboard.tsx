@@ -281,8 +281,8 @@ export default function ScreenDashboard({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5 text-amber-600 animate-spin" />
-              <span className="text-xs font-bold text-amber-900 uppercase tracking-wide">
-                Verification in Progress
+              <span className="text-xs font-black text-amber-900 uppercase tracking-wide">
+                Payment submitted! Awaiting Admin Verification.
               </span>
             </div>
             <span className="bg-amber-100 text-amber-800 border border-amber-200 text-[9px] font-extrabold px-2 py-0.5 rounded-full">
