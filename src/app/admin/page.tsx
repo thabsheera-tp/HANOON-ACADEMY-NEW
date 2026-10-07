@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -28,7 +28,7 @@ import {
   ChevronRight,
   Filter,
 } from "lucide-react";
-import { getCurrentSession, setAuthSession, logoutUser, UserProfileRecord, SPECIAL_CREDENTIALS } from "@/services/authService";
+import { getCurrentSession, logoutUser, UserProfileRecord } from "@/services/authService";
 import HanoonLogo from "@/components/brand/HanoonLogo";
 import MonthlyRevenueBarChart from "@/components/charts/MonthlyRevenueBarChart";
 import { fetchPayments, updatePaymentStatus } from "@/services/paymentService";
@@ -36,8 +36,10 @@ import { fetchStudents } from "@/services/studentService";
 import { fetchPayroll, markPayrollAsPaid, createPayrollRecord } from "@/services/payrollService";
 import {
   getAppSettings,
+  fetchAppSettings,
   saveAppSettings,
   getAuditLogs,
+  fetchAuditLogs,
   addAuditLog,
   AppSettings,
   AuditLogItem,
@@ -81,37 +83,38 @@ export default function AdminDashboardPage() {
   const [settingsForm, setSettingsForm] = useState<AppSettings>(getAppSettings());
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
-  useEffect(() => {
-    let session = getCurrentSession();
-    if (!session || !session.user || session.user.role !== "admin") {
-      const defaultAdmin = SPECIAL_CREDENTIALS.admin.profile;
-      setAuthSession(defaultAdmin);
-      session = { user: defaultAdmin, token: "hanoon-admin-session", expiresAt: Date.now() + 86400000 };
-    }
-    setCurrentUser(session.user);
-    loadAllData();
-  }, [router]);
-
-  const loadAllData = async () => {
+  const loadAllData = useCallback(async () => {
     setLoading(true);
     try {
-      const [payData, stdData, rollData] = await Promise.all([
+      const [payData, stdData, rollData, settingsData, auditData] = await Promise.all([
         fetchPayments(),
         fetchStudents(),
         fetchPayroll(),
+        fetchAppSettings(),
+        fetchAuditLogs(),
       ]);
       setPayments(payData);
       setStudents(stdData);
       setPayroll(rollData);
-      setSettings(getAppSettings());
-      setSettingsForm(getAppSettings());
-      setAuditLogs(getAuditLogs());
+      setSettings(settingsData);
+      setSettingsForm(settingsData);
+      setAuditLogs(auditData);
     } catch (err) {
       console.error("Failed to load admin dashboard data:", err);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const session = getCurrentSession();
+    if (!session || !session.user || session.user.role !== "admin") {
+      router.replace("/login?error=admin_only");
+      return;
+    }
+    setCurrentUser(session.user);
+    loadAllData();
+  }, [loadAllData, router]);
 
   const handleSignOut = async () => {
     await logoutUser();
@@ -223,12 +226,13 @@ export default function AdminDashboardPage() {
   };
 
   // Settings Save Action
-  const handleSaveSettings = (e: React.FormEvent) => {
+  const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    saveAppSettings(settingsForm);
+    await saveAppSettings(settingsForm);
     setSettings(settingsForm);
-    setAuditLogs(getAuditLogs());
-    setSaveSuccessMsg("Global application settings saved successfully!");
+    const updatedLogs = await fetchAuditLogs();
+    setAuditLogs(updatedLogs);
+    setSaveSuccessMsg("Global application settings saved & synced to Supabase!");
     setTimeout(() => setSaveSuccessMsg(null), 3000);
   };
 
@@ -249,6 +253,17 @@ export default function AdminDashboardPage() {
   const approvedPaymentsTotal = payments
     .filter((p) => p.status === "APPROVED")
     .reduce((sum, p) => sum + (p.amount || 0), 0);
+
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-purple-50 flex items-center justify-center p-4">
+        <div className="flex flex-col items-center gap-3">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600" />
+          <span className="text-xs font-semibold text-slate-500">Verifying administrator authorization...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-purple-50 text-slate-900 font-['Plus_Jakarta_Sans'] select-none">

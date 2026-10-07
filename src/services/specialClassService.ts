@@ -20,14 +20,14 @@ export interface SpecialClass {
 export const DEFAULT_SPECIAL_CLASSES: SpecialClass[] = [
   {
     id: "spc-tajweed",
-    title: "Tajweed",
+    title: "Tajweed Special Class",
     subtitle: "Quran Recitation Rules & Phonetics",
     instructor: "Qari Usthad Abdul Rahman Al-Hafiz",
     category: "Recitation",
     badgeGradient: "bg-gradient-to-tr from-violet-600 via-indigo-600 to-purple-500 text-white shadow-lg shadow-purple-500/25",
     iconType: "mic",
     scheduleTime: "Every Sunday • 08:00 AM IST",
-    status: "LIVE_NOW",
+    status: "UPCOMING",
     liveUrl: "https://zoom.us/j/hanoon-tajweed-live",
     description: "Master the authentic science of Quranic phonetics, Makharij al-Huroof, Sifat, and precision articulation under certified Qira'at masters.",
     recordingDuration: "54 mins",
@@ -56,7 +56,7 @@ export const DEFAULT_SPECIAL_CLASSES: SpecialClass[] = [
   },
 ];
 
-const LOCAL_STORAGE_KEY = "hanoon_special_classes_v1";
+const LOCAL_STORAGE_KEY = "hanoon_special_classes_v2";
 
 export function getSpecialClasses(): SpecialClass[] {
   if (typeof window === "undefined") return DEFAULT_SPECIAL_CLASSES;

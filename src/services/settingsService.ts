@@ -1,3 +1,6 @@
+import { RealtimeChannel } from "@supabase/supabase-js";
+import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
+
 export interface AppSettings {
   upiId: string;
   merchantName: string;
@@ -22,7 +25,7 @@ export interface AuditLogItem {
   details: string;
 }
 
-const DEFAULT_SETTINGS: AppSettings = {
+export const DEFAULT_SETTINGS: AppSettings = {
   upiId: "hanoonacademy@upi",
   merchantName: "Hanoon Academy of Islamic Studies",
   autoApprovalEnabled: false,
@@ -72,10 +75,16 @@ const DEFAULT_AUDIT_LOGS: AuditLogItem[] = [
   },
 ];
 
+const LOCAL_SETTINGS_KEY = "hanoon_app_settings";
+const LOCAL_AUDIT_KEY = "hanoon_audit_logs";
+
+/**
+ * Synchronous reader for fast component mount & hydration.
+ */
 export function getAppSettings(): AppSettings {
   if (typeof window === "undefined") return DEFAULT_SETTINGS;
   try {
-    const raw = localStorage.getItem("hanoon_app_settings");
+    const raw = localStorage.getItem(LOCAL_SETTINGS_KEY);
     if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
   } catch (e) {
     console.warn("Failed to read settings from localStorage:", e);
@@ -83,26 +92,171 @@ export function getAppSettings(): AppSettings {
   return DEFAULT_SETTINGS;
 }
 
-export function saveAppSettings(newSettings: AppSettings): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem("hanoon_app_settings", JSON.stringify(newSettings));
-    window.dispatchEvent(new CustomEvent("hanoon_settings_updated", { detail: newSettings }));
-    addAuditLog({
-      actor: "Admin Root",
-      action: "Updated Global Settings",
-      category: "SETTINGS",
-      details: `Updated UPI (${newSettings.upiId}) and Course Pricing rates.`,
-    });
-  } catch (e) {
-    console.error("Failed to save settings:", e);
+/**
+ * Asynchronously fetches settings from Supabase 'app_settings' table,
+ * with fallback to localStorage.
+ */
+export async function fetchAppSettings(): Promise<AppSettings> {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase
+        .from("app_settings")
+        .select("*")
+        .eq("id", "global")
+        .single();
+
+      if (!error && data) {
+        const mappedSettings: AppSettings = {
+          upiId: data.upi_id || DEFAULT_SETTINGS.upiId,
+          merchantName: data.merchant_name || DEFAULT_SETTINGS.merchantName,
+          autoApprovalEnabled: Boolean(data.auto_approval_enabled),
+          contactWhatsApp: data.contact_whatsapp || DEFAULT_SETTINGS.contactWhatsApp,
+          notificationAlerts: data.notification_alerts ?? DEFAULT_SETTINGS.notificationAlerts,
+          compactMobileMode: Boolean(data.compact_mobile_mode),
+          coursePricing: {
+            ...DEFAULT_SETTINGS.coursePricing,
+            ...(data.course_pricing || {}),
+          },
+        };
+
+        if (typeof window !== "undefined") {
+          localStorage.setItem(LOCAL_SETTINGS_KEY, JSON.stringify(mappedSettings));
+        }
+        return mappedSettings;
+      }
+    } catch (err) {
+      console.warn("Failed to fetch settings from Supabase, fallback to local:", err);
+    }
+  }
+
+  return getAppSettings();
+}
+
+/**
+ * Persists settings to Supabase and broadcasts changes to all devices via Realtime.
+ */
+export async function saveAppSettings(newSettings: AppSettings): Promise<void> {
+  const now = new Date().toISOString();
+
+  // 1. Save to Supabase 'app_settings' table
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { error } = await supabase.from("app_settings").upsert({
+        id: "global",
+        upi_id: newSettings.upiId,
+        merchant_name: newSettings.merchantName,
+        auto_approval_enabled: newSettings.autoApprovalEnabled,
+        contact_whatsapp: newSettings.contactWhatsApp,
+        notification_alerts: newSettings.notificationAlerts,
+        compact_mobile_mode: newSettings.compactMobileMode,
+        course_pricing: newSettings.coursePricing,
+        updated_at: now,
+      });
+
+      if (error) {
+        console.error("Supabase app_settings upsert error:", error);
+      }
+    } catch (err) {
+      console.warn("Failed to save settings to Supabase:", err);
+    }
+  }
+
+  // 2. Cache in localStorage & trigger local window event
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(LOCAL_SETTINGS_KEY, JSON.stringify(newSettings));
+      window.dispatchEvent(new CustomEvent("hanoon_settings_updated", { detail: newSettings }));
+      addAuditLog({
+        actor: "Admin",
+        action: "Updated Global Settings",
+        category: "SETTINGS",
+        details: `Updated UPI (${newSettings.upiId}) and Course Pricing rates.`,
+      });
+    } catch (e) {
+      console.error("Failed to save settings to localStorage:", e);
+    }
   }
 }
 
+/**
+ * Subscribes to real-time changes in Institute Settings (UPI ID, fees, WhatsApp).
+ * Ensures instant sync to student screens when Admin changes settings.
+ */
+export function subscribeToAppSettings(callback: (settings: AppSettings) => void): () => void {
+  let realtimeChannel: RealtimeChannel | null = null;
+
+  // 1. Supabase Postgres Realtime Subscription
+  if (isSupabaseConfigured && supabase) {
+    try {
+      realtimeChannel = supabase
+        .channel("public:app_settings_global")
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "app_settings",
+            filter: "id=eq.global",
+          },
+          (payload) => {
+            const row = payload.new as Record<string, unknown>;
+            if (row) {
+              const updated: AppSettings = {
+                upiId: (row.upi_id as string) || DEFAULT_SETTINGS.upiId,
+                merchantName: (row.merchant_name as string) || DEFAULT_SETTINGS.merchantName,
+                autoApprovalEnabled: Boolean(row.auto_approval_enabled),
+                contactWhatsApp: (row.contact_whatsapp as string) || DEFAULT_SETTINGS.contactWhatsApp,
+                notificationAlerts: (row.notification_alerts as boolean) ?? DEFAULT_SETTINGS.notificationAlerts,
+                compactMobileMode: Boolean(row.compact_mobile_mode),
+                coursePricing: {
+                  ...DEFAULT_SETTINGS.coursePricing,
+                  ...((row.course_pricing as typeof DEFAULT_SETTINGS.coursePricing) || {}),
+                },
+              };
+
+              if (typeof window !== "undefined") {
+                localStorage.setItem(LOCAL_SETTINGS_KEY, JSON.stringify(updated));
+              }
+              callback(updated);
+            }
+          }
+        )
+        .subscribe();
+    } catch (err) {
+      console.warn("Realtime settings subscription error:", err);
+    }
+  }
+
+  // 2. Local Window Event Listener (instant update across same device tabs)
+  const handleLocalEvent = (e: Event) => {
+    const customEvt = e as CustomEvent<AppSettings>;
+    if (customEvt.detail) {
+      callback(customEvt.detail);
+    }
+  };
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("hanoon_settings_updated", handleLocalEvent);
+  }
+
+  // Cleanup function
+  return () => {
+    if (realtimeChannel && supabase) {
+      supabase.removeChannel(realtimeChannel);
+    }
+    if (typeof window !== "undefined") {
+      window.removeEventListener("hanoon_settings_updated", handleLocalEvent);
+    }
+  };
+}
+
+/**
+ * Retrieves audit logs with Supabase support.
+ */
 export function getAuditLogs(): AuditLogItem[] {
   if (typeof window === "undefined") return DEFAULT_AUDIT_LOGS;
   try {
-    const raw = localStorage.getItem("hanoon_audit_logs");
+    const raw = localStorage.getItem(LOCAL_AUDIT_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -113,19 +267,73 @@ export function getAuditLogs(): AuditLogItem[] {
   return DEFAULT_AUDIT_LOGS;
 }
 
-export function addAuditLog(entry: Omit<AuditLogItem, "id" | "timestamp">): void {
-  if (typeof window === "undefined") return;
-  try {
-    const current = getAuditLogs();
-    const newLog: AuditLogItem = {
-      ...entry,
-      id: `aud-${Date.now()}`,
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    };
-    const updated = [newLog, ...current].slice(0, 50); // keep recent 50
-    localStorage.setItem("hanoon_audit_logs", JSON.stringify(updated));
-    window.dispatchEvent(new CustomEvent("hanoon_audit_logs_updated", { detail: updated }));
-  } catch (e) {
-    console.error("Failed to add audit log:", e);
+/**
+ * Asynchronously fetches audit logs from Supabase 'audit_logs' table.
+ */
+export async function fetchAuditLogs(): Promise<AuditLogItem[]> {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase
+        .from("audit_logs")
+        .select("*")
+        .order("timestamp", { ascending: false })
+        .limit(50);
+
+      if (!error && data && data.length > 0) {
+        const mapped: AuditLogItem[] = data.map((d) => ({
+          id: d.id,
+          timestamp: new Date(d.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          actor: d.actor,
+          action: d.action,
+          category: d.category,
+          details: d.details,
+        }));
+        if (typeof window !== "undefined") {
+          localStorage.setItem(LOCAL_AUDIT_KEY, JSON.stringify(mapped));
+        }
+        return mapped;
+      }
+    } catch (err) {
+      console.warn("Failed to fetch audit logs from Supabase:", err);
+    }
+  }
+
+  return getAuditLogs();
+}
+
+/**
+ * Appends a new audit log to both Supabase and localStorage.
+ */
+export async function addAuditLog(entry: Omit<AuditLogItem, "id" | "timestamp">): Promise<void> {
+  const newLog: AuditLogItem = {
+    ...entry,
+    id: `aud-${Date.now()}`,
+    timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+  };
+
+  if (isSupabaseConfigured && supabase) {
+    try {
+      await supabase.from("audit_logs").insert([
+        {
+          actor: entry.actor,
+          action: entry.action,
+          category: entry.category,
+          details: entry.details,
+        },
+      ]);
+    } catch (err) {
+      console.warn("Supabase audit log insert error:", err);
+    }
+  }
+
+  if (typeof window !== "undefined") {
+    try {
+      const current = getAuditLogs();
+      const updated = [newLog, ...current].slice(0, 50);
+      localStorage.setItem(LOCAL_AUDIT_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new CustomEvent("hanoon_audit_logs_updated", { detail: updated }));
+    } catch (e) {
+      console.error("Failed to add audit log to localStorage:", e);
+    }
   }
 }

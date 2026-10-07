@@ -126,3 +126,41 @@ export interface DbPayroll {
   paid_at?: string;
   created_at?: string;
 }
+
+export interface DbProfile {
+  id: string;
+  email: string;
+  full_name: string;
+  role: "student" | "teacher" | "admin";
+  district?: string;
+  whatsapp_num?: string;
+  avatar_url?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface DbAppSettings {
+  id: string;
+  upi_id: string;
+  merchant_name: string;
+  auto_approval_enabled: boolean;
+  contact_whatsapp: string;
+  notification_alerts: boolean;
+  compact_mobile_mode: boolean;
+  course_pricing: {
+    adaviyya: number;
+    homeTuition: number;
+    fashionDesigning: number;
+    shamail: number;
+  };
+  updated_at?: string;
+}
+
+export interface DbAuditLog {
+  id: string;
+  timestamp: string;
+  actor: string;
+  action: string;
+  category: "PAYMENT" | "CURRICULUM" | "PAYROLL" | "SETTINGS" | "AUTH";
+  details: string;
+}

@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import Link from "next/link";
 import {
   Bell,
   Radio,
@@ -15,10 +14,7 @@ import {
   Megaphone,
   MessageCircle,
   HelpCircle,
-  Video,
   ChevronRight,
-  ShieldCheck,
-  ExternalLink,
   BarChart3,
 } from "lucide-react";
 import { UserProfile, SelectedCourse, PaymentDetails } from "@/types/app";
@@ -34,6 +30,7 @@ import SubjectClassHubModal from "@/components/mobile/SubjectClassHubModal";
 import { getAdaviyyaSubjects, AdaviyyaSubject } from "@/services/subjectService";
 import AttendanceDonutChart from "@/components/charts/AttendanceDonutChart";
 import ProgressScoreBarChart from "@/components/charts/ProgressScoreBarChart";
+import { getAppSettings } from "@/services/settingsService";
 
 interface ScreenDashboardProps {
   userProfile: UserProfile;
@@ -41,7 +38,6 @@ interface ScreenDashboardProps {
   paymentDetails: PaymentDetails;
   onChangeCourse: () => void;
   onOpenReceipt?: () => void;
-  onOpenAdminPanel?: () => void;
   onSimulateAdminApproval?: () => void;
 }
 
@@ -50,7 +46,6 @@ export default function ScreenDashboard({
   selectedCourse,
   paymentDetails,
   onOpenReceipt,
-  onOpenAdminPanel,
   onSimulateAdminApproval,
 }: ScreenDashboardProps) {
   const [showLiveModal, setShowLiveModal] = useState(false);
@@ -131,16 +126,13 @@ export default function ScreenDashboard({
 
   return (
     <div className="w-full max-w-md mx-auto px-4 py-4 flex-1 flex flex-col justify-start space-y-4 select-none font-['Plus_Jakarta_Sans'] bg-purple-50/30 text-slate-900">
-      {/* Top Header: Student Profile + Admin Desk + Notification Bell */}
+      {/* Top Header: Student Profile + Notification Bell */}
       <div className="flex items-center justify-between pt-1">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-2xl bg-purple-600 text-white font-black flex items-center justify-center shadow-sm text-base">
             {avatarLetter}
           </div>
           <div>
-            <span className="text-[10px] font-bold text-purple-600 uppercase tracking-wider block">
-              Student Portal
-            </span>
             <h2 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight leading-tight">
               Welcome, {studentName}
             </h2>
@@ -148,18 +140,6 @@ export default function ScreenDashboard({
         </div>
 
         <div className="flex items-center gap-2">
-          {onOpenAdminPanel && (
-            <button
-              type="button"
-              onClick={onOpenAdminPanel}
-              className="py-1.5 px-2.5 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-800 text-[10px] font-bold flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
-              title="Open Real-time Admin Desk"
-            >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Admin Desk</span>
-            </button>
-          )}
-
           <button
             type="button"
             onClick={() => setShowNotificationToast((prev) => !prev)}
@@ -226,24 +206,13 @@ export default function ScreenDashboard({
           </p>
 
           <div className="flex items-center gap-2 pt-1">
-            {onOpenAdminPanel && (
-              <button
-                type="button"
-                onClick={onOpenAdminPanel}
-                className="flex-1 py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
-              >
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Open Admin Desk to Approve</span>
-              </button>
-            )}
-
             {onSimulateAdminApproval && (
               <button
                 type="button"
                 onClick={onSimulateAdminApproval}
                 className="py-2 px-3 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer shadow-xs"
               >
-                <span>Instant Unlock</span>
+                <span>Instant Unlock (Evaluation)</span>
               </button>
             )}
           </div>
@@ -522,14 +491,14 @@ export default function ScreenDashboard({
       </div>
 
       {/* ========================================================
-          5. SPECIAL CLASSES MODULE (Tajweed, Burdah Live)
+          5. UPCOMING SPECIAL CLASSES (Tajweed Special Class, Burdah Live)
           ======================================================== */}
       <div className="space-y-2.5">
         <div className="flex items-center justify-between px-1">
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-purple-600" />
             <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-              Special Classes & Events
+              Upcoming Special Classes
             </span>
           </div>
           <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
@@ -671,7 +640,7 @@ export default function ScreenDashboard({
         </p>
 
         <a
-          href={`https://wa.me/919846012345?text=Assalamu%20Alaikum%20Usthad,%20I%20am%20${encodeURIComponent(studentName)},%20enrolled%20in%20${encodeURIComponent(selectedCourse.title)}.%20I%20need%20academic%20assistance.`}
+          href={`https://wa.me/${getAppSettings().contactWhatsApp || "919846012345"}?text=Assalamu%20Alaikum%20Usthad,%20I%20am%20${encodeURIComponent(studentName)},%20enrolled%20in%20${encodeURIComponent(selectedCourse.title)}.%20I%20need%20academic%20assistance.`}
           target="_blank"
           rel="noopener noreferrer"
           className="w-full py-3 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
@@ -681,27 +650,7 @@ export default function ScreenDashboard({
         </a>
       </div>
 
-      {/* Academy Staff Portals Quick Access */}
-      <div className="p-4 rounded-2xl bg-purple-50/70 border border-purple-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="w-4 h-4 text-purple-600 shrink-0" />
-          <span className="font-bold text-slate-700">Are you a faculty member or administrator?</span>
-        </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <Link
-            href="/teacher"
-            className="flex-1 sm:flex-initial py-2 px-3.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-[11px] text-center shadow-xs transition-all"
-          >
-            Teacher Portal &rarr;
-          </Link>
-          <Link
-            href="/admin"
-            className="flex-1 sm:flex-initial py-2 px-3.5 rounded-xl bg-white hover:bg-purple-100 text-purple-800 border border-purple-200 font-extrabold text-[11px] text-center transition-all"
-          >
-            Admin Dashboard &rarr;
-          </Link>
-        </div>
-      </div>
+
 
       {/* ========================================================
           MODALS

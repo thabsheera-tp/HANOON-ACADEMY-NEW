@@ -12,10 +12,6 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // In development / demo mode, allow direct access so users can evaluate dashboards without being bounced
-  if (process.env.NODE_ENV !== "production") {
-    return NextResponse.next();
-  }
 
   const sessionCookie = request.cookies.get("hanoon_auth_session")?.value;
 

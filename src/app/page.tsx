@@ -246,7 +246,6 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
               paymentDetails={paymentDetails}
               onChangeCourse={() => setCurrentScreen("courses")}
               onOpenReceipt={() => setIsReceiptOpen(true)}
-              onOpenAdminPanel={() => setIsAdminOpen(true)}
               onSimulateAdminApproval={handleSimulateAdminApproval}
             />
           )}

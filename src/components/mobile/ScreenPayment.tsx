@@ -9,17 +9,15 @@ import {
   Clock,
   QrCode,
   CheckCircle2,
-  Sparkles,
   Smartphone,
-  CreditCard,
   FileText,
   User,
   Phone,
-  HelpCircle,
 } from "lucide-react";
 import { SelectedCourse, PaymentDetails, UserProfile } from "@/types/app";
 import { registerStudentAndPayment } from "@/services/studentService";
 import { subscribeToPaymentStatus } from "@/services/paymentService";
+import { getAppSettings, fetchAppSettings, subscribeToAppSettings } from "@/services/settingsService";
 
 interface ScreenPaymentProps {
   userProfile?: UserProfile;
@@ -56,7 +54,17 @@ export default function ScreenPayment({
       : "unpaid"
   );
 
-  const UPI_ID = "hanoonacademy@upi";
+  const [appSettings, setAppSettings] = useState(getAppSettings());
+
+  useEffect(() => {
+    fetchAppSettings().then(setAppSettings);
+    const unsubscribeSettings = subscribeToAppSettings((updated) => {
+      setAppSettings(updated);
+    });
+    return () => unsubscribeSettings();
+  }, []);
+
+  const upiId = appSettings.upiId || "hanoonacademy@upi";
 
   // Subscribe to real-time status updates when a TxID is submitted
   useEffect(() => {
@@ -81,10 +89,14 @@ export default function ScreenPayment({
   }, [paymentDetails.upiTxId, onSimulateAdminApproval]);
 
   const handleCopyUPI = () => {
-    navigator.clipboard.writeText(UPI_ID);
+    navigator.clipboard.writeText(upiId);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const isAdaviyya = selectedCourse.id === "adaviyya" || selectedCourse.id === "athaviy";
+  const payableAmount = isAdaviyya ? (selectedCourse.admissionFeeAmount || 500) : selectedCourse.feeAmount;
+  const payableFeeFormatted = isAdaviyya ? (selectedCourse.admissionFee || "₹500") : selectedCourse.fee;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -127,7 +139,7 @@ export default function ScreenPayment({
         courseId: selectedCourse.id,
         courseTitle: selectedCourse.title,
         upiTxId: cleanTxId,
-        amount: selectedCourse.feeAmount,
+        amount: payableAmount,
       });
 
       setVerifiedStatus("pending");
@@ -149,27 +161,35 @@ export default function ScreenPayment({
   return (
     <div className="w-full max-w-md mx-auto px-5 py-6 flex-1 flex flex-col justify-start space-y-6 select-none font-['Plus_Jakarta_Sans'] bg-purple-50/40">
       {/* Top Admission Fee Summary Card */}
-      <div className="neumorphic-card p-5 rounded-3xl flex items-center justify-between">
-        <div className="space-y-1">
-          <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-600 bg-purple-100/70 px-2.5 py-0.5 rounded-full inline-block">
-            Step 3 of 3 • Payment
-          </span>
-          <h1 className="text-lg font-black text-slate-900 leading-tight">
-            {selectedCourse.title}
-          </h1>
-          <p className="text-xs text-slate-500 font-medium">
-            {selectedCourse.duration}
-          </p>
+      <div className="neumorphic-card p-5 rounded-3xl space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-600 bg-purple-100/70 px-2.5 py-0.5 rounded-full inline-block">
+              {isAdaviyya ? "Admission Fee Checkout" : "Tuition Fee Checkout"}
+            </span>
+            <h1 className="text-lg font-black text-slate-900 leading-tight">
+              {selectedCourse.title}
+            </h1>
+            <p className="text-xs text-slate-500 font-medium">
+              {selectedCourse.duration}
+            </p>
+          </div>
+
+          <div className="text-right">
+            <span className="text-2xl font-black text-purple-700 block tracking-tight">
+              {payableFeeFormatted}
+            </span>
+            <span className="text-[10px] text-slate-500 font-bold">
+              {isAdaviyya ? "Admission Fee (Now)" : "Full Tuition"}
+            </span>
+          </div>
         </div>
 
-        <div className="text-right">
-          <span className="text-2xl font-black text-purple-700 block tracking-tight">
-            {selectedCourse.fee}
-          </span>
-          <span className="text-[10px] text-slate-400 font-semibold">
-            One-time Tuition
-          </span>
-        </div>
+        {isAdaviyya && (
+          <div className="p-3 rounded-2xl bg-purple-50 border border-purple-100 text-xs text-purple-900 font-medium leading-relaxed">
+            💡 <strong>Pay the ₹500 admission fee now to unlock the course.</strong> Total Course Fee is ₹3,000; the balance can be paid later in installments.
+          </div>
+        )}
       </div>
 
       {/* VERIFIED SUCCESS BANNER */}
@@ -279,7 +299,7 @@ export default function ScreenPayment({
                   2
                 </span>
                 <span>
-                  Pay exact amount <strong className="text-purple-700">{selectedCourse.fee}</strong> to our Institute UPI ID or QR.
+                  Pay exact amount <strong className="text-purple-700">{payableFeeFormatted}</strong> to our Institute UPI ID or QR.
                 </span>
               </div>
               <div className="flex items-start gap-2">
@@ -304,7 +324,7 @@ export default function ScreenPayment({
                 Official UPI ID
               </span>
               <span className="font-mono text-sm font-black text-slate-900 select-all">
-                {UPI_ID}
+                {upiId}
               </span>
             </div>
 
@@ -436,7 +456,11 @@ export default function ScreenPayment({
                 <span>Submitting to Supabase...</span>
               ) : (
                 <>
-                  <span>Submit Payment for Approval</span>
+                  <span>
+                    {isAdaviyya
+                      ? `Submit ${payableFeeFormatted} Admission Fee for Approval`
+                      : "Submit Payment for Approval"}
+                  </span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}

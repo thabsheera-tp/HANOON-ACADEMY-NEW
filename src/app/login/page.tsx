@@ -15,25 +15,45 @@ import {
   CheckCircle2,
   AlertCircle,
   KeyRound,
+  Phone,
+  MapPin,
 } from "lucide-react";
 import HanoonLogo from "@/components/brand/HanoonLogo";
-import { loginUser, getCurrentSession, setAuthSession, SPECIAL_CREDENTIALS, UserRole } from "@/services/authService";
+import {
+  loginUser,
+  signUpUser,
+  getCurrentSession,
+  setAuthSession,
+  SPECIAL_CREDENTIALS,
+  UserRole,
+} from "@/services/authService";
+import { isSupabaseConfigured } from "@/lib/supabaseClient";
 
 function LoginFormContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  const [portalCategory, setPortalCategory] = useState<"student" | "staff">("student");
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [whatsappNum, setWhatsappNum] = useState("");
+  const [district, setDistrict] = useState("Malappuram");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Check if redirected with error reason
+  // Check if redirected with error reason or specific portal param
   useEffect(() => {
     const errorParam = searchParams.get("error");
     const reasonParam = searchParams.get("reason");
+    const portalParam = searchParams.get("portal");
+
+    if (portalParam === "staff" || errorParam === "admin_only" || errorParam === "teacher_only") {
+      setPortalCategory("staff");
+    }
 
     if (errorParam === "admin_only") {
       setErrorMessage("Access Denied: The /admin portal requires verified Administrator credentials.");
@@ -56,50 +76,73 @@ function LoginFormContent() {
     }
   }, [searchParams, router]);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setSuccessMessage(null);
     setIsLoading(true);
 
     try {
-      const result = await loginUser(identifier, password);
+      if (portalCategory === "student" && authMode === "signup") {
+        if (!fullName.trim()) {
+          setErrorMessage("Please enter your full name.");
+          setIsLoading(false);
+          return;
+        }
 
-      if (result.success && result.role) {
-        setSuccessMessage(`Authenticated as ${result.role.toUpperCase()}! Redirecting...`);
+        const result = await signUpUser({
+          email: identifier,
+          password: password,
+          fullName: fullName,
+          role: "student",
+          district: district,
+          whatsappNum: whatsappNum,
+        });
 
-        setTimeout(() => {
-          if (result.role === "admin") {
-            router.push("/admin");
-          } else if (result.role === "teacher") {
-            router.push("/teacher");
+        if (result.success) {
+          if (result.requiresEmailConfirmation) {
+            setSuccessMessage(result.error || "Account created! Please check your email to confirm.");
+            setAuthMode("signin");
           } else {
-            router.push("/student");
+            setSuccessMessage("Account created successfully! Redirecting...");
+            setTimeout(() => {
+              router.push("/student");
+            }, 600);
           }
-        }, 500);
+        } else {
+          setErrorMessage(result.error || "Sign up failed. Please check your details.");
+        }
       } else {
-        setErrorMessage(result.error || "Invalid credentials. Please verify your email and password.");
+        const result = await loginUser(identifier, password);
+
+        if (result.success && result.role) {
+          // If staff gateway, ensure role is teacher or admin
+          if (portalCategory === "staff" && result.role === "student") {
+            setErrorMessage("This account is registered as a Student. Please switch to the Student Portal above.");
+            setIsLoading(false);
+            return;
+          }
+
+          setSuccessMessage(`Authenticated as ${result.role.toUpperCase()}! Redirecting...`);
+
+          setTimeout(() => {
+            if (result.role === "admin") {
+              router.push("/admin");
+            } else if (result.role === "teacher") {
+              router.push("/teacher");
+            } else {
+              router.push("/student");
+            }
+          }, 500);
+        } else {
+          setErrorMessage(result.error || "Invalid credentials. Please verify your email and password.");
+        }
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Authentication error occurred.";
       setErrorMessage(msg);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  // Quick Credential Autofill Helper for Testing
-  const handleQuickFill = (role: UserRole) => {
-    setErrorMessage(null);
-    if (role === "admin") {
-      setIdentifier(SPECIAL_CREDENTIALS.admin.email);
-      setPassword(SPECIAL_CREDENTIALS.admin.specialPass);
-    } else if (role === "teacher") {
-      setIdentifier(SPECIAL_CREDENTIALS.teacher.email);
-      setPassword(SPECIAL_CREDENTIALS.teacher.specialPass);
-    } else {
-      setIdentifier("student@hanoon.academy");
-      setPassword("student123");
     }
   };
 
@@ -116,22 +159,103 @@ function LoginFormContent() {
   };
 
   return (
-    <div className="w-full max-w-md mx-auto space-y-6">
+    <div className="w-full max-w-md mx-auto space-y-5">
       {/* Brand Header */}
       <div className="text-center space-y-2">
         <div className="flex justify-center mb-1">
           <HanoonLogo size="lg" />
         </div>
-        <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-          Academy Sign In
+        <h1 className="text-2xl font-black text-slate-900 tracking-tight">
+          {portalCategory === "staff"
+            ? "Faculty & Staff Gateway"
+            : authMode === "signup"
+            ? "Student Registration"
+            : "Student Portal Sign In"}
         </h1>
         <p className="text-xs text-slate-500 font-medium">
-          Access your personalized student curriculum, faculty desk, or admin portal.
+          {portalCategory === "staff"
+            ? "Restricted entrance for verified Teachers and Academy Administrators."
+            : authMode === "signup"
+            ? "Create your student account to access courses, live classes & certificates."
+            : "Sign in to access your registered courses and interactive student dashboard."}
         </p>
       </div>
 
-      {/* Main Login Card */}
+      {/* Main Portal Card */}
       <div className="bg-white p-6 rounded-3xl border border-purple-100 shadow-md space-y-5">
+        {/* Top Segmented Portal Selector (Strict Separation) */}
+        <div className="flex p-1 bg-purple-100/70 rounded-2xl gap-1">
+          <button
+            type="button"
+            onClick={() => {
+              setPortalCategory("student");
+              setErrorMessage(null);
+              setSuccessMessage(null);
+            }}
+            className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              portalCategory === "student"
+                ? "bg-white text-purple-700 shadow-xs"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <User className="w-3.5 h-3.5" />
+            <span>Student Portal</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setPortalCategory("staff");
+              setErrorMessage(null);
+              setSuccessMessage(null);
+            }}
+            className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              portalCategory === "staff"
+                ? "bg-purple-600 text-white shadow-xs"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Faculty & Admin</span>
+          </button>
+        </div>
+
+        {/* Student Auth Mode Toggle (Sign In / Register) */}
+        {portalCategory === "student" && (
+          <div className="grid grid-cols-2 p-1 bg-purple-50 rounded-2xl gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode("signin");
+                setErrorMessage(null);
+                setSuccessMessage(null);
+              }}
+              className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                authMode === "signin"
+                  ? "bg-white text-purple-700 shadow-xs"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode("signup");
+                setErrorMessage(null);
+                setSuccessMessage(null);
+              }}
+              className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                authMode === "signup"
+                  ? "bg-white text-purple-700 shadow-xs"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              Create Account
+            </button>
+          </div>
+        )}
+
         {errorMessage && (
           <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700 flex items-start gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -146,17 +270,73 @@ function LoginFormContent() {
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Sign Up Exclusive Fields */}
+          {authMode === "signup" && (
+            <>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 block">
+                  Full Name <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <User className="w-4 h-4 text-purple-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Aysha Mariyam"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 block">
+                    WhatsApp Number
+                  </label>
+                  <div className="relative">
+                    <Phone className="w-4 h-4 text-purple-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="tel"
+                      placeholder="9846012345"
+                      value={whatsappNum}
+                      onChange={(e) => setWhatsappNum(e.target.value)}
+                      className="w-full pl-10 pr-3 py-3 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 block">
+                    District
+                  </label>
+                  <div className="relative">
+                    <MapPin className="w-4 h-4 text-purple-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Malappuram"
+                      value={district}
+                      onChange={(e) => setDistrict(e.target.value)}
+                      className="w-full pl-10 pr-3 py-3 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-medium"
+                    />
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-slate-700 block">
-              Email Address or Student ID
+              Email Address
             </label>
             <div className="relative">
               <Mail className="w-4 h-4 text-purple-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
-                type="text"
+                type="email"
                 required
-                placeholder="name@hanoon.academy"
+                placeholder="name@example.com"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400"
@@ -166,7 +346,7 @@ function LoginFormContent() {
 
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-slate-700 block">
-              Secret Password / Passkey
+              {authMode === "signup" ? "Create Password (min 6 chars)" : "Password"}
             </label>
             <div className="relative">
               <Lock className="w-4 h-4 text-purple-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -194,52 +374,97 @@ function LoginFormContent() {
             className="w-full py-4 px-6 rounded-2xl font-bold text-sm text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-md shadow-purple-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
           >
             {isLoading ? (
-              <span>Authenticating...</span>
+              <span>
+                {portalCategory === "staff"
+                  ? "Verifying Staff Credentials..."
+                  : authMode === "signup"
+                  ? "Creating Account..."
+                  : "Authenticating Student..."}
+              </span>
             ) : (
               <>
-                <span>Sign In Securely</span>
+                <span>
+                  {portalCategory === "staff"
+                    ? "Sign In to Staff Gateway"
+                    : authMode === "signup"
+                    ? "Complete Registration"
+                    : "Sign In as Student"}
+                </span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
           </button>
         </form>
 
-        {/* Quick Testing Login Autofill */}
-        <div className="pt-3 border-t border-purple-50 space-y-2">
-          <div className="flex items-center gap-1.5 text-slate-500 text-[11px] font-bold">
-            <KeyRound className="w-3.5 h-3.5 text-purple-600" />
-            <span>1-Click Direct Portal Access (Evaluation Mode):</span>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
+        {/* Portal Switch Prompt */}
+        <div className="pt-2 border-t border-purple-50 text-center">
+          {portalCategory === "student" ? (
             <button
               type="button"
-              onClick={() => handleDirectJump("student")}
-              className="p-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-800 text-[11px] font-bold flex flex-col items-center justify-center cursor-pointer transition-all border border-purple-100"
+              onClick={() => {
+                setPortalCategory("staff");
+                setErrorMessage(null);
+                setSuccessMessage(null);
+              }}
+              className="text-xs font-bold text-purple-700 hover:text-purple-900 transition-colors inline-flex items-center gap-1.5 cursor-pointer py-1"
             >
-              <User className="w-4 h-4 mb-0.5 text-purple-600" />
-              <span>Student</span>
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Are you Faculty or Administrator? Enter Staff Gateway &rarr;</span>
             </button>
-
+          ) : (
             <button
               type="button"
-              onClick={() => handleDirectJump("teacher")}
-              className="p-2.5 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-900 text-[11px] font-bold flex flex-col items-center justify-center cursor-pointer transition-all border border-purple-200 shadow-2xs"
+              onClick={() => {
+                setPortalCategory("student");
+                setErrorMessage(null);
+                setSuccessMessage(null);
+              }}
+              className="text-xs font-bold text-purple-700 hover:text-purple-900 transition-colors inline-flex items-center gap-1.5 cursor-pointer py-1"
             >
-              <GraduationCap className="w-4 h-4 mb-0.5 text-purple-700" />
-              <span>Teacher</span>
+              <User className="w-3.5 h-3.5" />
+              <span>Are you a Student? Enter Student Portal &rarr;</span>
             </button>
-
-            <button
-              type="button"
-              onClick={() => handleDirectJump("admin")}
-              className="p-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-800 text-[11px] font-bold flex flex-col items-center justify-center cursor-pointer transition-all border border-purple-100"
-            >
-              <ShieldCheck className="w-4 h-4 mb-0.5 text-purple-600" />
-              <span>Admin</span>
-            </button>
-          </div>
+          )}
         </div>
+
+        {/* Quick Testing Login Autofill (Only visible in local evaluation mode) */}
+        {!isSupabaseConfigured && (
+          <div className="pt-3 border-t border-purple-50 space-y-2">
+            <div className="flex items-center gap-1.5 text-slate-500 text-[11px] font-bold">
+              <KeyRound className="w-3.5 h-3.5 text-purple-600" />
+              <span>1-Click Portal Jump (Local Demo Mode):</span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => handleDirectJump("student")}
+                className="p-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-800 text-[11px] font-bold flex flex-col items-center justify-center cursor-pointer transition-all border border-purple-100"
+              >
+                <User className="w-4 h-4 mb-0.5 text-purple-600" />
+                <span>Student</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleDirectJump("teacher")}
+                className="p-2.5 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-900 text-[11px] font-bold flex flex-col items-center justify-center cursor-pointer transition-all border border-purple-200 shadow-2xs"
+              >
+                <GraduationCap className="w-4 h-4 mb-0.5 text-purple-700" />
+                <span>Teacher</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleDirectJump("admin")}
+                className="p-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-800 text-[11px] font-bold flex flex-col items-center justify-center cursor-pointer transition-all border border-purple-100"
+              >
+                <ShieldCheck className="w-4 h-4 mb-0.5 text-purple-600" />
+                <span>Admin</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="text-center">

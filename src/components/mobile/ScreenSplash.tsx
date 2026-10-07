@@ -44,12 +44,21 @@ export default function ScreenSplash({
           <ArrowRight className="w-4 h-4" />
         </button>
 
-        <a
-          href="/login"
-          className="text-xs font-semibold text-slate-500 hover:text-purple-600 transition-colors py-1 cursor-pointer"
-        >
-          Sign In
-        </a>
+        <div className="flex items-center gap-3 text-xs pt-1">
+          <a
+            href="/login"
+            className="text-xs font-bold text-slate-600 hover:text-purple-600 transition-colors py-1 cursor-pointer"
+          >
+            Student Sign In
+          </a>
+          <span className="text-slate-300">•</span>
+          <a
+            href="/login?portal=staff"
+            className="text-xs font-bold text-purple-700 hover:text-purple-900 transition-colors py-1 cursor-pointer"
+          >
+            Faculty & Admin &rarr;
+          </a>
+        </div>
       </div>
     </div>
   );

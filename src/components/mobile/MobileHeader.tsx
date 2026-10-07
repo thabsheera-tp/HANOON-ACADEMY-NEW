@@ -4,11 +4,6 @@ import React, { useState } from "react";
 import Link from "next/link";
 import {
   ChevronLeft,
-  Wifi,
-  Battery,
-  Signal,
-  GraduationCap,
-  ShieldCheck,
   User,
   LogIn,
   X,
@@ -38,7 +33,7 @@ export default function MobileHeader({
       case "courses":
         return "Courses";
       case "course-details":
-        return "Curriculum Details";
+        return "Course Details";
       case "onboarding":
         return "Student Registration";
       case "payment":
@@ -52,19 +47,8 @@ export default function MobileHeader({
 
   return (
     <header className="bg-white text-slate-900 shrink-0 sticky top-0 z-40 border-b border-purple-100 shadow-xs select-none">
-      {/* Mobile Top Bar (Time, Wifi, Battery) */}
-      <div className="px-5 pt-2.5 pb-1 flex items-center justify-between text-[11px] font-bold text-slate-400">
-        <span>09:41</span>
-        <div className="w-16 h-2 bg-purple-100 rounded-full mx-auto hidden sm:block" />
-        <div className="flex items-center gap-1.5 text-slate-400">
-          <Signal className="w-3 h-3" />
-          <Wifi className="w-3 h-3" />
-          <Battery className="w-3.5 h-3.5" />
-        </div>
-      </div>
-
-      {/* Main Header Row */}
-      <div className="px-4 py-2.5 flex items-center justify-between relative">
+      {/* Main Header Row (Clean, No Dummy Status Bar) */}
+      <div className="px-4 py-3 flex items-center justify-between relative">
         <div className="flex items-center gap-2">
           {canGoBack && (
             <button
@@ -84,28 +68,27 @@ export default function MobileHeader({
           </div>
         </div>
 
-        {/* Profile Avatar / Portal Switcher Button */}
+        {/* Profile Avatar Popover (Strictly Student Context) */}
         <div className="flex items-center relative">
           <button
             type="button"
             onClick={() => setIsPortalMenuOpen(!isPortalMenuOpen)}
-            title="Switch Academy Portal"
+            title="Student Profile"
             className="w-8 h-8 rounded-xl bg-purple-600 text-white font-extrabold text-xs flex items-center justify-center shadow-xs hover:bg-purple-700 active:scale-95 transition-all cursor-pointer"
           >
-            A
+            S
           </button>
 
-          {/* Interactive Portal Switcher Popover */}
           {isPortalMenuOpen && (
             <>
               <div
                 className="fixed inset-0 z-40"
                 onClick={() => setIsPortalMenuOpen(false)}
               />
-              <div className="absolute right-0 top-10 w-64 bg-white rounded-2xl shadow-xl border border-purple-100 p-2.5 z-50 animate-in fade-in zoom-in-95 duration-150 space-y-1">
+              <div className="absolute right-0 top-10 w-60 bg-white rounded-2xl shadow-xl border border-purple-100 p-2.5 z-50 animate-in fade-in zoom-in-95 duration-150 space-y-1">
                 <div className="flex items-center justify-between px-2 py-1.5 border-b border-purple-50">
                   <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                    Switch Academy Portal
+                    Student Portal
                   </span>
                   <button
                     type="button"
@@ -116,59 +99,23 @@ export default function MobileHeader({
                   </button>
                 </div>
 
-                <Link
-                  href="/teacher"
-                  onClick={() => setIsPortalMenuOpen(false)}
-                  className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-purple-50 text-slate-800 transition-colors group cursor-pointer"
-                >
-                  <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-colors">
-                    <GraduationCap className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <span className="text-xs font-black text-slate-900 block leading-tight">
-                      Teacher Dashboard
-                    </span>
-                    <span className="text-[10px] text-slate-500">Live studio & class notes</span>
-                  </div>
-                </Link>
-
-                <Link
-                  href="/admin"
-                  onClick={() => setIsPortalMenuOpen(false)}
-                  className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-purple-50 text-slate-800 transition-colors group cursor-pointer"
-                >
-                  <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-colors">
-                    <ShieldCheck className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <span className="text-xs font-black text-slate-900 block leading-tight">
-                      Admin Dashboard
-                    </span>
-                    <span className="text-[10px] text-slate-500">UPI verification & payroll</span>
-                  </div>
-                </Link>
-
-                <Link
-                  href="/student"
-                  onClick={() => setIsPortalMenuOpen(false)}
-                  className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-purple-50 text-slate-800 transition-colors group cursor-pointer"
-                >
-                  <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                <div className="flex items-center gap-2.5 p-2 rounded-xl bg-purple-50/60 text-slate-800">
+                  <div className="w-7 h-7 rounded-lg bg-purple-600 text-white flex items-center justify-center">
                     <User className="w-4 h-4" />
                   </div>
                   <div>
                     <span className="text-xs font-black text-slate-900 block leading-tight">
-                      Student Dashboard
+                      Enrolled Student
                     </span>
-                    <span className="text-[10px] text-slate-500">Curriculum & live classes</span>
+                    <span className="text-[10px] text-purple-700 font-semibold">Active Session</span>
                   </div>
-                </Link>
+                </div>
 
                 <div className="pt-1 border-t border-purple-50">
                   <Link
                     href="/login"
                     onClick={() => setIsPortalMenuOpen(false)}
-                    className="flex items-center gap-2 p-1.5 rounded-lg text-[11px] font-bold text-purple-700 hover:bg-purple-50 transition-colors"
+                    className="flex items-center gap-2 p-2 rounded-xl text-xs font-bold text-purple-700 hover:bg-purple-50 transition-colors"
                   >
                     <LogIn className="w-3.5 h-3.5" />
                     <span>Sign In with another Account</span>

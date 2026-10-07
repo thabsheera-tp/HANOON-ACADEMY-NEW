@@ -20,10 +20,14 @@ export const SHOWCASE_COURSES: SelectedCourse[] = [
     id: "adaviyya",
     title: "Adaviyya",
     subtitle: "Islamic Sharia & Moral Tarbiyah (4 Core Hubs)",
-    fee: "₹1,500",
-    feeAmount: 1500,
+    fee: "₹3,000",
+    feeAmount: 3000,
+    admissionFee: "₹500",
+    admissionFeeAmount: 500,
+    batchInfo: "Completed 4 Batches",
+    installmentNote: "Pay the ₹500 admission fee now to unlock the course. The balance can be paid later in installments.",
     duration: "1 Year Academic Track",
-    tagline: "Comprehensive foundation comprising 4 dedicated subjects: Seerah, Haddad, Fiqh, and Hadith. Designed to nurture authentic Islamic scholarship, spiritual grounding, and practical ethics.",
+    tagline: "Comprehensive foundation comprising 4 dedicated subjects: Seerah, Haddad, Fiqh, and Hadith.",
     highlights: [
       "Seerah & Prophetic Biography",
       "Ratib al-Haddad Litany & Spiritual Adhkar",
@@ -96,7 +100,22 @@ export default function ScreenCoursesList({
     getActiveCourses().then((data) => {
       if (data && data.length > 0) {
         if (data.length >= 4) {
-          setCourses(data);
+          // Preserve client-specified Adaviyya pricing overrides
+          const merged = data.map((c) => {
+            if (c.id === "adaviyya" || c.id === "athaviy") {
+              return {
+                ...c,
+                fee: "₹3,000",
+                feeAmount: 3000,
+                admissionFee: "₹500",
+                admissionFeeAmount: 500,
+                batchInfo: "Completed 4 Batches",
+                installmentNote: "Pay the ₹500 admission fee now to unlock the course. The balance can be paid later in installments.",
+              };
+            }
+            return c;
+          });
+          setCourses(merged);
         } else {
           setCourses(SHOWCASE_COURSES);
         }
@@ -142,17 +161,25 @@ export default function ScreenCoursesList({
           const icon = getCourseIcon(course.id);
           const isShamail =
             course.id === "shamail-muhammadiyya" || course.title.includes("الشمائل");
+          const isAdaviyya = course.id === "adaviyya" || course.id === "athaviy";
 
           return (
             <button
               key={course.id}
               type="button"
               onClick={() => onSelectCourse(course)}
-              className="aspect-square neumorphic-button rounded-3xl p-3.5 flex flex-col items-center justify-center text-center gap-2 cursor-pointer group transition-all active:scale-[0.98]"
+              className="aspect-square neumorphic-button rounded-3xl p-3 flex flex-col items-center justify-center text-center gap-1.5 cursor-pointer group transition-all active:scale-[0.98] relative overflow-hidden"
             >
-              <div className="w-11 h-11 rounded-2xl bg-purple-50 border border-purple-100/80 flex items-center justify-center text-purple-600 group-hover:bg-purple-600 group-hover:text-white group-hover:scale-105 transition-all shadow-xs shrink-0">
+              {isAdaviyya && (
+                <span className="text-[8.5px] font-black uppercase tracking-wider text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full border border-purple-200">
+                  Completed 4 Batches
+                </span>
+              )}
+
+              <div className="w-10 h-10 rounded-2xl bg-purple-50 border border-purple-100/80 flex items-center justify-center text-purple-600 group-hover:bg-purple-600 group-hover:text-white group-hover:scale-105 transition-all shadow-xs shrink-0">
                 {icon}
               </div>
+
               <div className="flex flex-col items-center px-1">
                 <span
                   className={`text-sm font-extrabold text-slate-900 group-hover:text-purple-700 transition-colors tracking-tight leading-snug ${
@@ -161,9 +188,18 @@ export default function ScreenCoursesList({
                 >
                   {course.title}
                 </span>
-                {isShamail && (
+
+                {isAdaviyya ? (
+                  <span className="text-[9.5px] font-bold text-slate-500 group-hover:text-purple-600 transition-colors mt-0.5">
+                    Total: ₹3,000 • Adm: ₹500
+                  </span>
+                ) : isShamail ? (
                   <span className="text-[9.5px] font-semibold text-slate-400 group-hover:text-purple-500 transition-colors line-clamp-1 mt-0.5">
                     Ash-Shama&apos;il
+                  </span>
+                ) : (
+                  <span className="text-[9.5px] font-semibold text-slate-400 group-hover:text-purple-500 transition-colors line-clamp-1 mt-0.5">
+                    {course.fee}
                   </span>
                 )}
               </div>
@@ -172,17 +208,17 @@ export default function ScreenCoursesList({
         })}
       </div>
 
-      {/* 2. Special Classes Module: Clickable Tajweed & Burdah Live Buttons */}
+      {/* 2. Distinct Upcoming Special Classes Section */}
       <div className="space-y-2.5 pt-1">
         <div className="flex items-center justify-between px-1">
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-purple-600 animate-pulse" />
             <h2 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-              Special Classes Module
+              Upcoming Special Classes
             </h2>
           </div>
           <span className="text-[10px] font-bold text-purple-700 bg-purple-100/70 px-2.5 py-0.5 rounded-full">
-            Click for Details
+            Interactive Sessions
           </span>
         </div>
 
@@ -203,10 +239,14 @@ export default function ScreenCoursesList({
                     <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-all shadow-xs">
                       {isTajweed ? <Mic className="w-4 h-4" /> : <Radio className="w-4 h-4 animate-pulse" />}
                     </div>
-                    {isLive && (
+                    {isLive ? (
                       <span className="text-[9px] font-black uppercase text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded-md flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
                         Live
+                      </span>
+                    ) : (
+                      <span className="text-[9px] font-extrabold uppercase text-purple-700 bg-purple-50 border border-purple-100 px-1.5 py-0.5 rounded-md">
+                        Upcoming
                       </span>
                     )}
                   </div>

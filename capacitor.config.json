@@ -1,7 +1,7 @@
 {
   "appId": "com.hanoon.academy",
   "appName": "Hanoon Academy",
-  "webDir": "out",
+  "webDir": "public",
   "bundledWebRuntime": false,
   "server": {
     "androidScheme": "https"

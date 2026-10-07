@@ -12,6 +12,10 @@ export interface SelectedCourse {
   subtitle?: string;
   fee: string;
   feeAmount: number;
+  admissionFee?: string;
+  admissionFeeAmount?: number;
+  batchInfo?: string;
+  installmentNote?: string;
   duration: string;
   tagline: string;
   highlights: string[];

@@ -18,17 +18,13 @@ import {
   Plus,
   LogOut,
   ArrowLeft,
-  Sparkles,
   Download,
   Trash2,
   X,
   MessageCircle,
   BarChart3,
-  Check,
-  AlertCircle,
-  HelpCircle,
 } from "lucide-react";
-import { getCurrentSession, setAuthSession, logoutUser, UserProfileRecord, SPECIAL_CREDENTIALS } from "@/services/authService";
+import { getCurrentSession, logoutUser, UserProfileRecord } from "@/services/authService";
 import HanoonLogo from "@/components/brand/HanoonLogo";
 import TeacherEngagementDonut from "@/components/charts/TeacherEngagementDonut";
 import {
@@ -92,11 +88,10 @@ export default function TeacherDashboardPage() {
   const [selectedCourseFilter, setSelectedCourseFilter] = useState("ALL");
 
   useEffect(() => {
-    let session = getCurrentSession();
+    const session = getCurrentSession();
     if (!session || !session.user || (session.user.role !== "teacher" && session.user.role !== "admin")) {
-      const defaultTeacher = SPECIAL_CREDENTIALS.teacher.profile;
-      setAuthSession(defaultTeacher);
-      session = { user: defaultTeacher, token: "hanoon-teacher-session", expiresAt: Date.now() + 86400000 };
+      router.replace("/login?error=teacher_only");
+      return;
     }
     setCurrentUser(session.user);
 
@@ -273,7 +268,16 @@ export default function TeacherDashboardPage() {
     });
   }, [students, studentSearch, selectedCourseFilter]);
 
-  if (!currentUser) return null;
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-purple-50 flex items-center justify-center p-4">
+        <div className="flex flex-col items-center gap-3">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600" />
+          <span className="text-xs font-semibold text-slate-500">Verifying faculty authorization...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-purple-50/40 text-slate-900 font-['Plus_Jakarta_Sans'] pb-20 selection:bg-purple-200">
@@ -396,6 +400,19 @@ export default function TeacherDashboardPage() {
                 </button>
               )}
 
+              {/* Prominent Upload PDF Notes Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setUploadContentType("PDF");
+                  setActiveTab("materials");
+                }}
+                className="py-3.5 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md shadow-emerald-600/20"
+              >
+                <FileText className="w-4 h-4 text-emerald-100" />
+                <span>Upload PDF Notes</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => setIsScheduleModalOpen(true)}
@@ -503,6 +520,60 @@ export default function TeacherDashboardPage() {
         {/* TAB 1: OVERVIEW & ENGAGEMENT */}
         {activeTab === "overview" && (
           <div className="space-y-6">
+            {/* Prominent Faculty Fast-Actions Bar */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setUploadContentType("PDF");
+                  setActiveTab("materials");
+                }}
+                className="p-4 rounded-2xl bg-white border border-purple-100 hover:border-emerald-300 shadow-sm hover:shadow-md transition-all flex items-center gap-3 text-left group cursor-pointer"
+              >
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-all shrink-0">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-slate-900 group-hover:text-emerald-700 transition-colors">
+                    Upload PDF Notes
+                  </h4>
+                  <p className="text-[10px] text-slate-500 font-medium">Publish chapter handbooks & study files</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleStartLiveClass()}
+                className="p-4 rounded-2xl bg-white border border-purple-100 hover:border-purple-300 shadow-sm hover:shadow-md transition-all flex items-center gap-3 text-left group cursor-pointer"
+              >
+                <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-700 border border-purple-100 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-all shrink-0">
+                  <Radio className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-slate-900 group-hover:text-purple-700 transition-colors">
+                    Start Live Stream
+                  </h4>
+                  <p className="text-[10px] text-slate-500 font-medium">Launch virtual classroom broadcast</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsScheduleModalOpen(true)}
+                className="p-4 rounded-2xl bg-white border border-purple-100 hover:border-purple-300 shadow-sm hover:shadow-md transition-all flex items-center gap-3 text-left group cursor-pointer"
+              >
+                <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-700 border border-purple-100 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-all shrink-0">
+                  <Calendar className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-slate-900 group-hover:text-purple-700 transition-colors">
+                    Schedule Class
+                  </h4>
+                  <p className="text-[10px] text-slate-500 font-medium">Set timetable & push student alerts</p>
+                </div>
+              </button>
+            </div>
+
             {/* Quick Metrics Grid */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-white p-4.5 rounded-2xl border border-purple-100 shadow-md space-y-1">
