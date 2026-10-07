@@ -12,7 +12,13 @@ import ScreenPayment from "@/components/mobile/ScreenPayment";
 import ScreenDashboard from "@/components/mobile/ScreenDashboard";
 import ReceiptModal from "@/components/mobile/ReceiptModal";
 import { UserProfile, SelectedCourse, PaymentDetails, ScreenTab } from "@/types/app";
-import { getCurrentSession, setAuthSession, UserProfileRecord } from "@/services/authService";
+import {
+  getCurrentSession,
+  setAuthSession,
+  checkActiveSupabaseSession,
+  fetchUserLiveProfile,
+  UserProfileRecord,
+} from "@/services/authService";
 
 interface MobileAppShellProps {
   initialUser?: UserProfileRecord | null;
@@ -21,13 +27,15 @@ interface MobileAppShellProps {
 export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}) {
   const router = useRouter();
   // 6-Step Workflow:
-  // Step 1: "splash" -> Welcome Screen
+  // Step 1: "splash" -> Welcome Screen (Only for unauthenticated visitors)
   // Step 2: "courses" -> Course Selection View
   // Step 3: "course-details" -> Course Details & Pricing Sheet
   // Step 4: "onboarding" -> Student Onboarding Form
   // Step 5: "payment" -> Manual UPI Payment Screen
   // Step 6: "dashboard" -> Student Dashboard & Profile View
-  const [currentScreen, setCurrentScreen] = useState<ScreenTab>("splash");
+  const [currentScreen, setCurrentScreen] = useState<ScreenTab>(
+    initialUser ? "dashboard" : "splash"
+  );
 
   // User Profile
   const [userProfile, setUserProfile] = useState<UserProfile>({
@@ -49,67 +57,108 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
 
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
 
-  // Student Session Persistence & Direct Dashboard Auto-Routing via Supabase
+  // Auto-Routing for Root Route: Check for active Supabase session when the app loads
+  useEffect(() => {
+    let isMounted = true;
+
+    // If initialUser is not supplied (i.e. mounted at root "/"), check for active session and bypass welcome screen
+    if (!initialUser) {
+      const checkAndRoute = async () => {
+        const session = await checkActiveSupabaseSession();
+        if (!isMounted) return;
+
+        if (session && session.user) {
+          if (session.user.role === "admin") {
+            router.replace("/admin");
+          } else if (session.user.role === "teacher") {
+            router.replace("/teacher");
+          } else {
+            router.replace("/student");
+          }
+        }
+      };
+
+      checkAndRoute();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [initialUser, router]);
+
+  // Dynamic State Fetching: Fetch the current authenticated user's actual full_name from Supabase students/profiles table
   useEffect(() => {
     const session = getCurrentSession();
     const activeUser = initialUser || session?.user;
 
     if (activeUser) {
-      setUserProfile((prev) => ({
-        ...prev,
-        name: activeUser.full_name || prev.name,
-        place: activeUser.district || prev.place,
-        phone: activeUser.whatsapp_num || prev.phone,
-      }));
+      // Set active user state immediately
+      setUserProfile({
+        name: activeUser.full_name || "",
+        phone: activeUser.whatsapp_num || "",
+        place: activeUser.district || "",
+      });
 
       const verifyAndRoute = async () => {
-        let isVerified = false;
-        let activePayment: any = null;
-
-        // 1. Check local storage cache
+        // 1. Dynamically fetch latest profile from Supabase using user.id to guarantee fresh state
         try {
-          const savedPaymentsRaw = localStorage.getItem("hanoon_local_payments");
-          if (savedPaymentsRaw) {
-            const payments = JSON.parse(savedPaymentsRaw);
-            if (Array.isArray(payments) && payments.length > 0) {
-              const approved = payments.find(
-                (p: any) => p.status === "APPROVED" || p.status === "verified"
-              );
-              if (approved) {
-                isVerified = true;
-                activePayment = approved;
-              } else {
-                activePayment = payments[0];
-              }
-            }
+          const liveProfile = await fetchUserLiveProfile(
+            activeUser.id,
+            activeUser.whatsapp_num
+          );
+          if (liveProfile.fullName && liveProfile.fullName !== activeUser.full_name) {
+            setUserProfile((prev) => ({
+              ...prev,
+              name: liveProfile.fullName || prev.name,
+              place: liveProfile.district || prev.place,
+              phone: liveProfile.phone || prev.phone,
+            }));
           }
         } catch (e) {
-          console.warn("Could not read local payment session:", e);
+          console.warn("Could not dynamically fetch live user profile:", e);
         }
 
-        // 2. Strict Live Verification via Supabase
-        if (!isVerified && activeUser.whatsapp_num) {
+        let isVerified = false;
+        let activePayment: any = null;
+        const cleanPhone = activeUser.whatsapp_num
+          ? activeUser.whatsapp_num.replace(/\D/g, "")
+          : "";
+
+        // 2. Strict Live Payment Verification via Supabase for THIS user
+        if (cleanPhone) {
           try {
             const { supabase, isSupabaseConfigured } = await import("@/lib/supabaseClient");
             if (isSupabaseConfigured && supabase) {
-              const cleanPhone = activeUser.whatsapp_num.replace(/\D/g, "");
               const { data: studentRecord } = await supabase
                 .from("students")
-                .select("id, payments(*)")
+                .select("id, full_name, payments(*)")
                 .eq("whatsapp_num", cleanPhone)
+                .order("created_at", { ascending: false })
+                .limit(1)
                 .maybeSingle();
 
-              if (studentRecord && studentRecord.payments && Array.isArray(studentRecord.payments)) {
-                const approved = studentRecord.payments.find(
-                  (p: any) => p.status === "APPROVED" || p.status === "verified"
-                );
-                if (approved) {
-                  isVerified = true;
-                  activePayment = approved;
-                  localStorage.setItem(
-                    "hanoon_local_payments",
-                    JSON.stringify(studentRecord.payments)
+              if (studentRecord) {
+                if (studentRecord.full_name && studentRecord.full_name.trim()) {
+                  setUserProfile((prev) => ({
+                    ...prev,
+                    name: studentRecord.full_name.trim(),
+                  }));
+                }
+
+                if (studentRecord.payments && Array.isArray(studentRecord.payments)) {
+                  const approved = studentRecord.payments.find(
+                    (p: any) => p.status === "APPROVED" || p.status === "verified"
                   );
+                  if (approved) {
+                    isVerified = true;
+                    activePayment = approved;
+                    localStorage.setItem(
+                      "hanoon_local_payments",
+                      JSON.stringify(studentRecord.payments)
+                    );
+                  } else if (studentRecord.payments.length > 0) {
+                    activePayment = studentRecord.payments[0];
+                  }
                 }
               }
             }
@@ -118,7 +167,33 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
           }
         }
 
-        // 3. Resolve Enrolled Course dynamically from user's payment record
+        // 3. Check local storage cache ONLY if matching this student
+        if (!isVerified) {
+          try {
+            const savedPaymentsRaw = localStorage.getItem("hanoon_local_payments");
+            if (savedPaymentsRaw) {
+              const payments = JSON.parse(savedPaymentsRaw);
+              if (Array.isArray(payments) && payments.length > 0) {
+                const userMatch = payments.find(
+                  (p: any) =>
+                    p.student_id === activeUser.id ||
+                    p.student?.id === activeUser.id ||
+                    (cleanPhone && p.student?.whatsapp_num === cleanPhone)
+                );
+                if (userMatch) {
+                  if (userMatch.status === "APPROVED" || userMatch.status === "verified") {
+                    isVerified = true;
+                  }
+                  activePayment = userMatch;
+                }
+              }
+            }
+          } catch (e) {
+            console.warn("Could not read local payment session:", e);
+          }
+        }
+
+        // 4. Resolve Enrolled Course dynamically from user's payment record
         if (activePayment && activePayment.course_id) {
           const matchedCourse = SHOWCASE_COURSES.find(
             (c) =>
@@ -130,7 +205,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
           }
         }
 
-        // 4. If verified, route DIRECTLY to Student Dashboard (Never ask to login again)
+        // 5. If verified, route DIRECTLY to Student Dashboard
         if (isVerified && activePayment) {
           setPaymentDetails({
             upiTxId: activePayment.upi_txid,
@@ -160,6 +235,25 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
       verifyAndRoute();
     }
   }, [initialUser]);
+
+  // Purge global React state upon user logout
+  useEffect(() => {
+    const handleLogout = () => {
+      setUserProfile({ name: "", phone: "", place: "" });
+      setPaymentDetails({
+        upiTxId: "",
+        amount: SHOWCASE_COURSES[0].fee,
+        submittedAt: "",
+        status: "unpaid",
+      });
+      setCurrentScreen("splash");
+    };
+
+    window.addEventListener("hanoon_logout_event", handleLogout);
+    return () => {
+      window.removeEventListener("hanoon_logout_event", handleLogout);
+    };
+  }, []);
 
   // Real-time automatic unlock subscription across tabs and database events
   useEffect(() => {
@@ -305,6 +399,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
           currentScreen={currentScreen}
           onBack={handleBack}
           canGoBack={canGoBack}
+          userProfile={userProfile}
         />
 
         {/* Scrollable Viewport */}

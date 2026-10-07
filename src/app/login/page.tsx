@@ -21,6 +21,7 @@ import HanoonLogo from "@/components/brand/HanoonLogo";
 import {
   loginStudentWithPhone,
   loginStaffWithCredentials,
+  checkActiveSupabaseSession,
   getCurrentSession,
 } from "@/services/authService";
 
@@ -28,12 +29,12 @@ function LoginFormContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Portal Mode: Default is "student" (frictionless phone number). "staff" is discrete toggle.
+  // Portal Mode: Default is "student". "staff" is discrete toggle.
   const [portalCategory, setPortalCategory] = useState<"student" | "staff">("student");
 
   // Student Input States
-  const [studentPhone, setStudentPhone] = useState("");
   const [studentName, setStudentName] = useState("");
+  const [studentPhone, setStudentPhone] = useState("");
   const [studentDistrict, setStudentDistrict] = useState("Malappuram");
 
   // Staff Input States
@@ -43,11 +44,34 @@ function LoginFormContent() {
 
   // Status & Feedback States
   const [isLoading, setIsLoading] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Check query parameters and auto-session restoration
+  // Check active Supabase session on load and auto-route
   useEffect(() => {
+    let isMounted = true;
+
+    const checkSessionAndAutoRoute = async () => {
+      const activeSession = await checkActiveSupabaseSession();
+      if (!isMounted) return;
+
+      if (activeSession && activeSession.user) {
+        if (activeSession.user.role === "admin") {
+          router.replace("/admin");
+          return;
+        } else if (activeSession.user.role === "teacher") {
+          router.replace("/teacher");
+          return;
+        } else {
+          router.replace("/student");
+          return;
+        }
+      }
+
+      setCheckingAuth(false);
+    };
+
     const errorParam = searchParams.get("error");
     const reasonParam = searchParams.get("reason");
     const portalParam = searchParams.get("portal");
@@ -58,49 +82,59 @@ function LoginFormContent() {
 
     if (errorParam === "admin_only") {
       setErrorMessage("Access Denied: The /admin portal requires verified Administrator credentials.");
+      setCheckingAuth(false);
     } else if (errorParam === "teacher_only") {
       setErrorMessage("Access Denied: The /teacher portal requires authorized Faculty credentials.");
+      setCheckingAuth(false);
     } else if (reasonParam === "unauthenticated") {
       setErrorMessage("Please sign in with your authorized credentials to access this protected area.");
+      setCheckingAuth(false);
     } else if (reasonParam === "expired") {
       setErrorMessage("Your session has expired. Please log in again.");
+      setCheckingAuth(false);
+    } else {
+      checkSessionAndAutoRoute();
     }
 
-    // Auto-restore already active sessions (Students never need to re-login)
-    if (!errorParam && !reasonParam) {
-      const session = getCurrentSession();
-      if (session && session.user) {
-        if (session.user.role === "admin") {
-          router.replace("/admin");
-        } else if (session.user.role === "teacher") {
-          router.replace("/teacher");
-        } else if (session.user.role === "student") {
-          router.replace("/student");
-        }
-      }
-    }
+    return () => {
+      isMounted = false;
+    };
   }, [searchParams, router]);
 
-  // Handle Frictionless Student Login (Strictly Phone Number)
+  // Handle Student Login / Onboarding (Full Name & Phone Number)
   const handleStudentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setSuccessMessage(null);
+
+    const cleanName = studentName.trim();
+    const cleanPhone = studentPhone.replace(/\D/g, "");
+
+    if (!cleanName) {
+      setErrorMessage("Please enter your full name.");
+      return;
+    }
+
+    if (!cleanPhone || cleanPhone.length < 10) {
+      setErrorMessage("Please enter a valid 10-digit mobile or WhatsApp number.");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      const result = await loginStudentWithPhone(studentPhone, studentName, studentDistrict);
+      const result = await loginStudentWithPhone(
+        studentPhone,
+        cleanName,
+        studentDistrict.trim() || "Malappuram"
+      );
 
       if (result.success && result.user) {
-        if (result.isVerified) {
-          setSuccessMessage(`Welcome back, ${result.user.full_name}! Verified session restored. Redirecting...`);
-        } else {
-          setSuccessMessage(`Welcome to Hanoon Academy, ${result.user.full_name}! Redirecting...`);
-        }
+        setSuccessMessage(`Welcome, ${result.user.full_name}! Redirecting to your dashboard...`);
 
         setTimeout(() => {
           router.push("/student");
-        }, 500);
+        }, 350);
       } else {
         setErrorMessage(result.error || "Please enter a valid 10-digit mobile number.");
       }
@@ -112,7 +146,7 @@ function LoginFormContent() {
     }
   };
 
-  // Handle Secure Staff Login (Strictly Email & Password)
+  // Handle Secure Staff Login (Email & Password)
   const handleStaffSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -131,7 +165,7 @@ function LoginFormContent() {
           } else {
             router.push("/teacher");
           }
-        }, 500);
+        }, 350);
       } else {
         setErrorMessage(result.error || "Invalid staff email or password. Please verify your credentials.");
       }
@@ -142,6 +176,15 @@ function LoginFormContent() {
       setIsLoading(false);
     }
   };
+
+  if (checkingAuth) {
+    return (
+      <div className="w-full max-w-md mx-auto py-16 flex flex-col items-center justify-center space-y-3 font-['Plus_Jakarta_Sans']">
+        <div className="w-8 h-8 rounded-full border-2 border-purple-600 border-t-transparent animate-spin" />
+        <span className="text-xs font-semibold text-purple-700">Verifying session...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-md mx-auto space-y-5">
@@ -156,7 +199,7 @@ function LoginFormContent() {
         <p className="text-xs text-slate-500 font-medium">
           {portalCategory === "staff"
             ? "Secure credential access for verified Teachers and Academy Administrators."
-            : "Enter your Phone Number to access your courses, live classes & student dashboard."}
+            : "Enter your Name & Mobile Number to access your courses, live classes & student dashboard."}
         </p>
       </div>
 
@@ -179,10 +222,28 @@ function LoginFormContent() {
         )}
 
         {/* ========================================================
-            1. STUDENT AUTH FORM (Frictionless: Phone Number ONLY)
+            1. STUDENT ONBOARDING / LOGIN FORM (Name & Phone Number)
             ======================================================== */}
         {portalCategory === "student" ? (
           <form onSubmit={handleStudentSubmit} className="space-y-4">
+            {/* Student Full Name Field */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 block">
+                Student Full Name <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <User className="w-4 h-4 text-purple-600 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Fathima Zahra"
+                  value={studentName}
+                  onChange={(e) => setStudentName(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-semibold"
+                />
+              </div>
+            </div>
+
             {/* Phone Number Field */}
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-700 block">
@@ -202,23 +263,6 @@ function LoginFormContent() {
               <p className="text-[10.5px] text-slate-400 font-medium">
                 No passwords required. Your session stays permanently saved on this device.
               </p>
-            </div>
-
-            {/* Optional Full Name (For new registrations) */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700 block">
-                Student Name <span className="text-slate-400 font-normal">(Optional for first-time login)</span>
-              </label>
-              <div className="relative">
-                <User className="w-4 h-4 text-purple-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Enter your full name"
-                  value={studentName}
-                  onChange={(e) => setStudentName(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-medium"
-                />
-              </div>
             </div>
 
             {/* District Selector */}
@@ -256,7 +300,7 @@ function LoginFormContent() {
           </form>
         ) : (
           /* ========================================================
-             2. STAFF AUTH FORM (Secure Credentials: Email & Password)
+             2. STAFF AUTH FORM (Email & Password)
              ======================================================== */
           <form onSubmit={handleStaffSubmit} className="space-y-4">
             <div className="p-3 rounded-xl bg-purple-50/70 border border-purple-100 flex items-center gap-2 text-xs font-semibold text-purple-900">
@@ -326,7 +370,7 @@ function LoginFormContent() {
         )}
 
         {/* ========================================================
-            DISCRETE TOGGLE (Switch between Student and Staff Portals)
+            SUBTLE TOGGLE LINK (No Role Selection Questions Asked)
             ======================================================== */}
         <div className="pt-3 border-t border-purple-50 text-center">
           {portalCategory === "student" ? (
@@ -337,10 +381,9 @@ function LoginFormContent() {
                 setErrorMessage(null);
                 setSuccessMessage(null);
               }}
-              className="text-xs font-bold text-slate-500 hover:text-purple-700 transition-colors inline-flex items-center gap-1.5 cursor-pointer py-1"
+              className="text-xs font-semibold text-slate-500 hover:text-purple-700 transition-colors inline-flex items-center gap-1.5 cursor-pointer py-1"
             >
-              <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
-              <span>Are you Faculty or Administrator? Staff Login &rarr;</span>
+              <span>Institute Staff? Login Here</span>
             </button>
           ) : (
             <button
@@ -350,10 +393,9 @@ function LoginFormContent() {
                 setErrorMessage(null);
                 setSuccessMessage(null);
               }}
-              className="text-xs font-bold text-purple-700 hover:text-purple-900 transition-colors inline-flex items-center gap-1.5 cursor-pointer py-1"
+              className="text-xs font-semibold text-purple-700 hover:text-purple-900 transition-colors inline-flex items-center gap-1.5 cursor-pointer py-1"
             >
-              <User className="w-3.5 h-3.5" />
-              <span>&larr; Return to Student Phone Login</span>
+              <span>Student? Login Here</span>
             </button>
           )}
         </div>
