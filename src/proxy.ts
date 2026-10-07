@@ -15,9 +15,10 @@ export function proxy(request: NextRequest) {
 
   const sessionCookie = request.cookies.get("hanoon_auth_session")?.value;
 
-  // 1. Unauthenticated users -> Redirect to /login
+  // 1. Unauthenticated users -> Redirect to /login with staff portal active
   if (!sessionCookie) {
     const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("portal", "staff");
     loginUrl.searchParams.set("redirect", pathname);
     loginUrl.searchParams.set("reason", "unauthenticated");
     return NextResponse.redirect(loginUrl);
@@ -31,6 +32,7 @@ export function proxy(request: NextRequest) {
     // Check session expiry
     if (expiresAt && expiresAt < Date.now()) {
       const loginUrl = new URL("/login", request.url);
+      loginUrl.searchParams.set("portal", "staff");
       loginUrl.searchParams.set("reason", "expired");
       return NextResponse.redirect(loginUrl);
     }
@@ -41,20 +43,21 @@ export function proxy(request: NextRequest) {
         if (role === "teacher") {
           return NextResponse.redirect(new URL("/teacher", request.url));
         }
-        return NextResponse.redirect(new URL("/login?error=admin_only", request.url));
+        return NextResponse.redirect(new URL("/login?portal=staff&error=admin_only", request.url));
       }
     }
 
     // 3. Protect /teacher route: accessible by role === 'teacher' or 'admin'
     if (isTeacherRoute) {
       if (role !== "teacher" && role !== "admin") {
-        return NextResponse.redirect(new URL("/login?error=teacher_only", request.url));
+        return NextResponse.redirect(new URL("/login?portal=staff&error=teacher_only", request.url));
       }
     }
 
     return NextResponse.next();
   } catch {
     const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("portal", "staff");
     loginUrl.searchParams.set("reason", "invalid_session");
     return NextResponse.redirect(loginUrl);
   }

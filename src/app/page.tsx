@@ -47,7 +47,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
 
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
 
-  // Student Session Persistence & Auto-Restoration
+  // Student Session Persistence & Direct Dashboard Auto-Routing via Supabase
   useEffect(() => {
     const session = getCurrentSession();
     const activeUser = initialUser || session?.user;
@@ -60,26 +60,83 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
         phone: activeUser.whatsapp_num || prev.phone,
       }));
 
-      // Check if student has a saved payment in localStorage
-      try {
-        const savedPaymentsRaw = localStorage.getItem("hanoon_local_payments");
-        if (savedPaymentsRaw) {
-          const payments = JSON.parse(savedPaymentsRaw);
-          if (Array.isArray(payments) && payments.length > 0) {
-            const latest = payments[0];
-            setPaymentDetails({
-              upiTxId: latest.upi_txid,
-              amount: `₹${latest.amount}`,
-              submittedAt: latest.submitted_at || new Date().toLocaleTimeString(),
-              status: latest.status === "APPROVED" ? "verified" : "pending_verification",
-            });
-            // Auto-redirect directly to Student Dashboard!
-            setCurrentScreen("dashboard");
+      const verifyAndRoute = async () => {
+        let isVerified = false;
+        let activePayment: any = null;
+
+        // 1. Check local storage cache
+        try {
+          const savedPaymentsRaw = localStorage.getItem("hanoon_local_payments");
+          if (savedPaymentsRaw) {
+            const payments = JSON.parse(savedPaymentsRaw);
+            if (Array.isArray(payments) && payments.length > 0) {
+              const approved = payments.find(
+                (p: any) => p.status === "APPROVED" || p.status === "verified"
+              );
+              if (approved) {
+                isVerified = true;
+                activePayment = approved;
+              } else {
+                activePayment = payments[0];
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("Could not read local payment session:", e);
+        }
+
+        // 2. Strict Live Verification via Supabase
+        if (!isVerified && activeUser.whatsapp_num) {
+          try {
+            const { supabase, isSupabaseConfigured } = await import("@/lib/supabaseClient");
+            if (isSupabaseConfigured && supabase) {
+              const cleanPhone = activeUser.whatsapp_num.replace(/\D/g, "");
+              const { data: studentRecord } = await supabase
+                .from("students")
+                .select("id, payments(*)")
+                .eq("whatsapp_num", cleanPhone)
+                .maybeSingle();
+
+              if (studentRecord && studentRecord.payments && Array.isArray(studentRecord.payments)) {
+                const approved = studentRecord.payments.find(
+                  (p: any) => p.status === "APPROVED" || p.status === "verified"
+                );
+                if (approved) {
+                  isVerified = true;
+                  activePayment = approved;
+                  localStorage.setItem(
+                    "hanoon_local_payments",
+                    JSON.stringify(studentRecord.payments)
+                  );
+                }
+              }
+            }
+          } catch (e) {
+            console.warn("Supabase persistence check warning:", e);
           }
         }
-      } catch (e) {
-        console.warn("Could not restore payment session:", e);
-      }
+
+        // 3. If verified, route DIRECTLY to Student Dashboard (Never ask to login again)
+        if (isVerified && activePayment) {
+          setPaymentDetails({
+            upiTxId: activePayment.upi_txid,
+            amount: `₹${activePayment.amount || 3000}`,
+            submittedAt: activePayment.submitted_at || new Date().toLocaleTimeString(),
+            status: "verified",
+          });
+          setCurrentScreen("dashboard");
+        } else if (activePayment && (activePayment.status === "PENDING" || activePayment.status === "pending_verification")) {
+          setPaymentDetails({
+            upiTxId: activePayment.upi_txid,
+            amount: `₹${activePayment.amount || 3000}`,
+            submittedAt: activePayment.submitted_at || new Date().toLocaleTimeString(),
+            status: "pending_verification",
+          });
+          setCurrentScreen("dashboard");
+        }
+      };
+
+      verifyAndRoute();
     }
   }, [initialUser]);
 
