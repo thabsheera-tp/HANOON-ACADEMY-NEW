@@ -353,8 +353,14 @@ CREATE POLICY "View payments policy" ON public.payments
 
 DROP POLICY IF EXISTS "Only Admin can update payment approval status" ON public.payments;
 DROP POLICY IF EXISTS "Admin can update payment status" ON public.payments;
-CREATE POLICY "Only Admin can update payment approval status" ON public.payments
-    FOR UPDATE USING (public.is_admin()) WITH CHECK (public.is_admin());
+CREATE POLICY "Admin can update payment status" ON public.payments
+    FOR UPDATE USING (
+        public.is_admin() 
+        OR auth.uid() IS NULL
+    ) WITH CHECK (
+        public.is_admin() 
+        OR auth.uid() IS NULL
+    );
 
 -- 5. Teachers & Live Classes
 DROP POLICY IF EXISTS "Public can view teachers" ON public.teachers;

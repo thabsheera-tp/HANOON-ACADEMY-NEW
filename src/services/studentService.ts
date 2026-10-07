@@ -38,19 +38,52 @@ export async function registerStudentAndPayment(
   // 1. If Supabase is configured, insert into live PostgreSQL tables
   if (isSupabaseConfigured && supabase) {
     try {
-      // Step A: Insert student record
-      const { data: studentData, error: studentError } = await supabase
-        .from("students")
-        .insert({
-          full_name: fullName,
-          whatsapp_num: whatsappNum,
-          district: district,
-        })
-        .select()
-        .single();
+      const cleanPhone = whatsappNum.replace(/\D/g, "");
+      const normalizedCourseId =
+        courseId === "shamail-muhammadiyya" ? "shamail" : courseId;
 
-      if (studentError || !studentData) {
-        throw new Error(`Failed to create student in Supabase: ${studentError?.message}`);
+      // Step A: Check for existing student record by phone
+      let studentData: DbStudent | null = null;
+      const { data: existingStudent } = await supabase
+        .from("students")
+        .select("*")
+        .eq("whatsapp_num", cleanPhone)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingStudent) {
+        // Update details
+        const { data: updatedStudent } = await supabase
+          .from("students")
+          .update({
+            full_name: fullName.trim(),
+            district: district.trim(),
+          })
+          .eq("id", existingStudent.id)
+          .select()
+          .single();
+
+        studentData = updatedStudent || existingStudent;
+      } else {
+        const { data: newStudent, error: studentError } = await supabase
+          .from("students")
+          .insert({
+            full_name: fullName.trim(),
+            whatsapp_num: cleanPhone,
+            district: district.trim(),
+          })
+          .select()
+          .single();
+
+        if (studentError || !newStudent) {
+          throw new Error(`Failed to create student in Supabase: ${studentError?.message}`);
+        }
+        studentData = newStudent;
+      }
+
+      if (!studentData) {
+        throw new Error("Failed to resolve or create student record in Supabase.");
       }
 
       // Step B: Insert payment record with PENDING status
@@ -58,8 +91,8 @@ export async function registerStudentAndPayment(
         .from("payments")
         .insert({
           student_id: studentData.id,
-          course_id: courseId,
-          upi_txid: upiTxId,
+          course_id: normalizedCourseId,
+          upi_txid: upiTxId.trim(),
           amount: amount,
           status: "PENDING" as PaymentStatus,
         })
@@ -73,13 +106,20 @@ export async function registerStudentAndPayment(
         throw new Error(`Failed to submit payment to Supabase: ${paymentError?.message}`);
       }
 
-      // Also mirror to local storage for quick offline retrieval
+      // Mirror to local storage for instant hydration
       saveLocalBackup(studentData, paymentData);
 
-      // Dispatch local event for real-time listener
+      // Dispatch local event for real-time listener across browser tabs
       if (typeof window !== "undefined") {
         window.dispatchEvent(
-          new CustomEvent("hanoon_payment_event", { detail: paymentData })
+          new CustomEvent("hanoon_payment_event", {
+            detail: {
+              id: paymentData.id,
+              upi_txid: upiTxId.trim(),
+              status: "PENDING",
+              payment: paymentData,
+            },
+          })
         );
       }
 
@@ -93,16 +133,16 @@ export async function registerStudentAndPayment(
     }
   }
 
-  // 2. Fallback / Local In-Memory & LocalStorage Mode
+  // 2. Fallback / Offline LocalStorage Mode
   const generatedStudentId = `std_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
   const generatedPaymentId = `pay_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
   const now = new Date().toISOString();
 
   const fallbackStudent: DbStudent = {
     id: generatedStudentId,
-    full_name: fullName,
-    whatsapp_num: whatsappNum,
-    district: district,
+    full_name: fullName.trim(),
+    whatsapp_num: whatsappNum.replace(/\D/g, ""),
+    district: district.trim(),
     created_at: now,
   };
 
@@ -110,7 +150,7 @@ export async function registerStudentAndPayment(
     id: generatedPaymentId,
     student_id: generatedStudentId,
     course_id: courseId,
-    upi_txid: upiTxId,
+    upi_txid: upiTxId.trim(),
     status: "PENDING",
     amount: amount,
     submitted_at: now,
@@ -134,7 +174,14 @@ export async function registerStudentAndPayment(
 
   if (typeof window !== "undefined") {
     window.dispatchEvent(
-      new CustomEvent("hanoon_payment_event", { detail: fallbackPayment })
+      new CustomEvent("hanoon_payment_event", {
+        detail: {
+          id: fallbackPayment.id,
+          upi_txid: upiTxId.trim(),
+          status: "PENDING",
+          payment: fallbackPayment,
+        },
+      })
     );
   }
 
@@ -192,11 +239,7 @@ export async function fetchStudents(): Promise<DbStudent[]> {
     }
   }
 
-  return [
-    { id: "std-01", full_name: "Aysha Mariyam", whatsapp_num: "9846012345", district: "Malappuram", created_at: "2026-03-28" },
-    { id: "std-02", full_name: "Fathima Nihala", whatsapp_num: "9846056789", district: "Kozhikode", created_at: "2026-03-29" },
-    { id: "std-03", full_name: "Muhammed Rashid", whatsapp_num: "9745012345", district: "Kannur", created_at: "2026-03-30" },
-    { id: "std-04", full_name: "Zainaba K.", whatsapp_num: "9447012345", district: "Dubai, UAE", created_at: "2026-04-01" },
-  ];
+  // Purged: No hardcoded dummy students. Returns empty array if none registered.
+  return [];
 }
 

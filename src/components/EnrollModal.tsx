@@ -116,7 +116,7 @@ export default function EnrollModal({
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Aysha Mariyam"
+                  placeholder="Enter your full name"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm text-[#0F172A] focus:outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/20 transition-all"

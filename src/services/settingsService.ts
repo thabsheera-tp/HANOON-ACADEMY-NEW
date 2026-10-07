@@ -43,11 +43,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
 const DEFAULT_AUDIT_LOGS: AuditLogItem[] = [
   {
     id: "aud-001",
-    timestamp: "Today, 08:35 AM",
+    timestamp: "System Init",
     actor: "Admin (Faisal Al-Hanoon)",
-    action: "Approved UPI Payment",
-    category: "PAYMENT",
-    details: "Approved ₹1,500 via UTR 423589104712 for student Aysha Mariyam (Adaviyya).",
+    action: "System Audit Initialized",
+    category: "AUTH",
+    details: "Universal authentication & Supabase database security rules active.",
   },
   {
     id: "aud-002",

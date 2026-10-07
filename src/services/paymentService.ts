@@ -11,13 +11,15 @@ export async function fetchPayments(): Promise<DbPayment[]> {
         .from("payments")
         .select(`
           *,
-          student:students(*),
-          course:courses(*)
+          student:students(*)
         `)
         .order("submitted_at", { ascending: false });
 
       if (!error && data) {
         return data as DbPayment[];
+      }
+      if (error) {
+        console.warn("Supabase payments fetch error:", error.message);
       }
     } catch (err) {
       console.warn("Failed to fetch payments from Supabase, loading local:", err);
@@ -59,7 +61,7 @@ export async function updatePaymentStatus(
         .eq("id", paymentId);
 
       if (error) {
-        console.error("Error updating status in Supabase:", error);
+        console.error("Error updating status in Supabase:", error.message);
       }
     } catch (err) {
       console.warn("Failed Supabase status update:", err);
@@ -72,8 +74,10 @@ export async function updatePaymentStatus(
       const stored: DbPayment[] = JSON.parse(
         localStorage.getItem(LOCAL_PAYMENTS_KEY) || "[]"
       );
+      let matchedUpiTxId = "";
       const updated = stored.map((p) => {
         if (p.id === paymentId) {
+          matchedUpiTxId = p.upi_txid;
           return {
             ...p,
             status: newStatus,
@@ -85,10 +89,15 @@ export async function updatePaymentStatus(
       });
       localStorage.setItem(LOCAL_PAYMENTS_KEY, JSON.stringify(updated));
 
-      // Broadcast update event to all listening components
+      // Broadcast update event with both id and upi_txid for real-time reactivity
       window.dispatchEvent(
         new CustomEvent("hanoon_payment_event", {
-          detail: { id: paymentId, status: newStatus, rejection_reason: rejectionReason },
+          detail: {
+            id: paymentId,
+            upi_txid: matchedUpiTxId,
+            status: newStatus,
+            rejection_reason: rejectionReason,
+          },
         })
       );
     } catch (e) {

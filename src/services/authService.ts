@@ -329,7 +329,7 @@ export async function loginStudentWithPhone(
   const localUser: UserProfileRecord = {
     id: `std-${cleanPhone}`,
     email: `${cleanPhone}@student.hanoon.academy`,
-    full_name: fullName?.trim() || "Aysha Mariyam",
+    full_name: fullName?.trim() || `Student ${cleanPhone.slice(-4)}`,
     role: "student",
     whatsapp_num: cleanPhone,
     district: district?.trim() || "Malappuram",

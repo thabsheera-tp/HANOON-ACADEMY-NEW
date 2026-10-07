@@ -3,44 +3,7 @@ import { DbCertificate, CertificateStatus } from "@/types/supabase";
 
 const LOCAL_CERTIFICATES_KEY = "hanoon_local_certificates_v1";
 
-export const INITIAL_CERTIFICATES: DbCertificate[] = [
-  {
-    id: "cert-001",
-    student_id: "std-001",
-    student_name: "Aysha Mariyam",
-    course_id: "adaviyya",
-    course_title: "Adaviyya Islamic Sharia & Moral Tarbiyah",
-    certificate_number: "HA-ADAV-2026-0842",
-    issue_date: "2026-03-15",
-    grade: "Distinction (96%)",
-    status: "ISSUED",
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: "cert-002",
-    student_id: "std-002",
-    student_name: "Muhammed Nihal",
-    course_id: "shamail",
-    course_title: "Shama'il al-Muhammadiyya Prophetic Study",
-    certificate_number: "HA-SHAM-2026-0419",
-    issue_date: "2026-02-28",
-    grade: "First Class (89%)",
-    status: "ISSUED",
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: "cert-003",
-    student_id: "std-003",
-    student_name: "Fathima Hiba",
-    course_id: "fashion-designing",
-    course_title: "Fashion Designing & Modest Apparel",
-    certificate_number: "HA-FD-2026-0125",
-    issue_date: "2026-01-20",
-    grade: "Distinction (94%)",
-    status: "ISSUED",
-    created_at: new Date().toISOString(),
-  },
-];
+export const INITIAL_CERTIFICATES: DbCertificate[] = [];
 
 export async function fetchCertificates(): Promise<DbCertificate[]> {
   if (isSupabaseConfigured && supabase) {
@@ -67,13 +30,13 @@ export async function fetchCertificates(): Promise<DbCertificate[]> {
           return parsed;
         }
       }
-      localStorage.setItem(LOCAL_CERTIFICATES_KEY, JSON.stringify(INITIAL_CERTIFICATES));
     } catch (e) {
       console.warn("Local storage error reading certificates:", e);
     }
   }
 
-  return INITIAL_CERTIFICATES;
+  // Purged: No hardcoded dummy student certificates
+  return [];
 }
 
 export async function issueCertificate(certData: {

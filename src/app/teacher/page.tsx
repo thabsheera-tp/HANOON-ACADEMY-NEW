@@ -128,9 +128,9 @@ export default function TeacherDashboardPage() {
           };
         });
 
-        // Merge unique students
-        const merged = [...enriched, ...DEFAULT_STUDENTS.filter((ds) => !enriched.some((e) => e.id === ds.id))];
-        setStudents(merged);
+        setStudents(enriched);
+      } else {
+        setStudents([]);
       }
     });
   }, [router]);

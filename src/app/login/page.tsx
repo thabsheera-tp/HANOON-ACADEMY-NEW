@@ -213,7 +213,7 @@ function LoginFormContent() {
                 <User className="w-4 h-4 text-purple-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="e.g. Aysha Mariyam"
+                  placeholder="Enter your full name"
                   value={studentName}
                   onChange={(e) => setStudentName(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-medium"

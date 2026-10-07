@@ -118,7 +118,19 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
           }
         }
 
-        // 3. If verified, route DIRECTLY to Student Dashboard (Never ask to login again)
+        // 3. Resolve Enrolled Course dynamically from user's payment record
+        if (activePayment && activePayment.course_id) {
+          const matchedCourse = SHOWCASE_COURSES.find(
+            (c) =>
+              c.id === activePayment.course_id ||
+              (activePayment.course_id === "shamail" && c.id.includes("shamail"))
+          );
+          if (matchedCourse) {
+            setSelectedCourse(matchedCourse);
+          }
+        }
+
+        // 4. If verified, route DIRECTLY to Student Dashboard (Never ask to login again)
         if (isVerified && activePayment) {
           setPaymentDetails({
             upiTxId: activePayment.upi_txid,
@@ -127,7 +139,11 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
             status: "verified",
           });
           setCurrentScreen("dashboard");
-        } else if (activePayment && (activePayment.status === "PENDING" || activePayment.status === "pending_verification")) {
+        } else if (
+          activePayment &&
+          (activePayment.status === "PENDING" ||
+            activePayment.status === "pending_verification")
+        ) {
           setPaymentDetails({
             upiTxId: activePayment.upi_txid,
             amount: `₹${activePayment.amount || 3000}`,
@@ -141,6 +157,65 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
       verifyAndRoute();
     }
   }, [initialUser]);
+
+  // Real-time automatic unlock subscription across tabs and database events
+  useEffect(() => {
+    let realtimeChannel: any = null;
+    const setupRealtime = async () => {
+      const { supabase, isSupabaseConfigured } = await import("@/lib/supabaseClient");
+      if (isSupabaseConfigured && supabase) {
+        realtimeChannel = supabase
+          .channel("page_student_payment_unlock")
+          .on(
+            "postgres_changes",
+            {
+              event: "UPDATE",
+              schema: "public",
+              table: "payments",
+            },
+            (payload) => {
+              const updated = payload.new as any;
+              if (
+                updated &&
+                (updated.status === "APPROVED" || updated.status === "verified")
+              ) {
+                setPaymentDetails((prev) => ({
+                  ...prev,
+                  status: "verified",
+                }));
+              }
+            }
+          )
+          .subscribe();
+      }
+    };
+
+    setupRealtime();
+
+    const handleLocalPayment = (e: Event) => {
+      const customEvt = e as CustomEvent;
+      if (customEvt.detail) {
+        const { status } = customEvt.detail;
+        if (status === "APPROVED" || status === "verified") {
+          setPaymentDetails((prev) => ({
+            ...prev,
+            status: "verified",
+          }));
+        }
+      }
+    };
+
+    window.addEventListener("hanoon_payment_event", handleLocalPayment);
+
+    return () => {
+      if (realtimeChannel) {
+        import("@/lib/supabaseClient").then(({ supabase }) => {
+          if (supabase) supabase.removeChannel(realtimeChannel);
+        });
+      }
+      window.removeEventListener("hanoon_payment_event", handleLocalPayment);
+    };
+  }, []);
 
   // Step 1 -> Step 2
   const handleExploreCourses = () => {

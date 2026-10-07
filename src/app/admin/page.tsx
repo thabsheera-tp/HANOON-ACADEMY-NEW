@@ -182,6 +182,45 @@ export default function AdminDashboardPage() {
     }
     setCurrentUser(session.user);
     loadAllData();
+
+    // Supabase Realtime synchronization for pending verification queue
+    let realtimeChannel: any = null;
+    const setupRealtime = async () => {
+      const { supabase, isSupabaseConfigured } = await import("@/lib/supabaseClient");
+      if (isSupabaseConfigured && supabase) {
+        realtimeChannel = supabase
+          .channel("admin_payments_realtime_stream")
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "payments",
+            },
+            async () => {
+              const fresh = await fetchPayments();
+              setPayments(fresh);
+            }
+          )
+          .subscribe();
+      }
+    };
+    setupRealtime();
+
+    const handleLocalPayment = async () => {
+      const fresh = await fetchPayments();
+      setPayments(fresh);
+    };
+    window.addEventListener("hanoon_payment_event", handleLocalPayment);
+
+    return () => {
+      if (realtimeChannel) {
+        import("@/lib/supabaseClient").then(({ supabase }) => {
+          if (supabase) supabase.removeChannel(realtimeChannel);
+        });
+      }
+      window.removeEventListener("hanoon_payment_event", handleLocalPayment);
+    };
   }, [loadAllData, router]);
 
   const handleSignOut = async () => {
@@ -670,7 +709,7 @@ export default function AdminDashboardPage() {
                             }`}
                           >
                             <td className="py-3.5 px-4 font-bold text-slate-900">
-                              <div>{payment.student?.full_name || "Aysha Mariyam"}</div>
+                              <div>{payment.student?.full_name || "Student"}</div>
                               <div className="text-[10px] text-slate-400 font-normal">
                                 {payment.student?.whatsapp_num || "WhatsApp"} • {payment.student?.district || "Kerala"}
                               </div>

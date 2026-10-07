@@ -528,7 +528,7 @@ export default function AdminManagementPanel({
                     <div className="space-y-0.5">
                       <div className="flex items-center gap-2">
                         <h5 className="text-sm font-bold text-slate-900">
-                          {pay.student?.full_name || "Aysha Mariyam"}
+                          {pay.student?.full_name || "Student"}
                         </h5>
                         <span
                           className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
@@ -635,7 +635,7 @@ export default function AdminManagementPanel({
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. Aysha Mariyam"
+                      placeholder="Enter student full name"
                       value={certForm.student_name}
                       onChange={(e) => setCertForm({ ...certForm, student_name: e.target.value })}
                       required

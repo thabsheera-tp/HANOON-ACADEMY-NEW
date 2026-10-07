@@ -13,6 +13,7 @@ import {
   FileText,
   User,
   Phone,
+  RefreshCw,
 } from "lucide-react";
 import { SelectedCourse, PaymentDetails, UserProfile } from "@/types/app";
 import { registerStudentAndPayment } from "@/services/studentService";
@@ -144,6 +145,9 @@ export default function ScreenPayment({
 
       setVerifiedStatus("pending");
       onSubmitPayment(cleanTxId, res.payment.id);
+      if (onGoToDashboard) {
+        onGoToDashboard();
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Submission failed. Please check network.";
       setError(msg);
@@ -382,7 +386,7 @@ export default function ScreenPayment({
                 <User className="w-4 h-4 text-purple-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="e.g. Aysha Mariyam"
+                  placeholder="Enter student full name"
                   value={studentName}
                   onChange={(e) => setStudentName(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-medium"
@@ -399,7 +403,7 @@ export default function ScreenPayment({
                 <Phone className="w-4 h-4 text-purple-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="tel"
-                  placeholder="e.g. 9846012345"
+                  placeholder="Enter 10-digit WhatsApp number"
                   value={studentPhone}
                   onChange={(e) => setStudentPhone(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-medium"
@@ -416,7 +420,7 @@ export default function ScreenPayment({
                 <FileText className="w-4 h-4 text-purple-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="e.g. 423589104712"
+                  placeholder="Enter 12-digit UPI / UTR number"
                   value={txId}
                   onChange={(e) => setTxId(e.target.value.replace(/\s+/g, ""))}
                   maxLength={24}
@@ -439,7 +443,10 @@ export default function ScreenPayment({
               className="w-full py-4 px-6 rounded-2xl font-extrabold text-sm text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
               {isSubmitting ? (
-                <span>Submitting to Supabase...</span>
+                <span className="flex items-center gap-2">
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Submitting to Supabase...
+                </span>
               ) : (
                 <>
                   <span>

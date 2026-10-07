@@ -32,10 +32,10 @@ export default function StudentIDModal({
 
   if (!isOpen) return null;
 
-  const studentName = userProfile.name.trim() || "Aysha Mariyam";
+  const studentName = userProfile.name.trim() || "Student";
   const rollNumber = "HA-2026-8942";
   const issueDate = "01 Oct 2026";
-  const avatarLetter = studentName.charAt(0).toUpperCase() || "A";
+  const avatarLetter = studentName.charAt(0).toUpperCase() || "S";
 
   const handleDownloadCertificate = () => {
     setDownloadingCert(true);

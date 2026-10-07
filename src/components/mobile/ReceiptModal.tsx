@@ -57,7 +57,7 @@ export default function ReceiptModal({
           <div className="grid grid-cols-2 gap-2 text-xs py-1">
             <div>
               <span className="font-medium text-slate-500 block">Student Name</span>
-              <span className="font-bold text-slate-900">{userProfile.name || "Aysha Mariyam"}</span>
+              <span className="font-bold text-slate-900">{userProfile.name || "Student"}</span>
             </div>
             <div>
               <span className="font-medium text-slate-500 block">District / Place</span>
@@ -88,7 +88,7 @@ export default function ReceiptModal({
             <div className="flex justify-between items-center text-xs">
               <span className="text-slate-600">UTR / TxID</span>
               <span className="font-mono text-purple-700 font-bold">
-                {paymentDetails.upiTxId || "423589104712"}
+                {paymentDetails.upiTxId || "Pending Verification"}
               </span>
             </div>
             <div className="pt-2 mt-2 border-t border-purple-50 flex justify-between items-center text-sm">

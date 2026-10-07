@@ -129,63 +129,8 @@ export const DEFAULT_MATERIALS: CourseMaterial[] = [
   },
 ];
 
-export const DEFAULT_STUDENTS: TeacherStudentItem[] = [
-  {
-    id: "std-01",
-    fullName: "Aysha Mariyam",
-    whatsappNum: "9846012345",
-    district: "Malappuram",
-    courseName: "Adaviyya",
-    progressPercent: 92,
-    attendanceRate: 96,
-    lastActive: "Today, 07:15 PM",
-    status: "Excelling",
-  },
-  {
-    id: "std-02",
-    fullName: "Fathima Nihala",
-    whatsappNum: "9846056789",
-    district: "Kozhikode",
-    courseName: "Adaviyya",
-    progressPercent: 88,
-    attendanceRate: 90,
-    lastActive: "Yesterday",
-    status: "Active",
-  },
-  {
-    id: "std-03",
-    fullName: "Zainaba K.",
-    whatsappNum: "9447012345",
-    district: "Dubai, UAE",
-    courseName: "الشمائل المحمدية",
-    progressPercent: 78,
-    attendanceRate: 85,
-    lastActive: "2 days ago",
-    status: "Active",
-  },
-  {
-    id: "std-04",
-    fullName: "Mariyam Shaza",
-    whatsappNum: "9633112233",
-    district: "Kannur",
-    courseName: "Fashion Designing",
-    progressPercent: 64,
-    attendanceRate: 72,
-    lastActive: "4 days ago",
-    status: "Needs Attention",
-  },
-  {
-    id: "std-05",
-    fullName: "Hafsa Thasneem",
-    whatsappNum: "9562884400",
-    district: "Ernakulam",
-    courseName: "Home Tuition",
-    progressPercent: 95,
-    attendanceRate: 98,
-    lastActive: "Today, 05:40 PM",
-    status: "Excelling",
-  },
-];
+// Purged: No hardcoded dummy students. Students are fetched dynamically from Supabase
+export const DEFAULT_STUDENTS: TeacherStudentItem[] = [];
 
 // Helper functions for classes
 export function getTeacherClasses(): LiveClassSession[] {
