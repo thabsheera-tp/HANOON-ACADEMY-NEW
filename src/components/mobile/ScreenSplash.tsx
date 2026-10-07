@@ -43,14 +43,9 @@ export default function ScreenSplash({
         </div>
 
         {/* Main Brand Title */}
-        <div className="space-y-1">
-          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900">
-            Hanoon <span className="text-purple-600">Academy</span>
-          </h1>
-          <p className="text-xs text-slate-400 font-medium">
-            Islamic Studies & Excellence
-          </p>
-        </div>
+        <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900">
+          Hanoon <span className="text-purple-600">Academy</span>
+        </h1>
       </div>
 
       {/* Single Primary Action Button (Ultra-Minimalist, No Bottom Text Links) */}
