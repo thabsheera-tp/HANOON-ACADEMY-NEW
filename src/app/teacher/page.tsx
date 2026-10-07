@@ -319,12 +319,6 @@ export default function TeacherDashboardPage() {
               <span>Student View</span>
             </Link>
 
-            <Link
-              href="/admin"
-              className="py-2 px-3 sm:px-3.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-800 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer hidden sm:flex"
-            >
-              <span>Admin Portal</span>
-            </Link>
 
             <button
               type="button"

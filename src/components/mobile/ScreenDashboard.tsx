@@ -11,11 +11,14 @@ import {
   Clock,
   Sparkles,
   Award,
-  Megaphone,
   MessageCircle,
-  HelpCircle,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   BarChart3,
+  Calendar,
+  Scale,
+  ScrollText,
 } from "lucide-react";
 import { UserProfile, SelectedCourse, PaymentDetails } from "@/types/app";
 import { SpecialClass, getSpecialClasses } from "@/services/specialClassService";
@@ -38,7 +41,6 @@ interface ScreenDashboardProps {
   paymentDetails: PaymentDetails;
   onChangeCourse: () => void;
   onOpenReceipt?: () => void;
-  onSimulateAdminApproval?: () => void;
 }
 
 export default function ScreenDashboard({
@@ -46,15 +48,15 @@ export default function ScreenDashboard({
   selectedCourse,
   paymentDetails,
   onOpenReceipt,
-  onSimulateAdminApproval,
 }: ScreenDashboardProps) {
   const [showLiveModal, setShowLiveModal] = useState(false);
   const [showMaterialsModal, setShowMaterialsModal] = useState(false);
   const [showTimetableModal, setShowTimetableModal] = useState(false);
   const [showStudentIDModal, setShowStudentIDModal] = useState(false);
   const [showNotificationToast, setShowNotificationToast] = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(false);
 
-  // Special Classes State
+  // Special Classes State (Burdah Live)
   const [specialClasses, setSpecialClasses] = useState<SpecialClass[]>(() => getSpecialClasses());
   const [selectedSpecialClass, setSelectedSpecialClass] = useState<SpecialClass | null>(null);
   const [showSpecialModal, setShowSpecialModal] = useState(false);
@@ -120,60 +122,71 @@ export default function ScreenDashboard({
     paymentDetails.status === "verified" || (paymentDetails.status as string) === "APPROVED";
   const isPending =
     !isApproved &&
-    (paymentDetails.status === "pending_verification" || (paymentDetails.status as string) === "PENDING" || Boolean(paymentDetails.upiTxId));
+    (paymentDetails.status === "pending_verification" ||
+      (paymentDetails.status as string) === "PENDING" ||
+      Boolean(paymentDetails.upiTxId));
 
-  const isAdaviyya = selectedCourse.id === "adaviyya" || selectedCourse.id === "athaviy";
+  const burdahClass =
+    specialClasses.find(
+      (spc) =>
+        spc.id.toLowerCase().includes("burdah") ||
+        spc.title.toLowerCase().includes("burdah")
+    ) || specialClasses[0];
+
+  const getSubjectIcon = (iconType: string) => {
+    switch (iconType) {
+      case "book":
+        return <BookOpen className="w-5 h-5" />;
+      case "sparkles":
+        return <Sparkles className="w-5 h-5" />;
+      case "scale":
+        return <Scale className="w-5 h-5" />;
+      case "scroll":
+        return <ScrollText className="w-5 h-5" />;
+      default:
+        return <BookOpen className="w-5 h-5" />;
+    }
+  };
 
   return (
-    <div className="w-full max-w-md mx-auto px-4 py-4 flex-1 flex flex-col justify-start space-y-4 select-none font-['Plus_Jakarta_Sans'] bg-purple-50/30 text-slate-900">
-      {/* Top Header: Student Profile + Notification Bell */}
-      <div className="flex items-center justify-between pt-1">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-purple-600 text-white font-black flex items-center justify-center shadow-sm text-base">
+    <div className="w-full max-w-md mx-auto px-4 py-3 flex-1 flex flex-col justify-start space-y-3.5 select-none font-['Plus_Jakarta_Sans'] bg-purple-50/30 text-slate-900">
+      {/* 1. TOP PROFILE BAR (Compact, Modern) */}
+      <div className="flex items-center justify-between pt-0.5">
+        <div className="flex items-center gap-2.5">
+          <div className="w-10 h-10 rounded-2xl bg-purple-600 text-white font-extrabold flex items-center justify-center shadow-xs text-sm shrink-0">
             {avatarLetter}
           </div>
           <div>
-            <h2 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight leading-tight">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600 block leading-tight">
+              Student Dashboard
+            </span>
+            <h2 className="text-base font-extrabold text-slate-900 tracking-tight leading-tight line-clamp-1">
               Welcome, {studentName}
             </h2>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setShowNotificationToast((prev) => !prev)}
-            className="relative w-10 h-10 rounded-2xl bg-white border border-purple-100 shadow-sm flex items-center justify-center hover:bg-purple-50 transition-all text-slate-700 cursor-pointer"
-            title="Notifications"
-          >
-            <Bell className="w-4 h-4 text-purple-600" />
-            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-rose-500 animate-ping" />
-            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-rose-500" />
-          </button>
-        </div>
-      </div>
-
-      {/* ANNOUNCEMENT NOTICE BOARD TICKER */}
-      <div className="p-3 rounded-2xl bg-white border border-purple-100 shadow-xs flex items-center gap-2.5 overflow-hidden">
-        <div className="w-7 h-7 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
-          <Megaphone className="w-3.5 h-3.5 animate-pulse" />
-        </div>
-        <div className="overflow-hidden whitespace-nowrap flex-1">
-          <p className="text-xs font-semibold text-slate-600 inline-block">
-            📢 <strong className="text-slate-900">Notice Board:</strong> Interactive Live Session tonight at 07:30 PM IST • All PDF Handbooks downloadable • Connect with Faculty for doubts.
-          </p>
-        </div>
+        <button
+          type="button"
+          onClick={() => setShowNotificationToast((prev) => !prev)}
+          className="relative w-9 h-9 rounded-2xl bg-white border border-purple-100 shadow-xs flex items-center justify-center hover:bg-purple-50 transition-all text-slate-700 cursor-pointer shrink-0"
+          title="Notifications"
+        >
+          <Bell className="w-4 h-4 text-purple-600" />
+          <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
+          <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-rose-500" />
+        </button>
       </div>
 
       {/* Notification Toast Dropdown */}
       {showNotificationToast && (
-        <div className="p-3.5 rounded-2xl bg-white border border-purple-200 text-xs text-slate-700 shadow-lg flex items-center justify-between animate-fade-in">
-          <div className="flex items-center gap-2.5">
+        <div className="p-3 rounded-2xl bg-white border border-purple-200 text-xs text-slate-700 shadow-md flex items-center justify-between animate-fade-in">
+          <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 shrink-0 text-purple-600" />
             <span className="font-semibold text-slate-800">
               {isApproved
-                ? "Your enrollment is approved and verified! All courses unlocked."
-                : "Payment submitted. Verification usually takes 5-15 mins."}
+                ? "Enrollment approved! All subjects & interactive live classes active."
+                : "Payment submitted. Admin verification in progress."}
             </span>
           </div>
           <button
@@ -186,301 +199,209 @@ export default function ScreenDashboard({
         </div>
       )}
 
-      {/* PENDING VERIFICATION NOTICE BANNER (If not yet approved) */}
+      {/* PENDING VERIFICATION NOTICE BANNER (Strictly Informative, No Dev Buttons) */}
       {isPending && !isApproved && (
-        <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl shadow-xs space-y-2.5 animate-fade-in">
+        <div className="bg-amber-50/90 border border-amber-200 p-3 rounded-2xl shadow-xs space-y-1.5 animate-fade-in">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-amber-600 animate-spin" />
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-amber-600 animate-spin" />
               <span className="text-xs font-bold text-amber-900 uppercase tracking-wide">
-                Awaiting Admin Verification
+                Verification in Progress
               </span>
             </div>
-            <span className="bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full">
+            <span className="bg-amber-100 text-amber-800 border border-amber-200 text-[9px] font-extrabold px-2 py-0.5 rounded-full">
               PENDING
             </span>
           </div>
-
-          <p className="text-xs text-amber-800 leading-relaxed font-medium">
-            Your UPI transaction ID (<code className="text-amber-900 font-mono font-bold">{paymentDetails.upiTxId || "423589104712"}</code>) is queued in Supabase. Once approved, the full interactive curriculum will unlock automatically.
+          <p className="text-[11px] text-amber-800 font-medium leading-relaxed">
+            Transaction ID <code className="font-mono font-bold text-amber-900">{paymentDetails.upiTxId || "423589104712"}</code> is queued for verification.
           </p>
-
-          <div className="flex items-center gap-2 pt-1">
-            {onSimulateAdminApproval && (
-              <button
-                type="button"
-                onClick={onSimulateAdminApproval}
-                className="py-2 px-3 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer shadow-xs"
-              >
-                <span>Instant Unlock (Evaluation)</span>
-              </button>
-            )}
-          </div>
         </div>
       )}
 
-      {/* ========================================================
-          1. ACTIVE COURSE & PROGRESS CARD
-          ======================================================== */}
-      <div className="bg-white p-4.5 rounded-2xl border border-purple-100 shadow-sm space-y-3.5">
-        <div className="flex items-start justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600 bg-purple-50 px-2.5 py-0.5 rounded-full">
-                Active Enrolled Course
+      {/* 2. COMPACT ENROLLED PROGRAM & LIVE COUNTDOWN HERO CARD */}
+      <div className="bg-white p-3.5 rounded-2xl border border-purple-100 shadow-xs space-y-2.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-[9.5px] font-extrabold uppercase tracking-wider text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100">
+              Active Enrolled Track
+            </span>
+            {isApproved && (
+              <span className="text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                Verified
               </span>
-              {isApproved && (
-                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
-                  Verified
-                </span>
-              )}
-            </div>
-            <h3 className="text-lg font-extrabold text-slate-900 mt-1">
+            )}
+          </div>
+
+          <div className="flex items-center gap-1 text-[10px] font-mono font-bold text-purple-700 bg-purple-50/80 px-2 py-0.5 rounded-md">
+            <Clock className="w-3 h-3 text-purple-600" />
+            <span>{formattedCountdown}</span>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-extrabold text-slate-900 leading-tight">
               {selectedCourse.title}
             </h3>
-            <p className="text-xs text-slate-500 font-medium">
-              {selectedCourse.subtitle}
+            <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+              4 Core Subjects • Live Classes with Usthad Dr. Faisal
             </p>
           </div>
 
-          <div className="text-right">
-            <span className="text-sm font-black text-purple-700">
-              {selectedCourse.fee}
-            </span>
-            <span className="text-[10px] text-slate-400 block">
-              {selectedCourse.duration}
-            </span>
-          </div>
-        </div>
-
-        {/* Progress Bar */}
-        <div className="space-y-1.5 pt-1">
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-semibold text-slate-600">Course Completion</span>
-            <span className="font-bold text-purple-700">68% Finished</span>
-          </div>
-          <div className="w-full h-2.5 rounded-full bg-purple-100 overflow-hidden">
-            <div className="h-full rounded-full bg-purple-600 transition-all duration-500" style={{ width: "68%" }} />
-          </div>
-          <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5">
-            <span>Term 1 Completed</span>
-            <span>Term 2 In Progress</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ========================================================
-          2. ADAVIYYA 4 SUB-HUBS (When Adaviyya is enrolled)
-          ======================================================== */}
-      {isAdaviyya && (
-        <div className="space-y-2.5">
-          <div className="flex items-center justify-between px-1">
-            <div className="flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-purple-600" />
-              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                Adaviyya Sub-Hubs (4 Subjects)
-              </h3>
-            </div>
-            <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
-              Included
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2.5">
-            {subjects.map((sub) => (
-              <div
-                key={sub.id}
-                onClick={() => setActiveSubject(sub)}
-                className="bg-white p-3.5 rounded-2xl border border-purple-100 hover:border-purple-300 shadow-xs hover:shadow-sm transition-all cursor-pointer flex flex-col justify-between space-y-2 group"
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-purple-50 text-purple-700">
-                      Hub {sub.name}
-                    </span>
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  </div>
-                  <h4 className="text-sm font-extrabold text-slate-900 group-hover:text-purple-700 transition-colors">
-                    {sub.name}
-                  </h4>
-                  <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
-                    {sub.subtitle}
-                  </p>
-                </div>
-
-                <div className="pt-2 border-t border-purple-50 text-[10px] text-purple-600 font-semibold flex items-center justify-between">
-                  <span>PDF Notes & Classes</span>
-                  <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-purple-600" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================
-          3. INTERACTIVE LIVE CLASS CARD WITH COUNTDOWN
-          ======================================================== */}
-      <div className="bg-white p-4.5 rounded-2xl border border-purple-100 shadow-sm space-y-3 relative overflow-hidden">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
-            <span className="text-xs font-bold uppercase tracking-wider text-rose-600">
-              Interactive Live Session
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowTimetableModal(true)}
-            className="text-[11px] font-bold text-purple-600 hover:text-purple-700 cursor-pointer"
-          >
-            Weekly Schedule ➔
-          </button>
-        </div>
-
-        <div>
-          <h4 className="text-base font-extrabold text-slate-900">
-            Adaviyya Live Room: Seerah & Fiqh Jurisprudence
-          </h4>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Instructor: <strong className="text-slate-800">Usthad Dr. Faisal Al-Hanoon</strong>
-          </p>
-        </div>
-
-        {/* Live Countdown Display */}
-        <div className="p-3 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-slate-600 text-xs">
-            <Clock className="w-4 h-4 text-purple-600" />
-            <span>Class Starts In:</span>
-          </div>
-          <span className="font-mono text-xs font-black text-purple-700">
-            {formattedCountdown}
-          </span>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setShowLiveModal(true)}
-          className="w-full py-3.5 px-4 rounded-xl font-bold text-xs text-white bg-purple-600 hover:bg-purple-700 shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
-        >
-          <Radio className="w-4 h-4 animate-pulse" />
-          <span>Join Live Stream & Virtual Classroom</span>
-        </button>
-      </div>
-
-      {/* ========================================================
-          DATA VISUALIZATION WIDGETS (Attendance Donut & Assessment Scores)
-          ======================================================== */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-purple-600" />
-            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-              Student Attendance & Progress Analytics
-            </h3>
-          </div>
-          <span className="text-[10px] font-bold text-purple-700 bg-purple-100/70 px-2.5 py-0.5 rounded-full">
-            Active Term
-          </span>
-        </div>
-
-        {/* 1. Neumorphic Card: Attendance Donut Chart */}
-        <div className="neumorphic-card p-4 rounded-3xl space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-extrabold text-slate-800">
-              Attendance Record
-            </span>
-            <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
-              88% Present
-            </span>
-          </div>
-          <AttendanceDonutChart presentCount={22} leaveCount={2} absentCount={1} />
-        </div>
-
-        {/* 2. Wider Card: Minimalist Bar Chart for Course Progress & Assessment Scores */}
-        <div className="neumorphic-card p-4 rounded-3xl space-y-2">
-          <ProgressScoreBarChart />
-        </div>
-      </div>
-
-      {/* ========================================================
-          4. ACADEMIC SERVICES GRID (Join Live, Notes & PDFs, Fee Receipt, Student ID)
-          ======================================================== */}
-      <div className="space-y-2">
-        <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block px-1">
-          Academic Services
-        </span>
-
-        <div className="grid grid-cols-2 gap-2.5">
-          {/* Tile 1: Join Live */}
           <button
             type="button"
             onClick={() => setShowLiveModal(true)}
-            className="p-3.5 rounded-2xl bg-white hover:bg-purple-50/50 border border-purple-100 shadow-xs hover:shadow-sm transition-all text-left flex flex-col justify-between min-h-[100px] cursor-pointer group"
+            className="py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-95 shrink-0"
           >
-            <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+            <Radio className="w-3.5 h-3.5 animate-pulse" />
+            <span>Join Live</span>
+          </button>
+        </div>
+
+        {/* Minimal Progress Line */}
+        <div className="space-y-1 pt-0.5">
+          <div className="flex items-center justify-between text-[10.5px]">
+            <span className="font-semibold text-slate-500">Progress</span>
+            <span className="font-bold text-purple-700">68% Complete</span>
+          </div>
+          <div className="w-full h-1.5 rounded-full bg-purple-100 overflow-hidden">
+            <div className="h-full rounded-full bg-purple-600 transition-all duration-500" style={{ width: "68%" }} />
+          </div>
+        </div>
+      </div>
+
+      {/* 3. ENROLLED SUBJECTS: COMPACT 2x2 QUICK ACCESS GRID */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center gap-1.5">
+            <BookOpen className="w-3.5 h-3.5 text-purple-600" />
+            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+              Enrolled Subjects
+            </h3>
+          </div>
+          <span className="text-[10px] font-bold text-purple-700 bg-purple-100/70 px-2 py-0.5 rounded-full">
+            4 Interactive Hubs
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2.5">
+          {subjects.map((sub) => (
+            <button
+              key={sub.id}
+              type="button"
+              onClick={() => setActiveSubject(sub)}
+              className="bg-white border border-purple-100/90 hover:border-purple-300 rounded-2xl p-3 flex flex-col justify-between text-left cursor-pointer group transition-all hover:shadow-sm active:scale-[0.98] shadow-xs aspect-square"
+            >
+              <div className="flex items-center justify-between w-full">
+                <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-all shadow-xs">
+                  {getSubjectIcon(sub.iconType)}
+                </div>
+                <span className="w-2 h-2 rounded-full bg-emerald-500" title="Active Module" />
+              </div>
+
+              <div className="my-1">
+                <h4 className="text-sm font-extrabold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
+                  {sub.name}
+                </h4>
+                <p className="text-[10px] text-slate-500 line-clamp-1 mt-0.5 font-medium">
+                  {sub.subtitle}
+                </p>
+              </div>
+
+              <div className="pt-1.5 border-t border-purple-50 flex items-center justify-between text-[10px] text-purple-600 font-bold w-full">
+                <span>Modules</span>
+                <ChevronRight className="w-3 h-3 text-slate-400 group-hover:text-purple-600 transition-colors" />
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 4. ACADEMIC QUICK ACCESS SERVICES: 2x2 GRID */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+              Quick Services
+            </h3>
+          </div>
+          <span className="text-[10px] font-bold text-slate-400">
+            Essential Tools
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2.5">
+          {/* Tile 1: Live Classroom */}
+          <button
+            type="button"
+            onClick={() => setShowLiveModal(true)}
+            className="p-3 rounded-2xl bg-white hover:bg-purple-50/40 border border-purple-100 hover:border-purple-300 shadow-xs hover:shadow-sm transition-all text-left flex flex-col justify-between min-h-[92px] cursor-pointer group active:scale-[0.98]"
+          >
+            <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center group-hover:bg-rose-600 group-hover:text-white transition-all shadow-xs">
               <Radio className="w-4 h-4 animate-pulse" />
             </div>
-            <div>
-              <p className="text-xs font-bold text-slate-900 group-hover:text-purple-700">
-                Join Live Class
+            <div className="mt-2">
+              <p className="text-xs font-bold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
+                Live Class Room
               </p>
               <span className="text-[10px] text-rose-600 font-semibold block mt-0.5">
-                Live Broadcast
+                Join Stream
               </span>
             </div>
           </button>
 
-          {/* Tile 2: Notes & PDFs */}
+          {/* Tile 2: Course Notes & PDFs */}
           <button
             type="button"
             onClick={() => setShowMaterialsModal(true)}
-            className="p-3.5 rounded-2xl bg-white hover:bg-purple-50/50 border border-purple-100 shadow-xs hover:shadow-sm transition-all text-left flex flex-col justify-between min-h-[100px] cursor-pointer group"
+            className="p-3 rounded-2xl bg-white hover:bg-purple-50/40 border border-purple-100 hover:border-purple-300 shadow-xs hover:shadow-sm transition-all text-left flex flex-col justify-between min-h-[92px] cursor-pointer group active:scale-[0.98]"
           >
-            <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-all shadow-xs">
               <BookOpen className="w-4 h-4" />
             </div>
-            <div>
-              <p className="text-xs font-bold text-slate-900 group-hover:text-purple-700">
-                Subjects & Notes
+            <div className="mt-2">
+              <p className="text-xs font-bold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
+                Course Materials
               </p>
               <span className="text-[10px] text-slate-500 font-semibold block mt-0.5">
-                Videos & Offline PDFs
+                PDFs & Handbooks
               </span>
             </div>
           </button>
 
-          {/* Tile 3: Fee Receipt */}
+          {/* Tile 3: Timetable */}
           <button
             type="button"
-            onClick={() => onOpenReceipt && onOpenReceipt()}
-            className="p-3.5 rounded-2xl bg-white hover:bg-purple-50/50 border border-purple-100 shadow-xs hover:shadow-sm transition-all text-left flex flex-col justify-between min-h-[100px] cursor-pointer group"
+            onClick={() => setShowTimetableModal(true)}
+            className="p-3 rounded-2xl bg-white hover:bg-purple-50/40 border border-purple-100 hover:border-purple-300 shadow-xs hover:shadow-sm transition-all text-left flex flex-col justify-between min-h-[92px] cursor-pointer group active:scale-[0.98]"
           >
-            <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-              <FileText className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-all shadow-xs">
+              <Calendar className="w-4 h-4" />
             </div>
-            <div>
-              <p className="text-xs font-bold text-slate-900 group-hover:text-purple-700">
-                Fee Receipt
+            <div className="mt-2">
+              <p className="text-xs font-bold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
+                Timetable
               </p>
               <span className="text-[10px] text-slate-500 font-semibold block mt-0.5">
-                Official PDF Voucher
+                Weekly Schedule
               </span>
             </div>
           </button>
 
-          {/* Tile 4: Digital ID Card */}
+          {/* Tile 4: Student ID Pass */}
           <button
             type="button"
             onClick={() => setShowStudentIDModal(true)}
-            className="p-3.5 rounded-2xl bg-white hover:bg-purple-50/50 border border-purple-100 shadow-xs hover:shadow-sm transition-all text-left flex flex-col justify-between min-h-[100px] cursor-pointer group"
+            className="p-3 rounded-2xl bg-white hover:bg-purple-50/40 border border-purple-100 hover:border-purple-300 shadow-xs hover:shadow-sm transition-all text-left flex flex-col justify-between min-h-[92px] cursor-pointer group active:scale-[0.98]"
           >
-            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-xs">
               <Award className="w-4 h-4" />
             </div>
-            <div>
-              <p className="text-xs font-bold text-slate-900 group-hover:text-purple-700">
-                Student ID Card
+            <div className="mt-2">
+              <p className="text-xs font-bold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
+                Student ID Pass
               </p>
               <span className="text-[10px] text-slate-500 font-semibold block mt-0.5">
                 Digital Pass & QR
@@ -490,167 +411,192 @@ export default function ScreenDashboard({
         </div>
       </div>
 
-      {/* ========================================================
-          5. UPCOMING SPECIAL CLASSES (Tajweed Special Class, Burdah Live)
-          ======================================================== */}
-      <div className="space-y-2.5">
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-purple-600" />
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-              Upcoming Special Classes
+      {/* 5. SPECIAL CLASS (Burdah Live Only + Upcoming Indicator) */}
+      {burdahClass && (
+        <div className="space-y-1.5 pt-0.5">
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-purple-600 animate-pulse" />
+              <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                Special Class
+              </h3>
+            </div>
+            <span className="text-[10px] font-bold text-purple-700 bg-purple-100/70 px-2 py-0.5 rounded-full">
+              Live Session
             </span>
           </div>
-          <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
-            {specialClasses.length} Available
-          </span>
-        </div>
 
-        <div className="space-y-2.5">
-          {specialClasses.map((spc) => {
-            const isLive = spc.status === "LIVE_NOW";
-
-            return (
-              <div
-                key={spc.id}
-                className="bg-white p-4 rounded-2xl border border-purple-100 shadow-xs space-y-2.5"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
-                    {spc.category}
-                  </span>
-                  {isLive ? (
-                    <span className="text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
-                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                      LIVE NOW
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded-full">
-                      UPCOMING
-                    </span>
-                  )}
-                </div>
-
-                <div>
-                  <h4 className="text-sm font-extrabold text-slate-900">
-                    {spc.title}
-                  </h4>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {spc.subtitle} • Faculty: <strong className="text-slate-800">{spc.instructor}</strong>
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-between text-xs pt-1 border-t border-purple-50">
-                  <span className="text-[11px] text-purple-700 font-semibold">
-                    {spc.scheduleTime}
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedSpecialClass(spc);
-                      setShowSpecialModal(true);
-                    }}
-                    className="py-1.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs flex items-center gap-1 cursor-pointer shadow-xs transition-all"
-                  >
-                    <span>{isLive ? "Join Live" : "View Details"}</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedSpecialClass(burdahClass);
+              setShowSpecialModal(true);
+            }}
+            className="w-full bg-white border border-purple-100 hover:border-purple-300 rounded-2xl p-3 flex items-center justify-between text-left cursor-pointer group transition-all hover:shadow-sm active:scale-[0.98] shadow-xs"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-all shadow-xs shrink-0">
+                <Radio className="w-4 h-4 animate-pulse" />
               </div>
-            );
-          })}
+              <div>
+                <h4 className="text-xs font-extrabold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
+                  {burdahClass.title}
+                </h4>
+                <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
+                  {burdahClass.scheduleTime.split("•")[0]?.trim() || burdahClass.scheduleTime}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-[9px] font-black uppercase text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
+                Live
+              </span>
+              <ChevronRight className="w-4 h-4 text-purple-600" />
+            </div>
+          </button>
+
+          <p className="text-center text-[11px] font-medium text-slate-400 italic pt-0.5">
+            Special classes upcoming...
+          </p>
         </div>
+      )}
+
+      {/* 6. COMPACT ACTION UTILITIES: MENTOR WHATSAPP & FEE RECEIPT */}
+      <div className="grid grid-cols-2 gap-2.5 pt-0.5">
+        <a
+          href={`https://wa.me/${getAppSettings().contactWhatsApp || "919846012345"}?text=Assalamu%20Alaikum%20Usthad,%20I%20am%20${encodeURIComponent(studentName)},%20enrolled%20in%20${encodeURIComponent(selectedCourse.title)}.%20I%20need%20academic%20assistance.`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="p-2.5 rounded-2xl bg-white border border-purple-100 hover:border-purple-300 shadow-xs flex items-center gap-2 transition-all cursor-pointer group active:scale-[0.98]"
+        >
+          <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-colors">
+            <MessageCircle className="w-3.5 h-3.5" />
+          </div>
+          <div>
+            <span className="text-xs font-bold text-slate-900 block leading-tight">
+              Mentor Chat
+            </span>
+            <span className="text-[9.5px] text-slate-500 font-medium">WhatsApp</span>
+          </div>
+        </a>
+
+        {onOpenReceipt ? (
+          <button
+            type="button"
+            onClick={onOpenReceipt}
+            className="p-2.5 rounded-2xl bg-white border border-purple-100 hover:border-purple-300 shadow-xs flex items-center gap-2 transition-all cursor-pointer group active:scale-[0.98] text-left"
+          >
+            <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center group-hover:bg-amber-600 group-hover:text-white transition-colors">
+              <FileText className="w-3.5 h-3.5" />
+            </div>
+            <div>
+              <span className="text-xs font-bold text-slate-900 block leading-tight">
+                Fee Receipt
+              </span>
+              <span className="text-[9.5px] text-slate-500 font-medium">Official Voucher</span>
+            </div>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowAnalytics(!showAnalytics)}
+            className="p-2.5 rounded-2xl bg-white border border-purple-100 hover:border-purple-300 shadow-xs flex items-center gap-2 transition-all cursor-pointer group active:scale-[0.98] text-left"
+          >
+            <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-colors">
+              <BarChart3 className="w-3.5 h-3.5" />
+            </div>
+            <div>
+              <span className="text-xs font-bold text-slate-900 block leading-tight">
+                Analytics
+              </span>
+              <span className="text-[9.5px] text-slate-500 font-medium">Attendance & Score</span>
+            </div>
+          </button>
+        )}
       </div>
 
-      {/* ========================================================
-          6. MY CERTIFICATES SECTION (Student Digital Credentials)
-          ======================================================== */}
-      <div className="space-y-2.5">
-        <div className="flex items-center justify-between px-1">
+      {/* OPTIONAL EXPANDABLE ANALYTICS ACCORDION */}
+      <div className="pt-0.5">
+        <button
+          type="button"
+          onClick={() => setShowAnalytics((prev) => !prev)}
+          className="w-full py-2 px-3 rounded-xl bg-white border border-purple-100 hover:bg-purple-50/50 shadow-xs flex items-center justify-between text-xs font-bold text-slate-700 transition-all cursor-pointer"
+        >
           <div className="flex items-center gap-2">
-            <Award className="w-4 h-4 text-purple-600" />
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-              My Certificates
+            <BarChart3 className="w-3.5 h-3.5 text-purple-600" />
+            <span>Attendance & Progress Analytics</span>
+          </div>
+          {showAnalytics ? (
+            <ChevronUp className="w-4 h-4 text-slate-400" />
+          ) : (
+            <ChevronDown className="w-4 h-4 text-slate-400" />
+          )}
+        </button>
+
+        {showAnalytics && (
+          <div className="mt-2 space-y-2.5 animate-fade-in">
+            <div className="bg-white p-3.5 rounded-2xl border border-purple-100 shadow-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold text-slate-800">
+                  Attendance Record
+                </span>
+                <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                  88% Present
+                </span>
+              </div>
+              <AttendanceDonutChart presentCount={22} leaveCount={2} absentCount={1} />
+            </div>
+
+            <div className="bg-white p-3.5 rounded-2xl border border-purple-100 shadow-xs space-y-2">
+              <ProgressScoreBarChart />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* DIGITAL CERTIFICATES VIEW (If any issued) */}
+      {certificates.length > 0 && (
+        <div className="space-y-1.5 pt-0.5">
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+              <Award className="w-3.5 h-3.5 text-purple-600" />
+              <span>Digital Credentials</span>
+            </h3>
+            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+              {certificates.length} Issued
             </span>
           </div>
-          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">
-            Verified Digital Credentials
-          </span>
-        </div>
 
-        {certificates.length === 0 ? (
-          <div className="bg-white p-4 rounded-2xl border border-purple-100 text-center space-y-2">
-            <Award className="w-8 h-8 text-purple-300 mx-auto" />
-            <p className="text-xs text-slate-600 font-medium">
-              No certificates issued yet. Complete your course curriculum and assessments to receive official accreditation.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {certificates.map((cert) => (
               <div
                 key={cert.id}
-                className="bg-white p-4 rounded-2xl border border-purple-100 shadow-xs flex items-center justify-between gap-3"
+                className="bg-white p-3 rounded-2xl border border-purple-100 shadow-xs flex items-center justify-between gap-3"
               >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full">
-                      {cert.certificate_number}
-                    </span>
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-                      {cert.grade}
-                    </span>
-                  </div>
+                <div>
                   <h4 className="text-xs font-extrabold text-slate-900 leading-tight">
                     {cert.course_title}
                   </h4>
-                  <p className="text-[10px] text-slate-400">
-                    Issued to {cert.student_name} on {cert.issue_date}
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    Grade {cert.grade} • {cert.certificate_number}
                   </p>
                 </div>
 
                 <button
                   type="button"
                   onClick={() => setSelectedCert(cert)}
-                  className="py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs flex items-center gap-1 shrink-0 cursor-pointer shadow-xs transition-all"
+                  className="py-1.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs flex items-center gap-1 shrink-0 cursor-pointer shadow-xs transition-all"
                 >
-                  <Download className="w-3.5 h-3.5" />
+                  <Download className="w-3 h-3" />
                   <span>View</span>
                 </button>
               </div>
             ))}
           </div>
-        )}
-      </div>
-
-      {/* ========================================================
-          7. MENTOR WHATSAPP HELPLINE
-          ======================================================== */}
-      <div className="bg-white p-4 rounded-2xl border border-purple-100 shadow-xs space-y-2.5">
-        <div className="flex items-center gap-2 pb-1 border-b border-purple-50">
-          <HelpCircle className="w-4 h-4 text-purple-600" />
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-            Doubt Clearance & Academic Mentor Desk
-          </h3>
         </div>
-
-        <p className="text-xs text-slate-600 font-medium leading-relaxed">
-          Need clarification on Hadith interpretations, Fiqh questions, or recitation feedback? Chat directly with your faculty mentor.
-        </p>
-
-        <a
-          href={`https://wa.me/${getAppSettings().contactWhatsApp || "919846012345"}?text=Assalamu%20Alaikum%20Usthad,%20I%20am%20${encodeURIComponent(studentName)},%20enrolled%20in%20${encodeURIComponent(selectedCourse.title)}.%20I%20need%20academic%20assistance.`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="w-full py-3 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
-        >
-          <MessageCircle className="w-4 h-4" />
-          <span>Chat with Academic Mentor on WhatsApp</span>
-        </a>
-      </div>
-
-
+      )}
 
       {/* ========================================================
           MODALS
@@ -687,7 +633,7 @@ export default function ScreenDashboard({
         selectedCourse={selectedCourse}
       />
 
-      {/* 5. Special Class Modal */}
+      {/* 5. Special Class Modal (Burdah Live) */}
       <SpecialClassModal
         isOpen={showSpecialModal}
         onClose={() => setShowSpecialModal(false)}
@@ -723,7 +669,6 @@ export default function ScreenDashboard({
               </button>
             </div>
 
-            {/* Certificate Parchment UI */}
             <div className="p-4 rounded-2xl bg-purple-50/70 border-2 border-purple-200 text-center space-y-2">
               <span className="text-[10px] font-bold uppercase tracking-widest text-purple-700 block">
                 Hanoon Academy Certificate of Completion

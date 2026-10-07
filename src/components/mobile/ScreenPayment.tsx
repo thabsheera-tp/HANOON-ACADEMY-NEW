@@ -239,29 +239,15 @@ export default function ScreenPayment({
             Your UPI Transaction ID (<code className="font-mono font-bold text-amber-900">{paymentDetails.upiTxId || txId}</code>) is queued for Admin review in Supabase. Verification takes 5–15 mins.
           </p>
 
-          <div className="flex items-center gap-2 pt-1">
+          <div className="pt-1">
             <button
               type="button"
               onClick={onGoToDashboard}
-              className="flex-1 py-3 px-3 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
+              className="w-full py-3 px-4 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
             >
               <span>View Student Portal</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
-
-            {onSimulateAdminApproval && (
-              <button
-                type="button"
-                onClick={() => {
-                  setVerifiedStatus("verified");
-                  onSimulateAdminApproval();
-                }}
-                className="py-3 px-3 rounded-2xl bg-amber-200 hover:bg-amber-300 text-amber-900 text-xs font-bold transition-all cursor-pointer"
-                title="Simulate instant admin approval"
-              >
-                Instant Unlock (Demo)
-              </button>
-            )}
           </div>
         </div>
       )}

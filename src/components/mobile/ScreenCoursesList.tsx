@@ -155,121 +155,99 @@ export default function ScreenCoursesList({
 
   return (
     <div className="w-full max-w-md mx-auto px-5 py-4 flex-1 flex flex-col justify-start space-y-5 select-none font-['Plus_Jakarta_Sans'] bg-purple-50/40">
-      {/* 1. Main Academic Programs: Balanced 2x2 Grid */}
+      {/* 1. Main Academic Programs: Balanced 2x2 Grid (Clean: Name & Icon Only) */}
       <div className="grid grid-cols-2 gap-3.5 pt-1">
         {courses.slice(0, 4).map((course) => {
           const icon = getCourseIcon(course.id);
           const isShamail =
             course.id === "shamail-muhammadiyya" || course.title.includes("الشمائل");
-          const isAdaviyya = course.id === "adaviyya" || course.id === "athaviy";
 
           return (
             <button
               key={course.id}
               type="button"
               onClick={() => onSelectCourse(course)}
-              className="aspect-square neumorphic-button rounded-3xl p-3 flex flex-col items-center justify-center text-center gap-1.5 cursor-pointer group transition-all active:scale-[0.98] relative overflow-hidden"
+              className="aspect-square bg-white border border-purple-100/90 hover:border-purple-300 rounded-3xl p-4 flex flex-col items-center justify-center text-center gap-2.5 cursor-pointer group transition-all hover:shadow-md active:scale-[0.98] shadow-xs relative overflow-hidden"
             >
-              {isAdaviyya && (
-                <span className="text-[8.5px] font-black uppercase tracking-wider text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full border border-purple-200">
-                  Completed 4 Batches
-                </span>
-              )}
-
-              <div className="w-10 h-10 rounded-2xl bg-purple-50 border border-purple-100/80 flex items-center justify-center text-purple-600 group-hover:bg-purple-600 group-hover:text-white group-hover:scale-105 transition-all shadow-xs shrink-0">
+              <div className="w-12 h-12 rounded-2xl bg-purple-50 border border-purple-100/80 flex items-center justify-center text-purple-600 group-hover:bg-purple-600 group-hover:text-white group-hover:scale-105 transition-all shadow-xs shrink-0">
                 {icon}
               </div>
 
-              <div className="flex flex-col items-center px-1">
-                <span
-                  className={`text-sm font-extrabold text-slate-900 group-hover:text-purple-700 transition-colors tracking-tight leading-snug ${
-                    isShamail ? "font-['Amiri',_'Plus_Jakarta_Sans',_sans-serif]" : ""
-                  }`}
-                >
-                  {course.title}
-                </span>
-
-                {isAdaviyya ? (
-                  <span className="text-[9.5px] font-bold text-slate-500 group-hover:text-purple-600 transition-colors mt-0.5">
-                    Total: ₹3,000 • Adm: ₹500
-                  </span>
-                ) : isShamail ? (
-                  <span className="text-[9.5px] font-semibold text-slate-400 group-hover:text-purple-500 transition-colors line-clamp-1 mt-0.5">
-                    Ash-Shama&apos;il
-                  </span>
-                ) : (
-                  <span className="text-[9.5px] font-semibold text-slate-400 group-hover:text-purple-500 transition-colors line-clamp-1 mt-0.5">
-                    {course.fee}
-                  </span>
-                )}
-              </div>
+              <span
+                className={`text-sm font-extrabold text-slate-900 group-hover:text-purple-700 transition-colors tracking-tight leading-snug ${
+                  isShamail ? "font-['Amiri',_'Plus_Jakarta_Sans',_sans-serif] text-base" : ""
+                }`}
+              >
+                {course.title}
+              </span>
             </button>
           );
         })}
       </div>
 
-      {/* 2. Distinct Upcoming Special Classes Section */}
-      <div className="space-y-2.5 pt-1">
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-purple-600 animate-pulse" />
-            <h2 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-              Upcoming Special Classes
-            </h2>
-          </div>
-          <span className="text-[10px] font-bold text-purple-700 bg-purple-100/70 px-2.5 py-0.5 rounded-full">
-            Interactive Sessions
-          </span>
-        </div>
+      {/* 2. Special Classes Section: Burdah Live Only + Upcoming Indicator */}
+      {(() => {
+        const burdahClass =
+          specialClasses.find(
+            (spc) =>
+              spc.id.toLowerCase().includes("burdah") ||
+              spc.title.toLowerCase().includes("burdah")
+          ) || specialClasses[0];
 
-        <div className="grid grid-cols-2 gap-3.5">
-          {specialClasses.slice(0, 2).map((spc) => {
-            const isLive = spc.status === "LIVE_NOW";
-            const isTajweed = spc.id.includes("tajweed");
+        return (
+          <div className="space-y-2.5 pt-1">
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-purple-600 animate-pulse" />
+                <h2 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                  Special Classes
+                </h2>
+              </div>
+              <span className="text-[10px] font-bold text-purple-700 bg-purple-100/70 px-2.5 py-0.5 rounded-full">
+                Interactive Session
+              </span>
+            </div>
 
-            return (
+            {burdahClass && (
               <button
-                key={spc.id}
                 type="button"
-                onClick={() => setSelectedSpecialClass(spc)}
-                className="neumorphic-button rounded-2xl p-3.5 flex flex-col justify-between text-left cursor-pointer group transition-all hover:scale-[1.02] active:scale-[0.98] min-h-[110px]"
+                onClick={() => setSelectedSpecialClass(burdahClass)}
+                className="w-full bg-white border border-purple-100 hover:border-purple-300 rounded-2xl p-3.5 flex items-center justify-between text-left cursor-pointer group transition-all hover:shadow-md active:scale-[0.98] shadow-xs"
               >
-                <div className="space-y-1.5 w-full">
-                  <div className="flex items-center justify-between">
-                    <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-all shadow-xs">
-                      {isTajweed ? <Mic className="w-4 h-4" /> : <Radio className="w-4 h-4 animate-pulse" />}
-                    </div>
-                    {isLive ? (
-                      <span className="text-[9px] font-black uppercase text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded-md flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
-                        Live
-                      </span>
-                    ) : (
-                      <span className="text-[9px] font-extrabold uppercase text-purple-700 bg-purple-50 border border-purple-100 px-1.5 py-0.5 rounded-md">
-                        Upcoming
-                      </span>
-                    )}
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-all shadow-xs shrink-0">
+                    <Radio className="w-5 h-5 animate-pulse" />
                   </div>
-                  <h3 className="text-sm font-extrabold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
-                    {spc.title}
-                  </h3>
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
+                      {burdahClass.title}
+                    </h3>
+                    <p className="text-[11px] font-semibold text-slate-500 mt-0.5">
+                      {burdahClass.scheduleTime.split("•")[0]?.trim() || burdahClass.scheduleTime}
+                    </p>
+                  </div>
                 </div>
 
-                <div className="pt-2 border-t border-purple-50/80 w-full flex items-center justify-between">
-                  <p className="text-[10px] font-semibold text-slate-500 leading-tight line-clamp-1">
-                    {spc.scheduleTime.split("•")[0]?.trim() || spc.scheduleTime}
-                  </p>
-                  <span className="text-[10px] font-bold text-purple-600 shrink-0">
-                    Details &rarr;
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[9px] font-black uppercase text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
+                    Live
+                  </span>
+                  <span className="text-xs font-bold text-purple-600">
+                    &rarr;
                   </span>
                 </div>
               </button>
-            );
-          })}
-        </div>
-      </div>
+            )}
 
-      {/* 3. Interactive Details Modal for Tajweed & Burdah Live */}
+            <p className="text-center text-xs font-medium text-slate-400 italic pt-0.5">
+              Special classes upcoming...
+            </p>
+          </div>
+        );
+      })()}
+
+      {/* 3. Interactive Details Modal for Burdah Live */}
       <SpecialClassModal
         isOpen={Boolean(selectedSpecialClass)}
         onClose={() => setSelectedSpecialClass(null)}

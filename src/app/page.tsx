@@ -10,7 +10,6 @@ import ScreenOnboarding from "@/components/mobile/ScreenOnboarding";
 import ScreenPayment from "@/components/mobile/ScreenPayment";
 import ScreenDashboard from "@/components/mobile/ScreenDashboard";
 import ReceiptModal from "@/components/mobile/ReceiptModal";
-import AdminManagementPanel from "@/components/mobile/AdminManagementPanel";
 import { UserProfile, SelectedCourse, PaymentDetails, ScreenTab } from "@/types/app";
 import { getCurrentSession, setAuthSession, UserProfileRecord } from "@/services/authService";
 
@@ -47,7 +46,6 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
   });
 
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
-  const [isAdminOpen, setIsAdminOpen] = useState(false);
 
   // Student Session Persistence & Auto-Restoration
   useEffect(() => {
@@ -145,23 +143,6 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     setCurrentScreen("dashboard");
   };
 
-  const handleSimulateAdminApproval = () => {
-    setPaymentDetails((prev) => ({
-      ...prev,
-      status: "verified",
-    }));
-    setCurrentScreen("dashboard");
-  };
-
-  const handleAdminApproveCallback = (approvedStudentName?: string) => {
-    setPaymentDetails((prev) => ({
-      ...prev,
-      status: "verified",
-    }));
-    if (approvedStudentName && !userProfile.name) {
-      setUserProfile((prev) => ({ ...prev, name: approvedStudentName }));
-    }
-  };
 
   const handleBack = () => {
     if (currentScreen === "dashboard") setCurrentScreen("payment");
@@ -232,7 +213,6 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
               paymentDetails={paymentDetails}
               onSubmitPayment={handleSubmitPayment}
               onGoToDashboard={() => setCurrentScreen("dashboard")}
-              onSimulateAdminApproval={handleSimulateAdminApproval}
               onOpenReceipt={() => setIsReceiptOpen(true)}
               onSaveProfile={handleSaveProfile}
             />
@@ -246,7 +226,6 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
               paymentDetails={paymentDetails}
               onChangeCourse={() => setCurrentScreen("courses")}
               onOpenReceipt={() => setIsReceiptOpen(true)}
-              onSimulateAdminApproval={handleSimulateAdminApproval}
             />
           )}
         </div>
@@ -269,12 +248,6 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
         paymentDetails={paymentDetails}
       />
 
-      {/* Real-Time Admin Management Desk Modal */}
-      <AdminManagementPanel
-        isOpen={isAdminOpen}
-        onClose={() => setIsAdminOpen(false)}
-        onPaymentApproved={handleAdminApproveCallback}
-      />
     </div>
   );
 }

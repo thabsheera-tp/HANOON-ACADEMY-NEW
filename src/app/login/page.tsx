@@ -14,7 +14,6 @@ import {
   EyeOff,
   CheckCircle2,
   AlertCircle,
-  KeyRound,
   Phone,
   MapPin,
 } from "lucide-react";
@@ -23,11 +22,8 @@ import {
   loginUser,
   signUpUser,
   getCurrentSession,
-  setAuthSession,
-  SPECIAL_CREDENTIALS,
-  UserRole,
 } from "@/services/authService";
-import { isSupabaseConfigured } from "@/lib/supabaseClient";
+
 
 function LoginFormContent() {
   const router = useRouter();
@@ -146,17 +142,6 @@ function LoginFormContent() {
     }
   };
 
-  const handleDirectJump = (role: UserRole) => {
-    if (role === "admin") {
-      setAuthSession(SPECIAL_CREDENTIALS.admin.profile);
-      router.push("/admin");
-    } else if (role === "teacher") {
-      setAuthSession(SPECIAL_CREDENTIALS.teacher.profile);
-      router.push("/teacher");
-    } else {
-      router.push("/student");
-    }
-  };
 
   return (
     <div className="w-full max-w-md mx-auto space-y-5">
@@ -427,44 +412,6 @@ function LoginFormContent() {
           )}
         </div>
 
-        {/* Quick Testing Login Autofill (Only visible in local evaluation mode) */}
-        {!isSupabaseConfigured && (
-          <div className="pt-3 border-t border-purple-50 space-y-2">
-            <div className="flex items-center gap-1.5 text-slate-500 text-[11px] font-bold">
-              <KeyRound className="w-3.5 h-3.5 text-purple-600" />
-              <span>1-Click Portal Jump (Local Demo Mode):</span>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => handleDirectJump("student")}
-                className="p-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-800 text-[11px] font-bold flex flex-col items-center justify-center cursor-pointer transition-all border border-purple-100"
-              >
-                <User className="w-4 h-4 mb-0.5 text-purple-600" />
-                <span>Student</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleDirectJump("teacher")}
-                className="p-2.5 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-900 text-[11px] font-bold flex flex-col items-center justify-center cursor-pointer transition-all border border-purple-200 shadow-2xs"
-              >
-                <GraduationCap className="w-4 h-4 mb-0.5 text-purple-700" />
-                <span>Teacher</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleDirectJump("admin")}
-                className="p-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-800 text-[11px] font-bold flex flex-col items-center justify-center cursor-pointer transition-all border border-purple-100"
-              >
-                <ShieldCheck className="w-4 h-4 mb-0.5 text-purple-600" />
-                <span>Admin</span>
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       <div className="text-center">
