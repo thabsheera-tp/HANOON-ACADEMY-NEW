@@ -10,9 +10,9 @@ interface AttendanceDonutChartProps {
 }
 
 export default function AttendanceDonutChart({
-  presentCount = 22,
-  leaveCount = 2,
-  absentCount = 1,
+  presentCount = 0,
+  leaveCount = 0,
+  absentCount = 0,
 }: AttendanceDonutChartProps) {
   const [isMounted, setIsMounted] = useState(false);
 
@@ -21,17 +21,28 @@ export default function AttendanceDonutChart({
   }, []);
 
   const total = presentCount + leaveCount + absentCount;
-  const presentPct = Math.round((presentCount / total) * 100);
+  const presentPct = total > 0 ? Math.round((presentCount / total) * 100) : 0;
 
-  const data = [
+  const data = total > 0 ? [
     { name: "Present", value: presentCount, color: "#9333ea" }, // purple-600
     { name: "Leave", value: leaveCount, color: "#c084fc" },     // purple-400
     { name: "Absent", value: absentCount, color: "#e9d5ff" },   // purple-200
+  ] : [
+    { name: "No Data", value: 1, color: "#e2e8f0" }
   ];
 
   if (!isMounted) {
     return (
       <div className="h-36 w-full flex items-center justify-center bg-purple-50/40 rounded-2xl animate-pulse" />
+    );
+  }
+
+  if (total === 0) {
+    return (
+      <div className="py-6 text-center space-y-1">
+        <p className="text-xs font-bold text-slate-700">No attendance sessions recorded yet</p>
+        <p className="text-[11px] text-slate-400">Attendance percentages will appear after participating in live classes.</p>
+      </div>
     );
   }
 

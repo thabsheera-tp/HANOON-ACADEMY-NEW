@@ -157,9 +157,9 @@ export default function AdminDashboardPage() {
   const [isAddingClassLog, setIsAddingClassLog] = useState(false);
   const [newClassLogForm, setNewClassLogForm] = useState({
     teacher_name: "Usthad Dr. Faisal Al-Hanoon",
-    classes_taken: 4,
+    classes_taken: 0,
     rate_per_class: 800,
-    month_year: "April 2026",
+    month_year: new Date().toLocaleString("default", { month: "long", year: "numeric" }),
   });
 
   // Settings State Form & QR Management
@@ -795,11 +795,10 @@ export default function AdminDashboardPage() {
                   </div>
                   <div className="space-y-0.5">
                     <h3 className="text-2xl font-black text-slate-900 tracking-tight">
-                      {students.length > 0 ? students.length + 138 : 142}
+                      {students.length}
                     </h3>
-                    <p className="text-[11px] text-emerald-600 font-bold flex items-center gap-1">
-                      <TrendingUp className="w-3 h-3 shrink-0" />
-                      <span>+12 this week across all tracks</span>
+                    <p className="text-[11px] text-slate-500 font-medium">
+                      {students.length === 0 ? "No students registered yet" : `${students.length} registered students`}
                     </p>
                   </div>
                 </div>
@@ -855,10 +854,10 @@ export default function AdminDashboardPage() {
                   </div>
                   <div className="space-y-0.5">
                     <h3 className="text-2xl font-black text-slate-900 tracking-tight">
-                      ₹{(approvedPaymentsTotal > 0 ? approvedPaymentsTotal + 240000 : 284000).toLocaleString("en-IN")}
+                      ₹{approvedPaymentsTotal.toLocaleString("en-IN")}
                     </h3>
                     <p className="text-[11px] text-slate-500 font-medium">
-                      100% Direct UPI settlements
+                      Direct UPI settlements verified
                     </p>
                   </div>
                 </div>

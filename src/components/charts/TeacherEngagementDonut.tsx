@@ -17,9 +17,9 @@ interface TeacherEngagementDonutProps {
 }
 
 export default function TeacherEngagementDonut({
-  presentRate = 84,
-  lateRate = 11,
-  absentRate = 5,
+  presentRate = 0,
+  lateRate = 0,
+  absentRate = 0,
 }: TeacherEngagementDonutProps) {
   const [isMounted, setIsMounted] = useState(false);
 
@@ -28,6 +28,23 @@ export default function TeacherEngagementDonut({
   }, []);
 
   const total = presentRate + lateRate + absentRate;
+
+  if (!isMounted) {
+    return (
+      <div className="h-48 w-full flex items-center justify-center bg-purple-50/50 rounded-2xl animate-pulse">
+        <span className="text-xs text-purple-400 font-bold">Loading engagement data...</span>
+      </div>
+    );
+  }
+
+  if (total === 0) {
+    return (
+      <div className="py-8 text-center space-y-1 bg-purple-50/20 rounded-2xl border border-purple-50">
+        <p className="text-xs font-bold text-slate-700">No attendance data recorded yet</p>
+        <p className="text-[11px] text-slate-400">Class engagement breakdown will display once students participate in live sessions.</p>
+      </div>
+    );
+  }
 
   const data: EngagementSegment[] = [
     {
@@ -49,14 +66,6 @@ export default function TeacherEngagementDonut({
       percentage: Math.round((absentRate / total) * 100),
     },
   ];
-
-  if (!isMounted) {
-    return (
-      <div className="h-48 w-full flex items-center justify-center bg-purple-50/50 rounded-2xl animate-pulse">
-        <span className="text-xs text-purple-400 font-bold">Loading engagement data...</span>
-      </div>
-    );
-  }
 
   return (
     <div className="w-full flex flex-col md:flex-row items-center justify-between gap-6">

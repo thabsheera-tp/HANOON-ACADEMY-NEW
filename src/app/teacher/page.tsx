@@ -810,18 +810,22 @@ export default function TeacherDashboardPage() {
 
               <div className="bg-white p-4.5 rounded-2xl border border-purple-100 shadow-md space-y-1">
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                  Avg Attendance
+                  Classes Delivered
                 </span>
-                <h3 className="text-2xl font-black text-emerald-600">84.2%</h3>
-                <p className="text-[11px] text-emerald-600 font-bold">Top tier engagement</p>
+                <h3 className="text-2xl font-black text-purple-700">
+                  {accessibleClasses.filter((c) => c.status === "COMPLETED").length}
+                </h3>
+                <p className="text-[11px] text-slate-500 font-medium">Completed sessions</p>
               </div>
 
               <div className="bg-white p-4.5 rounded-2xl border border-purple-100 shadow-md space-y-1">
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                  Classes Delivered
+                  Upcoming Classes
                 </span>
-                <h3 className="text-2xl font-black text-purple-700">38 Hours</h3>
-                <p className="text-[11px] text-slate-500 font-medium">Verified for payroll</p>
+                <h3 className="text-2xl font-black text-emerald-600">
+                  {accessibleClasses.filter((c) => c.status === "SCHEDULED").length}
+                </h3>
+                <p className="text-[11px] text-emerald-600 font-bold">Scheduled on calendar</p>
               </div>
 
               <div className="bg-white p-4.5 rounded-2xl border border-purple-100 shadow-md space-y-1">
@@ -829,7 +833,7 @@ export default function TeacherDashboardPage() {
                   Notes & Recordings
                 </span>
                 <h3 className="text-2xl font-black text-slate-900">{accessibleMaterials.length}</h3>
-                <p className="text-[11px] text-purple-600 font-bold">Assigned materials</p>
+                <p className="text-[11px] text-purple-600 font-bold">Published study files</p>
               </div>
             </div>
 
@@ -851,7 +855,7 @@ export default function TeacherDashboardPage() {
               </div>
 
               {/* Chart Component */}
-              <TeacherEngagementDonut presentRate={84} lateRate={11} absentRate={5} />
+              <TeacherEngagementDonut presentRate={0} lateRate={0} absentRate={0} />
             </div>
 
             {/* Next Scheduled Classes Quick View */}

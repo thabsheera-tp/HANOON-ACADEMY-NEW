@@ -48,34 +48,10 @@ const DEFAULT_AUDIT_LOGS: AuditLogItem[] = [
   {
     id: "aud-001",
     timestamp: "System Init",
-    actor: "Admin (Faisal Al-Hanoon)",
+    actor: "System Administrator",
     action: "System Audit Initialized",
-    category: "AUTH",
-    details: "Universal authentication & Supabase database security rules active.",
-  },
-  {
-    id: "aud-002",
-    timestamp: "Today, 08:15 AM",
-    actor: "Admin (Faisal Al-Hanoon)",
-    action: "Curriculum Added",
-    category: "CURRICULUM",
-    details: "Integrated Ash-Shama'il al-Muhammadiyya (الشمائل المحمدية) 2x2 grid catalog.",
-  },
-  {
-    id: "aud-003",
-    timestamp: "Yesterday, 06:40 PM",
-    actor: "Admin (Faisal Al-Hanoon)",
-    action: "Payroll Disbursed",
-    category: "PAYROLL",
-    details: "Disbursed ₹12,800 to Usthad Dr. Faisal for 16 completed live classes.",
-  },
-  {
-    id: "aud-004",
-    timestamp: "April 04, 2026, 11:20 AM",
-    actor: "Admin (Faisal Al-Hanoon)",
-    action: "Settings Configured",
     category: "SETTINGS",
-    details: "Verified primary Institute UPI ID 'hanoonacademy@upi'.",
+    details: "Production database security and educational tables active.",
   },
 ];
 

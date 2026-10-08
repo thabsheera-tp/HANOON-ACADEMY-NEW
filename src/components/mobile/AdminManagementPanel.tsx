@@ -111,8 +111,8 @@ export default function AdminManagementPanel({
   const [newPayrollForm, setNewPayrollForm] = useState({
     teacher_id: "tch-01",
     teacher_name: "Usthad Dr. Faisal Al-Hanoon",
-    month_year: "April 2026",
-    classes_taken: 16,
+    month_year: new Date().toLocaleString("default", { month: "long", year: "numeric" }),
+    classes_taken: 0,
     rate_per_class: 800,
   });
 

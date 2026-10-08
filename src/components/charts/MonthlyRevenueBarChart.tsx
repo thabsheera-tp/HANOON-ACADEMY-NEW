@@ -18,12 +18,12 @@ interface MonthlyData {
 }
 
 const DEFAULT_MONTHLY_DATA: MonthlyData[] = [
-  { month: "Nov", revenue: 145, enrollments: 58 },
-  { month: "Dec", revenue: 190, enrollments: 76 },
-  { month: "Jan", revenue: 230, enrollments: 92 },
-  { month: "Feb", revenue: 260, enrollments: 104 },
-  { month: "Mar", revenue: 310, enrollments: 124 },
-  { month: "Apr", revenue: 345, enrollments: 138 },
+  { month: "Nov", revenue: 0, enrollments: 0 },
+  { month: "Dec", revenue: 0, enrollments: 0 },
+  { month: "Jan", revenue: 0, enrollments: 0 },
+  { month: "Feb", revenue: 0, enrollments: 0 },
+  { month: "Mar", revenue: 0, enrollments: 0 },
+  { month: "Apr", revenue: 0, enrollments: 0 },
 ];
 
 export default function MonthlyRevenueBarChart({

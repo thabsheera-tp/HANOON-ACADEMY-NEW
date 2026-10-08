@@ -363,10 +363,10 @@ export default function ScreenDashboard({
         <div className="space-y-1 pt-0.5">
           <div className="flex items-center justify-between text-[10.5px]">
             <span className="font-semibold text-slate-500">Progress</span>
-            <span className="font-bold text-purple-700">{isApproved ? "68% Complete" : "Pending Approval"}</span>
+            <span className="font-bold text-purple-700">{isApproved ? "100% Enrolled" : "Pending Approval"}</span>
           </div>
           <div className="w-full h-1.5 rounded-full bg-purple-100 overflow-hidden">
-            <div className="h-full rounded-full bg-purple-600 transition-all duration-500" style={{ width: isApproved ? "68%" : "5%" }} />
+            <div className="h-full rounded-full bg-purple-600 transition-all duration-500" style={{ width: isApproved ? "100%" : "5%" }} />
           </div>
         </div>
       </div>
@@ -672,15 +672,15 @@ export default function ScreenDashboard({
                 <span className="text-xs font-extrabold text-slate-800">
                   Attendance Record
                 </span>
-                <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
-                  88% Present
+                <span className="text-[10px] font-extrabold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100">
+                  Live Attendance
                 </span>
               </div>
-              <AttendanceDonutChart presentCount={22} leaveCount={2} absentCount={1} />
+              <AttendanceDonutChart presentCount={0} leaveCount={0} absentCount={0} />
             </div>
 
             <div className="bg-white p-3.5 rounded-2xl border border-purple-100 shadow-xs space-y-2">
-              <ProgressScoreBarChart />
+              <ProgressScoreBarChart data={[]} />
             </div>
           </div>
         )}

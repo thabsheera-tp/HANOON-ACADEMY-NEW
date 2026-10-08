@@ -34,7 +34,7 @@ export const DEFAULT_SPECIAL_CLASSES: SpecialClass[] = [
     recordingUrl: "https://youtube.com/live/hanoon-tajweed-rec",
     pdfTitle: "Tajweed Rules & Phonetic Articulation Guide.pdf",
     pdfSize: "6.4 MB",
-    registeredCount: 142,
+    registeredCount: 0,
   },
   {
     id: "spc-burdah",
@@ -52,7 +52,7 @@ export const DEFAULT_SPECIAL_CLASSES: SpecialClass[] = [
     recordingUrl: "https://youtube.com/live/hanoon-burdah-rec",
     pdfTitle: "Qasida al-Burdah Arabic Text with Translation.pdf",
     pdfSize: "8.2 MB",
-    registeredCount: 218,
+    registeredCount: 0,
   },
 ];
 

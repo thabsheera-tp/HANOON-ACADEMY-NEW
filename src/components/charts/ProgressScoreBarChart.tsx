@@ -15,13 +15,7 @@ interface ProgressScoreBarChartProps {
   data?: { module: string; score: number }[];
 }
 
-const DEFAULT_SCORES = [
-  { module: "W1 Quiz", score: 78 },
-  { module: "W2 Hw", score: 85 },
-  { module: "W3 Oral", score: 92 },
-  { module: "W4 Exam", score: 88 },
-  { module: "W5 Review", score: 95 },
-];
+const DEFAULT_SCORES: { module: string; score: number }[] = [];
 
 export default function ProgressScoreBarChart({
   data = DEFAULT_SCORES,
@@ -35,6 +29,15 @@ export default function ProgressScoreBarChart({
   if (!isMounted) {
     return (
       <div className="h-40 w-full flex items-center justify-center bg-purple-50/40 rounded-2xl animate-pulse" />
+    );
+  }
+
+  if (!data || data.length === 0) {
+    return (
+      <div className="py-6 text-center space-y-1">
+        <p className="text-xs font-bold text-slate-700">No assessment scores recorded yet</p>
+        <p className="text-[11px] text-slate-400">Weekly quizzes, oral assessments, and term review scores will appear here.</p>
+      </div>
     );
   }
 
