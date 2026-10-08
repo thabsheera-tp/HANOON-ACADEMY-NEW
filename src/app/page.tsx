@@ -443,9 +443,13 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     setCurrentScreen("course-details");
   };
 
-  // Step 3 -> Step 4 (Progressive Enrollment directly to Payment Explanation Screen)
+  // Step 3 -> Step 4 (Progressive Enrollment)
   const handleProceedToRegister = () => {
-    setCurrentScreen("payment");
+    if (!userProfile.name || !userProfile.phone) {
+      setCurrentScreen("onboarding");
+    } else {
+      setCurrentScreen("payment");
+    }
   };
 
   const handleSaveProfile = (profile: UserProfile) => {
@@ -463,7 +467,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
   const handleSubmitPayment = (txId: string, paymentId?: string) => {
     const updatedDetails: PaymentDetails = {
       upiTxId: txId,
-      amount: selectedCourse.fee,
+      amount: selectedCourse.admissionFee || selectedCourse.fee,
       submittedAt: new Date().toLocaleTimeString(),
       status: "pending_verification",
     };
@@ -476,7 +480,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
         paymentId,
         courseId: selectedCourse.id,
         courseTitle: selectedCourse.title,
-        amount: selectedCourse.fee,
+        amount: selectedCourse.admissionFee || selectedCourse.fee,
         submittedAt: new Date().toLocaleTimeString(),
         studentName: userProfile.name,
         studentPhone: userProfile.phone,
@@ -491,8 +495,8 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
 
   const handleBack = () => {
     if (currentScreen === "dashboard") setCurrentScreen("courses");
-    else if (currentScreen === "payment") setCurrentScreen("splash");
-    else if (currentScreen === "onboarding") setCurrentScreen("course-details");
+    else if (currentScreen === "payment") setCurrentScreen("onboarding");
+    else if (currentScreen === "onboarding") setCurrentScreen("splash");
     else if (currentScreen === "course-details") setCurrentScreen("courses");
     else if (currentScreen === "courses") {
       setCurrentScreen("splash");
@@ -567,7 +571,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
           {/* Step 1: Welcome Screen (Ultra-minimalist branding & direct route to /courses) */}
           {currentScreen === "splash" && (
             <ScreenSplash
-              onGetStarted={() => setCurrentScreen("courses")}
+              onGetStarted={() => setCurrentScreen("onboarding")}
               onExploreCourses={() => setCurrentScreen("courses")}
               onStaffLogin={() => router.push("/login?portal=staff")}
             />
@@ -596,8 +600,15 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
               userProfile={userProfile}
               selectedCourse={selectedCourse}
               onSaveProfile={handleSaveProfile}
+              onSelectCourse={(course) => {
+                setSelectedCourse(course);
+                setPaymentDetails((prev) => ({
+                  ...prev,
+                  amount: course.admissionFee || course.fee,
+                }));
+              }}
               onProceedToPayment={handleProceedToPayment}
-              onBackToCourse={() => setCurrentScreen("course-details")}
+              onBackToCourse={() => setCurrentScreen("splash")}
             />
           )}
 
