@@ -15,13 +15,17 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     email TEXT UNIQUE NOT NULL,
     full_name TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('student', 'teacher', 'admin')) DEFAULT 'student',
+    role TEXT NOT NULL CHECK (role IN ('student', 'teacher', 'admin', 'super_admin', 'verification_admin')) DEFAULT 'student',
     district TEXT DEFAULT 'Kerala',
     whatsapp_num TEXT,
     avatar_url TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- Ensure multi-tier role constraint exists if table was created in an earlier migration
+ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
+ALTER TABLE public.profiles ADD CONSTRAINT profiles_role_check CHECK (role IN ('student', 'teacher', 'admin', 'super_admin', 'verification_admin'));
 
 -- Trigger: Automatically create a profile entry when a user signs up via Supabase Auth
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -48,20 +52,33 @@ CREATE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- Security Helper Functions for RLS
+-- Security Helper Functions for RLS (Multi-Tier Admin Hierarchy)
 CREATE OR REPLACE FUNCTION public.current_user_role()
 RETURNS TEXT AS $$
     SELECT role FROM public.profiles WHERE id = auth.uid();
 $$ LANGUAGE sql STABLE SECURITY DEFINER;
 
+-- Super Admin: Full administrative privileges over curriculum, settings, payroll, and financials
+CREATE OR REPLACE FUNCTION public.is_super_admin()
+RETURNS BOOLEAN AS $$
+    SELECT COALESCE((SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()), false);
+$$ LANGUAGE sql STABLE SECURITY DEFINER;
+
+-- Legacy alias for Super Admin backward compatibility
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
-    SELECT COALESCE((SELECT role = 'admin' FROM public.profiles WHERE id = auth.uid()), false);
+    SELECT public.is_super_admin();
+$$ LANGUAGE sql STABLE SECURITY DEFINER;
+
+-- Verification Admin: Scoped access strictly to UPI payment queue approvals/rejections
+CREATE OR REPLACE FUNCTION public.is_verification_admin()
+RETURNS BOOLEAN AS $$
+    SELECT COALESCE((SELECT role IN ('verification_admin', 'admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()), false);
 $$ LANGUAGE sql STABLE SECURITY DEFINER;
 
 CREATE OR REPLACE FUNCTION public.is_teacher()
 RETURNS BOOLEAN AS $$
-    SELECT COALESCE((SELECT role IN ('teacher', 'admin') FROM public.profiles WHERE id = auth.uid()), false);
+    SELECT COALESCE((SELECT role IN ('teacher', 'admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()), false);
 $$ LANGUAGE sql STABLE SECURITY DEFINER;
 
 -- ==============================================================================
@@ -285,20 +302,20 @@ ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 -- 1. Profiles
 DROP POLICY IF EXISTS "Users can read own profile" ON public.profiles;
 CREATE POLICY "Users can read own profile" ON public.profiles
-    FOR SELECT USING (auth.uid() = id OR public.is_admin());
+    FOR SELECT USING (auth.uid() = id OR public.is_verification_admin());
 
 DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 CREATE POLICY "Users can update own profile" ON public.profiles
     FOR UPDATE USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
 
--- 2. Courses & Subjects
+-- 2. Courses & Subjects (Super Admin only for management)
 DROP POLICY IF EXISTS "Public courses read access" ON public.courses;
 CREATE POLICY "Public courses read access" ON public.courses
     FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Admin manage courses" ON public.courses;
 CREATE POLICY "Admin manage courses" ON public.courses
-    FOR ALL USING (public.is_admin()) WITH CHECK (public.is_admin());
+    FOR ALL USING (public.is_super_admin()) WITH CHECK (public.is_super_admin());
 
 DROP POLICY IF EXISTS "Public subjects read access" ON public.course_subjects;
 CREATE POLICY "Public subjects read access" ON public.course_subjects
@@ -306,7 +323,7 @@ CREATE POLICY "Public subjects read access" ON public.course_subjects
 
 DROP POLICY IF EXISTS "Admin manage course subjects" ON public.course_subjects;
 CREATE POLICY "Admin manage course subjects" ON public.course_subjects
-    FOR ALL USING (public.is_admin()) WITH CHECK (public.is_admin());
+    FOR ALL USING (public.is_super_admin()) WITH CHECK (public.is_super_admin());
 
 DROP POLICY IF EXISTS "Public special classes read access" ON public.special_classes;
 CREATE POLICY "Public special classes read access" ON public.special_classes
@@ -314,7 +331,7 @@ CREATE POLICY "Public special classes read access" ON public.special_classes
 
 DROP POLICY IF EXISTS "Admin manage special classes" ON public.special_classes;
 CREATE POLICY "Admin manage special classes" ON public.special_classes
-    FOR ALL USING (public.is_admin()) WITH CHECK (public.is_admin());
+    FOR ALL USING (public.is_super_admin()) WITH CHECK (public.is_super_admin());
 
 -- 3. Students
 DROP POLICY IF EXISTS "Anyone can register student record" ON public.students;
@@ -328,15 +345,15 @@ CREATE POLICY "Students and Admins can view student records" ON public.students
     FOR SELECT USING (
         auth.uid() IS NULL 
         OR user_id = auth.uid() 
-        OR public.is_admin()
+        OR public.is_verification_admin()
         OR public.is_teacher()
     );
 
 DROP POLICY IF EXISTS "Admins can update student records" ON public.students;
 CREATE POLICY "Admins can update student records" ON public.students
-    FOR UPDATE USING (public.is_admin()) WITH CHECK (public.is_admin());
+    FOR UPDATE USING (public.is_super_admin()) WITH CHECK (public.is_super_admin());
 
--- 4. Payments
+-- 4. Manual UPI Payments (Accessible by Verification Staff & Super Admin)
 DROP POLICY IF EXISTS "Anyone can submit payment" ON public.payments;
 DROP POLICY IF EXISTS "Public can insert payment" ON public.payments;
 CREATE POLICY "Anyone can submit payment" ON public.payments
@@ -346,7 +363,7 @@ DROP POLICY IF EXISTS "View payments policy" ON public.payments;
 DROP POLICY IF EXISTS "Public can view payments" ON public.payments;
 CREATE POLICY "View payments policy" ON public.payments
     FOR SELECT USING (
-        public.is_admin() 
+        public.is_verification_admin() 
         OR student_id IN (SELECT id FROM public.students WHERE user_id = auth.uid())
         OR auth.uid() IS NULL
     );
@@ -355,10 +372,10 @@ DROP POLICY IF EXISTS "Only Admin can update payment approval status" ON public.
 DROP POLICY IF EXISTS "Admin can update payment status" ON public.payments;
 CREATE POLICY "Admin can update payment status" ON public.payments
     FOR UPDATE USING (
-        public.is_admin() 
+        public.is_verification_admin() 
         OR auth.uid() IS NULL
     ) WITH CHECK (
-        public.is_admin() 
+        public.is_verification_admin() 
         OR auth.uid() IS NULL
     );
 
@@ -370,7 +387,7 @@ CREATE POLICY "Public can view teachers" ON public.teachers
 
 DROP POLICY IF EXISTS "Admin can manage teachers" ON public.teachers;
 CREATE POLICY "Admin can manage teachers" ON public.teachers
-    FOR ALL USING (public.is_admin()) WITH CHECK (public.is_admin());
+    FOR ALL USING (public.is_super_admin()) WITH CHECK (public.is_super_admin());
 
 DROP POLICY IF EXISTS "Public can view live classes" ON public.live_classes;
 DROP POLICY IF EXISTS "Public can read live classes" ON public.live_classes;
@@ -391,41 +408,41 @@ CREATE POLICY "Public can view verified certificates" ON public.certificates
 DROP POLICY IF EXISTS "Only Admin can issue certificates" ON public.certificates;
 DROP POLICY IF EXISTS "Admin can insert certificates" ON public.certificates;
 CREATE POLICY "Only Admin can issue certificates" ON public.certificates
-    FOR ALL USING (public.is_admin()) WITH CHECK (public.is_admin());
+    FOR ALL USING (public.is_super_admin()) WITH CHECK (public.is_super_admin());
 
--- 7. Teacher Payroll
+-- 7. Teacher Payroll (Super Admin HR privilege only)
 DROP POLICY IF EXISTS "Admin can manage all payroll" ON public.teacher_payroll;
 DROP POLICY IF EXISTS "Admin can manage payroll" ON public.teacher_payroll;
 CREATE POLICY "Admin can manage all payroll" ON public.teacher_payroll
-    FOR ALL USING (public.is_admin()) WITH CHECK (public.is_admin());
+    FOR ALL USING (public.is_super_admin()) WITH CHECK (public.is_super_admin());
 
 DROP POLICY IF EXISTS "Teachers can view own payroll" ON public.teacher_payroll;
 CREATE POLICY "Teachers can view own payroll" ON public.teacher_payroll
     FOR SELECT USING (
-        public.is_admin() OR 
+        public.is_super_admin() OR 
         teacher_id IN (
             SELECT id FROM public.teachers 
             WHERE email = (SELECT email FROM public.profiles WHERE id = auth.uid())
         )
     );
 
--- 8. Global Settings
+-- 8. Global Settings (Super Admin configuration only)
 DROP POLICY IF EXISTS "Public can read app settings" ON public.app_settings;
 CREATE POLICY "Public can read app settings" ON public.app_settings
     FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Only Admin can update app settings" ON public.app_settings;
 CREATE POLICY "Only Admin can update app settings" ON public.app_settings
-    FOR UPDATE USING (public.is_admin()) WITH CHECK (public.is_admin());
+    FOR UPDATE USING (public.is_super_admin()) WITH CHECK (public.is_super_admin());
 
--- 9. Audit Logs
+-- 9. Audit Logs (Super Admin can read; Verification Admin can insert action entries)
 DROP POLICY IF EXISTS "Only Admin can read audit logs" ON public.audit_logs;
 CREATE POLICY "Only Admin can read audit logs" ON public.audit_logs
-    FOR SELECT USING (public.is_admin());
+    FOR SELECT USING (public.is_super_admin());
 
 DROP POLICY IF EXISTS "Admin can insert audit logs" ON public.audit_logs;
 CREATE POLICY "Admin can insert audit logs" ON public.audit_logs
-    FOR INSERT WITH CHECK (public.is_admin());
+    FOR INSERT WITH CHECK (public.is_verification_admin());
 
 -- ==============================================================================
 -- ENABLE SUPABASE REALTIME REPLICATION (Safe duplicate check)

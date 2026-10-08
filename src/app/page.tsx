@@ -11,6 +11,7 @@ import ScreenOnboarding from "@/components/mobile/ScreenOnboarding";
 import ScreenPayment from "@/components/mobile/ScreenPayment";
 import ScreenDashboard from "@/components/mobile/ScreenDashboard";
 import ReceiptModal from "@/components/mobile/ReceiptModal";
+import { Lock, X } from "lucide-react";
 import { UserProfile, SelectedCourse, PaymentDetails, ScreenTab } from "@/types/app";
 import {
   getCurrentSession,
@@ -34,8 +35,9 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
   // Step 5: "payment" -> Manual UPI Payment Screen
   // Step 6: "dashboard" -> Student Dashboard & Profile View
   const [currentScreen, setCurrentScreen] = useState<ScreenTab>(
-    initialUser ? "dashboard" : "splash"
+    initialUser ? "courses" : "splash"
   );
+  const [accessNotice, setAccessNotice] = useState<string | null>(null);
 
   // User Profile
   const [userProfile, setUserProfile] = useState<UserProfile>({
@@ -56,6 +58,17 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
   });
 
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
+
+  // Check URL query parameters for access restriction notice
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const noticeParam = params.get("notice");
+      if (noticeParam) {
+        setAccessNotice(noticeParam);
+      }
+    }
+  }, []);
 
   // Auto-Routing for Root Route: Check for active Supabase session when the app loads
   useEffect(() => {
@@ -147,7 +160,10 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
 
                 if (studentRecord.payments && Array.isArray(studentRecord.payments)) {
                   const approved = studentRecord.payments.find(
-                    (p: any) => p.status === "APPROVED" || p.status === "verified"
+                    (p: any) =>
+                      p.status === "APPROVED" ||
+                      p.status === "verified" ||
+                      p.status === "ACTIVE"
                   );
                   if (approved) {
                     isVerified = true;
@@ -181,7 +197,11 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
                     (cleanPhone && p.student?.whatsapp_num === cleanPhone)
                 );
                 if (userMatch) {
-                  if (userMatch.status === "APPROVED" || userMatch.status === "verified") {
+                  if (
+                    userMatch.status === "APPROVED" ||
+                    userMatch.status === "verified" ||
+                    userMatch.status === "ACTIVE"
+                  ) {
                     isVerified = true;
                   }
                   activePayment = userMatch;
@@ -225,7 +245,8 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
             submittedAt: activePayment.submitted_at || new Date().toLocaleTimeString(),
             status: "pending_verification",
           });
-          setCurrentScreen("dashboard");
+          // Unpaid / pending students can ONLY view Course Details or catalog, never dashboard
+          setCurrentScreen("course-details");
         } else {
           // If student is authenticated but has not paid yet, route to Course Selection
           setCurrentScreen("courses");
@@ -371,12 +392,12 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
       });
     }
 
-    setCurrentScreen("dashboard");
+    // After submitting manual payment, keep student on payment receipt/pending state until verified
+    setCurrentScreen("payment");
   };
 
-
   const handleBack = () => {
-    if (currentScreen === "dashboard") setCurrentScreen("payment");
+    if (currentScreen === "dashboard") setCurrentScreen("courses");
     else if (currentScreen === "payment") setCurrentScreen("course-details");
     else if (currentScreen === "onboarding") setCurrentScreen("course-details");
     else if (currentScreen === "course-details") setCurrentScreen("courses");
@@ -384,8 +405,28 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
   };
 
   const canGoBack = currentScreen !== "splash";
-  const isEnrolled = paymentDetails.status === "verified";
+  const isEnrolled =
+    paymentDetails.status === "verified" ||
+    (paymentDetails.status as string) === "APPROVED" ||
+    (paymentDetails.status as string) === "ACTIVE";
   const hasPaymentSubmitted = paymentDetails.status === "pending_verification";
+
+  // Route Guard: Restrict Dashboard access strictly to APPROVED / ACTIVE students
+  useEffect(() => {
+    if (currentScreen === "dashboard" && !isEnrolled) {
+      setAccessNotice("Please complete enrollment to access your dashboard.");
+      setCurrentScreen("course-details");
+    }
+  }, [currentScreen, isEnrolled]);
+
+  const handleSelectScreen = (screen: ScreenTab) => {
+    if (screen === "dashboard" && !isEnrolled) {
+      setAccessNotice("Please complete enrollment to access your dashboard.");
+      setCurrentScreen("course-details");
+      return;
+    }
+    setCurrentScreen(screen);
+  };
 
   return (
     <div className="min-h-screen bg-purple-50/50 flex justify-center items-center sm:py-6 selection:bg-purple-100 selection:text-purple-700">
@@ -401,6 +442,24 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
           canGoBack={canGoBack}
           userProfile={userProfile}
         />
+
+        {/* Access Notice Banner (Displayed if an unpaid student attempts to access dashboard) */}
+        {accessNotice && (
+          <div className="mx-4 mt-3 p-3 rounded-2xl bg-amber-50 border border-amber-200/90 text-amber-900 text-xs font-semibold flex items-center justify-between gap-3 animate-fade-in shadow-xs z-20 shrink-0">
+            <div className="flex items-center gap-2">
+              <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>{accessNotice}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setAccessNotice(null)}
+              className="p-1 rounded-lg text-amber-700 hover:text-amber-950 hover:bg-amber-100 transition-colors cursor-pointer"
+              aria-label="Dismiss notice"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* Scrollable Viewport */}
         <div className="flex-1 overflow-y-auto flex flex-col relative z-10 bg-white">
@@ -422,6 +481,9 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
               selectedCourse={selectedCourse}
               onProceedToRegister={handleProceedToRegister}
               onBackToCourses={() => setCurrentScreen("courses")}
+              paymentDetails={paymentDetails}
+              isPaid={isEnrolled}
+              onGoToDashboard={() => handleSelectScreen("dashboard")}
             />
           )}
 
@@ -443,14 +505,14 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
               selectedCourse={selectedCourse}
               paymentDetails={paymentDetails}
               onSubmitPayment={handleSubmitPayment}
-              onGoToDashboard={() => setCurrentScreen("dashboard")}
+              onGoToDashboard={() => handleSelectScreen("dashboard")}
               onOpenReceipt={() => setIsReceiptOpen(true)}
               onSaveProfile={handleSaveProfile}
             />
           )}
 
-          {/* Step 6: Student Dashboard & Profile View */}
-          {currentScreen === "dashboard" && (
+          {/* Step 6: Student Dashboard & Profile View (Strictly gated for APPROVED/ACTIVE students) */}
+          {currentScreen === "dashboard" && isEnrolled && (
             <ScreenDashboard
               userProfile={userProfile}
               selectedCourse={selectedCourse}
@@ -464,7 +526,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
         {/* Sticky Mobile Bottom Navigation (Visible on Screens 2 to 6) */}
         <MobileBottomNav
           currentScreen={currentScreen}
-          onChangeScreen={(screen) => setCurrentScreen(screen)}
+          onChangeScreen={handleSelectScreen}
           isEnrolled={isEnrolled}
           hasPaymentSubmitted={hasPaymentSubmitted}
         />

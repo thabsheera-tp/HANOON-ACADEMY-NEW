@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   X,
   BookOpen,
@@ -17,6 +17,8 @@ import {
   MessageCircle,
   FileText,
   Video,
+  Lock,
+  ArrowRight,
 } from "lucide-react";
 import { AdaviyyaSubject } from "@/services/subjectService";
 
@@ -25,6 +27,8 @@ interface SubjectClassHubModalProps {
   onClose: () => void;
   subject: AdaviyyaSubject | null;
   studentName?: string;
+  isPaid?: boolean;
+  onEnroll?: () => void;
 }
 
 export default function SubjectClassHubModal({
@@ -32,10 +36,53 @@ export default function SubjectClassHubModal({
   onClose,
   subject,
   studentName = "Student",
+  isPaid: isPaidProp,
+  onEnroll,
 }: SubjectClassHubModalProps) {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadedChapters, setDownloadedChapters] = useState<Record<string, boolean>>({});
   const [activePlayingId, setActivePlayingId] = useState<string | null>(null);
+
+  // Dynamic payment status resolution (respects prop or fallback localStorage cache)
+  const [internalIsPaid, setInternalIsPaid] = useState<boolean>(() => {
+    if (typeof isPaidProp === "boolean") return isPaidProp;
+    if (typeof window === "undefined") return false;
+    try {
+      const saved = localStorage.getItem("hanoon_local_payments");
+      if (saved) {
+        const list = JSON.parse(saved);
+        if (Array.isArray(list)) {
+          return list.some(
+            (p: any) => p.status === "APPROVED" || p.status === "verified"
+          );
+        }
+      }
+    } catch {}
+    return false;
+  });
+
+  useEffect(() => {
+    if (typeof isPaidProp === "boolean") {
+      setInternalIsPaid(isPaidProp);
+    }
+  }, [isPaidProp]);
+
+  // Real-time payment verification event listener
+  useEffect(() => {
+    const handlePaymentEvent = (e: Event) => {
+      const customEvt = e as CustomEvent;
+      if (customEvt.detail) {
+        const { status } = customEvt.detail;
+        if (status === "APPROVED" || status === "verified") {
+          setInternalIsPaid(true);
+        }
+      }
+    };
+    window.addEventListener("hanoon_payment_event", handlePaymentEvent);
+    return () => window.removeEventListener("hanoon_payment_event", handlePaymentEvent);
+  }, []);
+
+  const isPaid = typeof isPaidProp === "boolean" ? isPaidProp : internalIsPaid;
 
   if (!isOpen || !subject) return null;
 
@@ -57,6 +104,7 @@ export default function SubjectClassHubModal({
   };
 
   const handleDownload = (chapterId: string) => {
+    if (!isPaid) return;
     setDownloadingId(chapterId);
     setTimeout(() => {
       setDownloadingId(null);
@@ -120,34 +168,76 @@ export default function SubjectClassHubModal({
           </div>
         </div>
 
-        {/* Interactive Live Class Entry Tile */}
-        <div className="p-3.5 rounded-2xl bg-purple-600 text-white shadow-xs space-y-2.5 mb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-rose-400 animate-ping" />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-200">
-                Interactive Lecture Hall
+        {/* ========================================================
+            ACCESS CONTROLLED LIVE CLASS SECTION:
+            UNPAID/PENDING -> Restricted Enrollment Banner + "Enroll Now"
+            PAID/APPROVED  -> Active Zoom Tile with "Join Live Class"
+            ======================================================== */}
+        {!isPaid ? (
+          <div className="p-4 rounded-2xl bg-purple-50/90 border border-purple-200 shadow-xs space-y-3 mb-3">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0 border border-purple-200">
+                <Lock className="w-4 h-4" />
+              </div>
+              <div className="space-y-1 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-700 bg-purple-200/60 px-2 py-0.5 rounded-full">
+                    Enrollment Required
+                  </span>
+                </div>
+                <h4 className="text-xs font-black text-slate-900 leading-snug">
+                  Enroll & Get Verified to Access Live Classes and Materials
+                </h4>
+                <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                  Interactive live Zoom classes, direct faculty doubt clearance, and downloadable curriculum PDF notes are unlocked once admission is verified.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (onEnroll) {
+                  onEnroll();
+                } else {
+                  onClose();
+                }
+              }}
+              className="w-full py-2.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-[0.98] text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+            >
+              <span>Enroll Now / Complete Payment</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ) : (
+          <div className="p-3.5 rounded-2xl bg-purple-600 text-white shadow-xs space-y-2.5 mb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-rose-400 animate-ping" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-200">
+                  Interactive Lecture Hall
+                </span>
+              </div>
+              <span className="text-[10px] font-bold bg-white/20 px-2 py-0.5 rounded-full">
+                Live Zoom
               </span>
             </div>
-            <span className="text-[10px] font-bold bg-white/20 px-2 py-0.5 rounded-full">
-              Live Zoom
-            </span>
+
+            <p className="text-xs text-purple-100 font-medium">
+              Join the bi-weekly interactive lecture, ask live questions, and participate in discussion.
+            </p>
+
+            <a
+              href={subject.liveClassUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full py-2.5 px-3 rounded-xl bg-white text-purple-700 hover:bg-purple-50 font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+            >
+              <Radio className="w-3.5 h-3.5 animate-pulse text-purple-600" />
+              <span>Join Live Class</span>
+            </a>
           </div>
-
-          <p className="text-xs text-purple-100 font-medium">
-            Join the bi-weekly interactive lecture, ask live questions, and participate in discussion.
-          </p>
-
-          <a
-            href={subject.liveClassUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full py-2.5 px-3 rounded-xl bg-white text-purple-700 font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
-          >
-            <Radio className="w-3.5 h-3.5 animate-pulse text-purple-600" />
-            <span>Launch Live Virtual Class</span>
-          </a>
-        </div>
+        )}
 
         {/* Chapter Video Lessons & PDF Handbooks */}
         <div className="space-y-2 mb-3">
@@ -155,8 +245,14 @@ export default function SubjectClassHubModal({
             <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-800">
               Curriculum Lessons & Materials ({subject.chapters.length})
             </h4>
-            <span className="text-[10px] font-semibold text-purple-600">
-              Full Access
+            <span
+              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                isPaid
+                  ? "text-purple-700 bg-purple-100"
+                  : "text-amber-700 bg-amber-50 border border-amber-200"
+              }`}
+            >
+              {isPaid ? "Full Access" : "Locked (Unverified)"}
             </span>
           </div>
 
@@ -191,15 +287,29 @@ export default function SubjectClassHubModal({
 
                     <button
                       type="button"
-                      onClick={() => setActivePlayingId(isPlaying ? null : chapter.id)}
-                      className="p-2 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-700 cursor-pointer transition-colors shrink-0"
-                      title="Stream Video Lesson"
+                      onClick={() => {
+                        if (!isPaid) {
+                          if (onEnroll) onEnroll();
+                          return;
+                        }
+                        setActivePlayingId(isPlaying ? null : chapter.id);
+                      }}
+                      className={`p-2 rounded-xl transition-colors shrink-0 cursor-pointer ${
+                        isPaid
+                          ? "bg-purple-100 hover:bg-purple-200 text-purple-700"
+                          : "bg-slate-100 text-slate-400 hover:bg-slate-200"
+                      }`}
+                      title={isPaid ? "Stream Video Lesson" : "Enroll to Unlock Lesson"}
                     >
-                      <PlayCircle className="w-4 h-4" />
+                      {isPaid ? (
+                        <PlayCircle className="w-4 h-4" />
+                      ) : (
+                        <Lock className="w-4 h-4 text-slate-400" />
+                      )}
                     </button>
                   </div>
 
-                  {isPlaying && (
+                  {isPlaying && isPaid && (
                     <div className="p-2.5 rounded-xl bg-slate-900 text-white text-xs space-y-1.5 animate-fade-in">
                       <div className="flex items-center justify-between text-[11px] text-purple-300">
                         <span>Streaming Lesson Recording</span>
@@ -211,36 +321,49 @@ export default function SubjectClassHubModal({
                     </div>
                   )}
 
-                  {/* PDF Download Button */}
+                  {/* PDF Download Button - Locked when unpaid */}
                   <div className="pt-1.5 border-t border-purple-100/60 flex items-center justify-between">
                     <span className="text-[10px] text-slate-500 font-medium truncate max-w-[190px]">
                       {chapter.pdfTitle}
                     </span>
 
-                    <button
-                      type="button"
-                      disabled={isDownloading}
-                      onClick={() => handleDownload(chapter.id)}
-                      className={`py-1 px-2.5 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all ${
-                        isDownloaded
-                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                          : "bg-white border border-purple-200 text-purple-700 hover:bg-purple-50"
-                      }`}
-                    >
-                      {isDownloaded ? (
-                        <>
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                          <span>Saved</span>
-                        </>
-                      ) : isDownloading ? (
-                        <span>Downloading...</span>
-                      ) : (
-                        <>
-                          <Download className="w-3 h-3" />
-                          <span>PDF</span>
-                        </>
-                      )}
-                    </button>
+                    {isPaid ? (
+                      <button
+                        type="button"
+                        disabled={isDownloading}
+                        onClick={() => handleDownload(chapter.id)}
+                        className={`py-1 px-2.5 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all ${
+                          isDownloaded
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            : "bg-white border border-purple-200 text-purple-700 hover:bg-purple-50"
+                        }`}
+                      >
+                        {isDownloaded ? (
+                          <>
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            <span>Saved</span>
+                          </>
+                        ) : isDownloading ? (
+                          <span>Downloading...</span>
+                        ) : (
+                          <>
+                            <Download className="w-3 h-3" />
+                            <span>PDF</span>
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled
+                        aria-disabled="true"
+                        title="Enroll and get verified to download PDF material"
+                        className="py-1 px-2.5 rounded-lg text-[10px] font-bold flex items-center gap-1 bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed select-none"
+                      >
+                        <Lock className="w-3 h-3 text-slate-400" />
+                        <span>Locked</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               );

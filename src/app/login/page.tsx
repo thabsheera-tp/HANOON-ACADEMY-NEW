@@ -57,7 +57,11 @@ function LoginFormContent() {
       if (!isMounted) return;
 
       if (activeSession && activeSession.user) {
-        if (activeSession.user.role === "admin") {
+        if (
+          activeSession.user.role === "admin" ||
+          activeSession.user.role === "super_admin" ||
+          activeSession.user.role === "verification_admin"
+        ) {
           router.replace("/admin");
           return;
         } else if (activeSession.user.role === "teacher") {
@@ -157,10 +161,21 @@ function LoginFormContent() {
       const result = await loginStaffWithCredentials(staffEmail, staffPassword);
 
       if (result.success && result.role) {
-        setSuccessMessage(`Authenticated as ${result.role === "admin" ? "Administrator" : "Faculty Member"}! Redirecting...`);
+        const isVerif = result.role === "verification_admin";
+        const roleLabel = isVerif
+          ? "Verification Staff"
+          : result.role === "teacher"
+          ? "Faculty Member"
+          : "Administrator";
+
+        setSuccessMessage(`Authenticated as ${roleLabel}! Redirecting...`);
 
         setTimeout(() => {
-          if (result.role === "admin") {
+          if (
+            result.role === "admin" ||
+            result.role === "super_admin" ||
+            result.role === "verification_admin"
+          ) {
             router.push("/admin");
           } else {
             router.push("/teacher");
@@ -303,9 +318,50 @@ function LoginFormContent() {
              2. STAFF AUTH FORM (Email & Password)
              ======================================================== */
           <form onSubmit={handleStaffSubmit} className="space-y-4">
-            <div className="p-3 rounded-xl bg-purple-50/70 border border-purple-100 flex items-center gap-2 text-xs font-semibold text-purple-900">
-              <ShieldCheck className="w-4 h-4 text-purple-600 shrink-0" />
-              <span>Restricted entrance for verified Teachers & Administrators</span>
+            <div className="p-3 rounded-xl bg-purple-50/70 border border-purple-100 flex items-center justify-between gap-2 text-xs font-semibold text-purple-900">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-purple-600 shrink-0" />
+                <span>Restricted entrance for Faculty & Administrators</span>
+              </div>
+            </div>
+
+            {/* Quick Demo Staff Credentials Selector */}
+            <div className="space-y-1.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70">
+              <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider block">
+                Quick Demo Accounts (Evaluation):
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStaffEmail("admin@hanoon.academy");
+                    setStaffPassword("HANOON-ADMIN-2026!");
+                  }}
+                  className="px-2 py-1 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-800 text-[11px] font-bold transition-all cursor-pointer"
+                >
+                  Super Admin
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStaffEmail("verify@hanoon.academy");
+                    setStaffPassword("HANOON-VERIFY-2026!");
+                  }}
+                  className="px-2 py-1 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-[11px] font-bold transition-all cursor-pointer"
+                >
+                  Verification Staff
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStaffEmail("teacher@hanoon.academy");
+                    setStaffPassword("HANOON-TEACHER-2026!");
+                  }}
+                  className="px-2 py-1 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-[11px] font-bold transition-all cursor-pointer"
+                >
+                  Faculty Member
+                </button>
+              </div>
             </div>
 
             {/* Staff Email Field */}

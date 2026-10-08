@@ -48,6 +48,7 @@ export default function ScreenDashboard({
   userProfile,
   selectedCourse,
   paymentDetails,
+  onChangeCourse,
   onOpenReceipt,
 }: ScreenDashboardProps) {
   const [showLiveModal, setShowLiveModal] = useState(false);
@@ -741,6 +742,11 @@ export default function ScreenDashboard({
         isOpen={showMaterialsModal}
         onClose={() => setShowMaterialsModal(false)}
         selectedCourse={selectedCourse}
+        isPaid={isApproved}
+        onEnroll={() => {
+          setShowMaterialsModal(false);
+          onChangeCourse();
+        }}
       />
 
       {/* 3. Timetable Modal */}
@@ -765,6 +771,11 @@ export default function ScreenDashboard({
         onClose={() => setShowSpecialModal(false)}
         specialClass={selectedSpecialClass}
         userName={studentName}
+        isPaid={isApproved}
+        onEnroll={() => {
+          setShowSpecialModal(false);
+          onChangeCourse();
+        }}
       />
 
       {/* 6. Adaviyya Subject Hub Modal */}
@@ -773,6 +784,11 @@ export default function ScreenDashboard({
         onClose={() => setActiveSubject(null)}
         subject={activeSubject}
         studentName={studentName}
+        isPaid={isApproved}
+        onEnroll={() => {
+          setActiveSubject(null);
+          onChangeCourse();
+        }}
       />
 
       {/* 7. Certificate View Modal */}

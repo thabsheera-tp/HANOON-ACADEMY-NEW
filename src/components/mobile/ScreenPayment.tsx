@@ -243,15 +243,8 @@ export default function ScreenPayment({
             Your UPI Transaction ID (<code className="font-mono font-bold text-amber-900">{paymentDetails.upiTxId || txId}</code>) is queued for Admin review in Supabase. Verification takes 5–15 mins.
           </p>
 
-          <div className="pt-1">
-            <button
-              type="button"
-              onClick={onGoToDashboard}
-              className="w-full py-3 px-4 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
-            >
-              <span>View Student Portal</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+          <div className="p-2.5 rounded-xl bg-amber-100/70 text-amber-900 text-[11px] font-semibold text-center border border-amber-200/80">
+            🔒 Dashboard access unlocks immediately once verification is approved by the admin.
           </div>
         </div>
       )}

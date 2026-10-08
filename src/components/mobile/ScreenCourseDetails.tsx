@@ -9,13 +9,14 @@ import {
   Scale,
   Mic,
   ChevronRight,
+  ChevronLeft,
   Award,
   Layers,
-  FileCheck,
   Radio,
   Scroll,
+  Lock,
 } from "lucide-react";
-import { SelectedCourse } from "@/types/app";
+import { SelectedCourse, PaymentDetails } from "@/types/app";
 import {
   AdaviyyaSubject,
   getAdaviyyaSubjects,
@@ -28,6 +29,9 @@ interface ScreenCourseDetailsProps {
   selectedCourse: SelectedCourse;
   onProceedToRegister: () => void;
   onBackToCourses?: () => void;
+  paymentDetails?: PaymentDetails;
+  isPaid?: boolean;
+  onGoToDashboard?: () => void;
 }
 
 interface SyllabusModule {
@@ -40,11 +44,82 @@ export default function ScreenCourseDetails({
   selectedCourse,
   onProceedToRegister,
   onBackToCourses,
+  paymentDetails,
+  isPaid: isPaidProp,
+  onGoToDashboard,
 }: ScreenCourseDetailsProps) {
   const [subjects, setSubjects] = useState<AdaviyyaSubject[]>([]);
   const [activeSubject, setActiveSubject] = useState<AdaviyyaSubject | null>(null);
   const [specialClasses, setSpecialClasses] = useState<SpecialClass[]>([]);
   const [selectedSpecialClass, setSelectedSpecialClass] = useState<SpecialClass | null>(null);
+
+  // Dynamic payment verification check
+  const [internalIsPaid, setInternalIsPaid] = useState<boolean>(() => {
+    if (typeof isPaidProp === "boolean") return isPaidProp;
+    if (
+      paymentDetails?.status === "verified" ||
+      (paymentDetails?.status as string) === "APPROVED"
+    ) {
+      return true;
+    }
+    if (typeof window === "undefined") return false;
+    try {
+      const saved = localStorage.getItem("hanoon_local_payments");
+      if (saved) {
+        const list = JSON.parse(saved);
+        if (Array.isArray(list)) {
+          return list.some(
+            (p: any) =>
+              (p.status === "APPROVED" || p.status === "verified") &&
+              (!selectedCourse.id ||
+                p.course_id === selectedCourse.id ||
+                p.course?.id === selectedCourse.id ||
+                selectedCourse.id === "adaviyya" ||
+                selectedCourse.id === "athaviy")
+          );
+        }
+      }
+    } catch {}
+    return false;
+  });
+
+  useEffect(() => {
+    if (typeof isPaidProp === "boolean") {
+      setInternalIsPaid(isPaidProp);
+    }
+  }, [isPaidProp]);
+
+  useEffect(() => {
+    if (
+      paymentDetails?.status === "verified" ||
+      (paymentDetails?.status as string) === "APPROVED"
+    ) {
+      setInternalIsPaid(true);
+    }
+  }, [paymentDetails?.status]);
+
+  useEffect(() => {
+    const handlePaymentEvent = (e: Event) => {
+      const customEvt = e as CustomEvent;
+      if (customEvt.detail) {
+        const { status, course_id } = customEvt.detail;
+        if (status === "APPROVED" || status === "verified") {
+          if (
+            !course_id ||
+            course_id === selectedCourse.id ||
+            selectedCourse.id === "adaviyya" ||
+            selectedCourse.id === "athaviy"
+          ) {
+            setInternalIsPaid(true);
+          }
+        }
+      }
+    };
+    window.addEventListener("hanoon_payment_event", handlePaymentEvent);
+    return () => window.removeEventListener("hanoon_payment_event", handlePaymentEvent);
+  }, [selectedCourse.id]);
+
+  const isPaid = typeof isPaidProp === "boolean" ? isPaidProp : internalIsPaid;
 
   useEffect(() => {
     const loaded = getAdaviyyaSubjects();
@@ -69,6 +144,12 @@ export default function ScreenCourseDetails({
     selectedCourse.title.toLowerCase().includes("athaviy") ||
     selectedCourse.title.toLowerCase().includes("adaviyya");
 
+  const isHomeTuition =
+    selectedCourse.id === "home-tuition" ||
+    selectedCourse.id === "tuition" ||
+    selectedCourse.title.toLowerCase().includes("home tuition") ||
+    selectedCourse.title.toLowerCase().includes("tuition");
+
   const getSubjectIcon = (iconType: string) => {
     switch (iconType) {
       case "book":
@@ -88,7 +169,12 @@ export default function ScreenCourseDetails({
 
   // Syllabus modules for non-Athaviy courses
   const getSyllabusModules = (): SyllabusModule[] => {
-    if (selectedCourse.id === "home-tuition") {
+    if (
+      selectedCourse.id === "home-tuition" ||
+      selectedCourse.id === "tuition" ||
+      selectedCourse.title.toLowerCase().includes("home tuition") ||
+      selectedCourse.title.toLowerCase().includes("tuition")
+    ) {
       return [
         {
           number: "01",
@@ -239,9 +325,10 @@ export default function ScreenCourseDetails({
           <button
             type="button"
             onClick={onBackToCourses}
-            className="text-xs font-bold text-purple-700 hover:text-purple-800 flex items-center gap-1.5 cursor-pointer bg-white px-3 py-1.5 rounded-xl border border-purple-100 shadow-xs transition-colors"
+            aria-label="Back"
+            className="w-9 h-9 rounded-xl bg-white border border-purple-100 text-purple-700 hover:text-purple-900 flex items-center justify-center shadow-xs transition-colors cursor-pointer"
           >
-            <span>← Back to Catalog</span>
+            <ChevronLeft className="w-5 h-5" />
           </button>
         )}
 
@@ -250,26 +337,45 @@ export default function ScreenCourseDetails({
         </span>
       </div>
 
+      {/* Access Restriction Banner for Unpaid / Pending Students */}
+      {!isPaid && (
+        <div className="p-3.5 rounded-2xl bg-purple-100/70 border border-purple-200/80 shadow-xs flex items-center justify-between gap-3 animate-fade-in">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Lock className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-xs font-black text-slate-900 leading-tight">
+                Enroll & Get Verified to Access Live Classes and Materials
+              </p>
+              <p className="text-[10px] text-slate-600 font-medium mt-0.5">
+                Live interactive lecture halls & downloadable PDF notes unlock once verified
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onProceedToRegister}
+            className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-[11px] shadow-xs shrink-0 cursor-pointer transition-all whitespace-nowrap"
+          >
+            Enroll Now
+          </button>
+        </div>
+      )}
+
       {/* 1. Course Header Card */}
       {isAthaviy ? (
-        /* ADAVIYYA: Clean UI with subtle "Completed 4 Batches" badge - NO long descriptions */
-        <div className="neumorphic-card p-5 rounded-3xl space-y-2.5">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-700 bg-purple-100 px-2.5 py-0.5 rounded-full border border-purple-200">
+        /* ADAVIYYA: Minimal title & badge only */
+        <div className="neumorphic-card p-5 rounded-3xl space-y-2">
+          <div>
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-700 bg-purple-100 px-2.5 py-0.5 rounded-full border border-purple-200 inline-block">
               Completed 4 Batches
-            </span>
-            <span className="text-[10px] font-bold text-slate-500 bg-purple-50 px-2 py-0.5 rounded-full">
-              4 Core Subjects
             </span>
           </div>
 
           <h1 className="text-2xl font-black text-slate-900 tracking-tight leading-tight">
             {selectedCourse.title}
           </h1>
-
-          <p className="text-xs text-slate-600 font-semibold">
-            {selectedCourse.subtitle || "Islamic Sharia & Moral Tarbiyah (4 Core Hubs)"}
-          </p>
         </div>
       ) : (
         /* Other Courses: Standard Header */
@@ -282,62 +388,60 @@ export default function ScreenCourseDetails({
             {selectedCourse.tagline || selectedCourse.subtitle}
           </p>
 
-          <div className="pt-2 border-t border-purple-50 flex flex-wrap gap-1.5">
-            {selectedCourse.highlights.map((item, idx) => (
-              <span
-                key={idx}
-                className="text-[10px] font-semibold text-purple-800 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-100"
-              >
-                ✓ {item}
-              </span>
-            ))}
-          </div>
+          {!isHomeTuition && selectedCourse.highlights && selectedCourse.highlights.length > 0 && (
+            <div className="pt-2 border-t border-purple-50 flex flex-wrap gap-1.5">
+              {selectedCourse.highlights.map((item, idx) => (
+                <span
+                  key={idx}
+                  className="text-[10px] font-semibold text-purple-800 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-100"
+                >
+                  ✓ {item}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
       {/* 2. Subjects / Syllabus Section */}
       {isAthaviy ? (
-        /* ADAVIYYA: Display ONLY Clean Interactive Course/Subject Buttons */
-        <div className="space-y-3">
-          <div className="flex items-center justify-between px-1">
-            <div className="flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-purple-600" />
-              <h2 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-                Interactive Course Subjects (4 Hubs)
-              </h2>
-            </div>
-            <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
-              Tap to View Hub
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            {subjects.map((sub) => (
-              <button
-                key={sub.id}
-                type="button"
-                onClick={() => setActiveSubject(sub)}
-                className="neumorphic-button p-4 rounded-2xl flex flex-col justify-between space-y-2.5 text-left group cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98]"
-              >
-                <div>
-                  <div className="w-8 h-8 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center mb-2 shadow-xs group-hover:bg-purple-600 group-hover:text-white transition-all">
-                    {getSubjectIcon(sub.iconType)}
-                  </div>
-                  <h3 className="text-sm font-extrabold text-slate-900 group-hover:text-purple-700 transition-colors">
-                    {sub.name}
-                  </h3>
-                  <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
-                    {sub.subtitle}
-                  </p>
+        /* ADAVIYYA: 4 Subject buttons placed directly under the hero card without redundant headers */
+        <div className="grid grid-cols-2 gap-3">
+          {subjects.map((sub) => (
+            <button
+              key={sub.id}
+              type="button"
+              onClick={() => setActiveSubject(sub)}
+              className="neumorphic-button p-4 rounded-2xl flex flex-col justify-between space-y-2.5 text-left group cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <div>
+                <div className="w-8 h-8 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center mb-2 shadow-xs group-hover:bg-purple-600 group-hover:text-white transition-all">
+                  {getSubjectIcon(sub.iconType)}
                 </div>
+                <h3 className="text-sm font-extrabold text-slate-900 group-hover:text-purple-700 transition-colors">
+                  {sub.name}
+                </h3>
+                <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
+                  {sub.subtitle}
+                </p>
+              </div>
 
-                <div className="pt-2 border-t border-purple-50 text-[10px] text-purple-600 font-bold flex items-center justify-between w-full">
-                  <span>{sub.chapters.length} Chapters</span>
-                  <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-purple-600" />
-                </div>
-              </button>
-            ))}
-          </div>
+              <div className="pt-2 border-t border-purple-50 text-[10px] font-bold flex items-center justify-between w-full">
+                {isPaid ? (
+                  <span className="text-emerald-700 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    <span>{sub.chapters.length} Ch. (Unlocked)</span>
+                  </span>
+                ) : (
+                  <span className="text-slate-500 flex items-center gap-1">
+                    <Lock className="w-3 h-3 text-slate-400" />
+                    <span>{sub.chapters.length} Chapters</span>
+                  </span>
+                )}
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-purple-600" />
+              </div>
+            </button>
+          ))}
         </div>
       ) : (
         /* Non-Adaviyya: Structured Syllabus Modules */
@@ -382,147 +486,186 @@ export default function ScreenCourseDetails({
         </div>
       )}
 
-      {/* 3. Distinct "Upcoming Special Classes" Section (For Adaviyya & All Courses) */}
-      <div className="space-y-2.5 pt-1">
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-1.5">
+      {/* 3. Distinct "Upcoming Special Classes" Section (For Adaviyya & Other Courses, Hidden for Home Tuition) */}
+      {!isHomeTuition && (
+        <div className="space-y-2.5 pt-1">
+          <div className="flex items-center gap-1.5 px-1">
             <Sparkles className="w-4 h-4 text-purple-600" />
             <h2 className="text-xs font-black text-slate-800 uppercase tracking-wider">
               Upcoming Special Classes
             </h2>
           </div>
-          <span className="text-[10px] font-bold text-purple-700 bg-purple-100/70 px-2 py-0.5 rounded-full">
-            Special Sessions
-          </span>
-        </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          {specialClasses.slice(0, 2).map((spc) => {
-            const isTajweed = spc.id.includes("tajweed");
+          <div className="grid grid-cols-2 gap-3">
+            {specialClasses.slice(0, 2).map((spc) => {
+              const isTajweed = spc.id.includes("tajweed");
 
-            return (
-              <button
-                key={spc.id}
-                type="button"
-                onClick={() => setSelectedSpecialClass(spc)}
-                className="neumorphic-button rounded-2xl p-3 flex flex-col justify-between text-left cursor-pointer group transition-all hover:scale-[1.02] active:scale-[0.98] min-h-[95px]"
-              >
-                <div className="space-y-1 w-full">
-                  <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-all">
-                    {isTajweed ? <Mic className="w-3.5 h-3.5" /> : <Radio className="w-3.5 h-3.5 animate-pulse" />}
+              return (
+                <button
+                  key={spc.id}
+                  type="button"
+                  onClick={() => setSelectedSpecialClass(spc)}
+                  className="neumorphic-button rounded-2xl p-3 flex flex-col justify-between text-left cursor-pointer group transition-all hover:scale-[1.02] active:scale-[0.98] min-h-[95px]"
+                >
+                  <div className="space-y-1 w-full">
+                    <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-all">
+                      {isTajweed ? <Mic className="w-3.5 h-3.5" /> : <Radio className="w-3.5 h-3.5 animate-pulse" />}
+                    </div>
+                    <h3 className="text-xs font-extrabold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
+                      {spc.title}
+                    </h3>
                   </div>
-                  <h3 className="text-xs font-extrabold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
-                    {spc.title}
-                  </h3>
-                </div>
 
-                <div className="pt-1.5 border-t border-purple-50 w-full flex items-center justify-between">
-                  <span className="text-[9.5px] font-semibold text-slate-500 truncate">
-                    {spc.scheduleTime.split("•")[0]?.trim() || "Live Class"}
-                  </span>
-                  <span className="text-[9.5px] font-bold text-purple-600 shrink-0">
-                    &rarr;
-                  </span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* 4. Pricing & Updated Fee Structure */}
-      <div className="neumorphic-card p-5 rounded-3xl space-y-3.5">
-        {isAthaviy ? (
-          /* ADAVIYYA UPDATED FEE STRUCTURE */
-          <div className="space-y-3">
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">
-                  Course Fee Structure
-                </span>
-                <div className="space-y-0.5 mt-0.5">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-black text-slate-900 tracking-tight">
-                      Total Fee: ₹3,000
+                  <div className="pt-1.5 border-t border-purple-50 w-full flex items-center justify-between">
+                    <span className="text-[9.5px] font-semibold text-slate-500 truncate">
+                      {spc.scheduleTime.split("•")[0]?.trim() || "Live Class"}
+                    </span>
+                    <span className="text-[9.5px] font-bold text-purple-600 shrink-0">
+                      &rarr;
                     </span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-xs font-extrabold text-purple-700">
-                    <span className="bg-purple-100 px-2 py-0.5 rounded-md">
-                      Admission Fee: ₹500
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-100">
-                Installments Available
-              </span>
-            </div>
-
-            {/* Helper Text */}
-            <div className="p-3 rounded-xl bg-purple-50/70 border border-purple-100 text-xs text-purple-900 font-medium leading-relaxed">
-              💡 <strong>Pay the ₹500 admission fee now to unlock the course.</strong> The balance can be paid later in installments.
-            </div>
+                </button>
+              );
+            })}
           </div>
-        ) : (
-          /* Other Courses Fee Display */
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                Enrollment Tuition Fee
-              </span>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-black text-purple-700 tracking-tight">
-                  {selectedCourse.fee}
-                </span>
-                <span className="text-xs font-semibold text-slate-400">
-                  / One-time
-                </span>
-              </div>
-            </div>
+        </div>
+      )}
 
-            <span className="text-xs font-bold text-purple-700 bg-purple-50 px-3 py-1.5 rounded-xl border border-purple-100">
-              All Inclusive
+      {/* 4. Compact Pricing & Enrollment Card */}
+      {isAthaviy ? (
+        /* ADAVIYYA: Single compact card with essential fees & primary action */
+        <div className="neumorphic-card p-5 rounded-3xl space-y-4 mb-6">
+          <div className="flex items-center justify-between pb-3 border-b border-purple-50">
+            <span className="text-xs font-bold text-slate-500">
+              Total Course Fee
+            </span>
+            <span className="text-sm font-black text-slate-800">
+              ₹3,000
             </span>
           </div>
-        )}
 
-        {/* Inclusions List */}
-        <div className="space-y-2 pt-2 border-t border-purple-50">
-          <div className="flex items-center gap-2 text-xs text-slate-700">
-            <CheckCircle2 className="w-4 h-4 text-purple-600 shrink-0" />
-            <span>Complete Academic Term Access & Live Classes</span>
+          <div className="flex items-baseline justify-between">
+            <div>
+              <span className="text-xs font-bold text-purple-700 block">
+                Amount Payable Now
+              </span>
+              <span className="text-[10px] text-slate-400">
+                Admission Fee to Unlock Course
+              </span>
+            </div>
+            <span className="text-2xl font-black text-purple-700">
+              ₹500
+            </span>
           </div>
-          <div className="flex items-center gap-2 text-xs text-slate-700">
-            <FileCheck className="w-4 h-4 text-purple-600 shrink-0" />
-            <span>Downloadable PDF Notes & Digital Study Material</span>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-slate-700">
-            <Award className="w-4 h-4 text-purple-600 shrink-0" />
-            <span>Official Digital Certificate Issued Upon Completion</span>
+
+          <div className="pt-1">
+            {isPaid ? (
+              <button
+                type="button"
+                onClick={onGoToDashboard || onProceedToRegister}
+                className="w-full py-3.5 px-5 rounded-2xl font-extrabold text-xs text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Course Enrolled & Active ✓ — Go to Dashboard</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onProceedToRegister}
+                className="w-full py-3.5 px-5 rounded-2xl font-extrabold text-xs text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-md shadow-purple-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>Pay ₹500 & Enroll</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
-      </div>
+      ) : isHomeTuition ? (
+        /* HOME TUITION: Clean minimal pricing tag & primary enrollment action button */
+        <div className="neumorphic-card p-5 rounded-3xl space-y-4 mb-6">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-600">
+              Total Course Fee
+            </span>
+            <span className="text-2xl font-black text-purple-700">
+              {selectedCourse.fee || "₹2,000"}
+            </span>
+          </div>
 
-      {/* 5. Progressive Enrollment CTA Button */}
-      <div className="pt-2 pb-6">
-        <button
-          type="button"
-          onClick={onProceedToRegister}
-          className="w-full py-4 px-6 rounded-2xl font-extrabold text-sm text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
-        >
-          <span>
-            {isAthaviy ? "Pay ₹500 Admission Fee to Unlock Course" : "Enroll in this Course"}
-          </span>
-          <ArrowRight className="w-4 h-4" />
-        </button>
-      </div>
+          <div className="pt-1">
+            {isPaid ? (
+              <button
+                type="button"
+                onClick={onGoToDashboard || onProceedToRegister}
+                className="w-full py-3.5 px-5 rounded-2xl font-extrabold text-xs text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Course Enrolled & Active ✓ — Go to Dashboard</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onProceedToRegister}
+                className="w-full py-3.5 px-5 rounded-2xl font-extrabold text-xs text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-md shadow-purple-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>Enroll in this Course</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* Other Courses: Clean Compact Pricing Card */
+        <div className="neumorphic-card p-5 rounded-3xl space-y-4 mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-xs font-bold text-purple-700 block">
+                Total Course Fee
+              </span>
+              <span className="text-[10px] text-slate-400">
+                One-time enrollment
+              </span>
+            </div>
+            <span className="text-2xl font-black text-purple-700">
+              {selectedCourse.fee}
+            </span>
+          </div>
+
+          <div className="pt-1">
+            {isPaid ? (
+              <button
+                type="button"
+                onClick={onGoToDashboard || onProceedToRegister}
+                className="w-full py-3.5 px-5 rounded-2xl font-extrabold text-xs text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Course Enrolled & Active ✓ — Go to Dashboard</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onProceedToRegister}
+                className="w-full py-3.5 px-5 rounded-2xl font-extrabold text-xs text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-md shadow-purple-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>Enroll in this Course</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Modal for viewing Adaviyya Subject Chapter syllabus */}
       <SubjectClassHubModal
         isOpen={Boolean(activeSubject)}
         onClose={() => setActiveSubject(null)}
         subject={activeSubject}
+        studentName="Student"
+        isPaid={isPaid}
+        onEnroll={() => {
+          setActiveSubject(null);
+          onProceedToRegister();
+        }}
       />
 
       {/* Modal for viewing Upcoming Special Classes */}
@@ -531,6 +674,11 @@ export default function ScreenCourseDetails({
         onClose={() => setSelectedSpecialClass(null)}
         specialClass={selectedSpecialClass}
         userName="Student"
+        isPaid={isPaid}
+        onEnroll={() => {
+          setSelectedSpecialClass(null);
+          onProceedToRegister();
+        }}
       />
     </div>
   );

@@ -37,9 +37,10 @@ export function proxy(request: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
 
-    // 2. Protect /admin route: strictly accessible by role === 'admin'
+    // 2. Protect /admin route: accessible by Super Admin ('admin', 'super_admin') AND Verification Staff ('verification_admin')
     if (isAdminRoute) {
-      if (role !== "admin") {
+      const isAllowedAdmin = role === "admin" || role === "super_admin" || role === "verification_admin";
+      if (!isAllowedAdmin) {
         if (role === "teacher") {
           return NextResponse.redirect(new URL("/teacher", request.url));
         }
@@ -47,9 +48,9 @@ export function proxy(request: NextRequest) {
       }
     }
 
-    // 3. Protect /teacher route: accessible by role === 'teacher' or 'admin'
+    // 3. Protect /teacher route: accessible by role === 'teacher' or 'admin' or 'super_admin'
     if (isTeacherRoute) {
-      if (role !== "teacher" && role !== "admin") {
+      if (role !== "teacher" && role !== "admin" && role !== "super_admin") {
         return NextResponse.redirect(new URL("/login?portal=staff&error=teacher_only", request.url));
       }
     }

@@ -1,6 +1,6 @@
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 
-export type UserRole = "student" | "teacher" | "admin";
+export type UserRole = "student" | "teacher" | "admin" | "super_admin" | "verification_admin";
 
 export interface UserProfileRecord {
   id: string;
@@ -15,12 +15,26 @@ export interface UserProfileRecord {
 
 export interface AuthSessionData {
   user: UserProfileRecord;
+  role?: UserRole;
   token: string;
   expiresAt: number;
 }
 
 export const SESSION_COOKIE_NAME = "hanoon_auth_session";
 export const LOCAL_SESSION_KEY = "hanoon_auth_session_v1";
+
+// Role hierarchy helpers
+export function isSuperAdminRole(role?: UserRole | string | null): boolean {
+  return role === "admin" || role === "super_admin";
+}
+
+export function isVerificationAdminRole(role?: UserRole | string | null): boolean {
+  return role === "verification_admin";
+}
+
+export function isAdminOrStaffRole(role?: UserRole | string | null): boolean {
+  return role === "admin" || role === "super_admin" || role === "verification_admin";
+}
 
 // Fallback credentials used strictly for local evaluation when Supabase is not configured
 export const DEMO_EVALUATION_CREDENTIALS = {
@@ -31,6 +45,16 @@ export const DEMO_EVALUATION_CREDENTIALS = {
       email: "admin@hanoon.academy",
       full_name: "Executive Dean Faisal Al-Hanoon",
       role: "admin" as UserRole,
+      district: "Calicut",
+    },
+  },
+  verificationAdmin: {
+    email: "verify@hanoon.academy",
+    profile: {
+      id: "usr-verify-01",
+      email: "verify@hanoon.academy",
+      full_name: "Staff Verification Officer (Zayd)",
+      role: "verification_admin" as UserRole,
       district: "Calicut",
     },
   },
@@ -52,6 +76,10 @@ export const SPECIAL_CREDENTIALS = {
     ...DEMO_EVALUATION_CREDENTIALS.admin,
     specialPass: "HANOON-ADMIN-2026!",
   },
+  verificationAdmin: {
+    ...DEMO_EVALUATION_CREDENTIALS.verificationAdmin,
+    specialPass: "HANOON-VERIFY-2026!",
+  },
   teacher: {
     ...DEMO_EVALUATION_CREDENTIALS.teacher,
     specialPass: "HANOON-TEACHER-2026!",
@@ -68,6 +96,7 @@ export function setAuthSession(user: UserProfileRecord, token: string = "hanoon-
 
   const sessionData: AuthSessionData = {
     user,
+    role: user.role,
     token,
     expiresAt: Date.now() + 1000 * 60 * 60 * 24 * 365, // 365 days (permanent device persistence)
   };
@@ -579,7 +608,7 @@ export async function loginStaffWithCredentials(
 ): Promise<{
   success: boolean;
   user?: UserProfileRecord;
-  role?: "teacher" | "admin";
+  role?: UserRole;
   error?: string;
 }> {
   const cleanEmail = email.trim().toLowerCase();
@@ -611,17 +640,24 @@ export async function loginStaffWithCredentials(
 
         const role = profileData?.role as UserRole | undefined;
 
-        if (role !== "admin" && role !== "teacher") {
+        if (role !== "admin" && role !== "super_admin" && role !== "verification_admin" && role !== "teacher") {
           return {
             success: false,
             error: "Access Denied: This portal requires verified Faculty or Administrator credentials.",
           };
         }
 
+        const fallbackTitle =
+          role === "verification_admin"
+            ? "Verification Staff Officer"
+            : role === "teacher"
+            ? "Faculty Member"
+            : "Academy Administrator";
+
         const userRecord: UserProfileRecord = {
           id: authData.user.id,
           email: authData.user.email || cleanEmail,
-          full_name: profileData?.full_name || authData.user.user_metadata?.full_name || (role === "admin" ? "Academy Administrator" : "Faculty Member"),
+          full_name: profileData?.full_name || authData.user.user_metadata?.full_name || fallbackTitle,
           role: role,
           district: profileData?.district || "Kerala",
           whatsapp_num: profileData?.whatsapp_num || "",
@@ -647,6 +683,15 @@ export async function loginStaffWithCredentials(
   }
 
   if (
+    cleanEmail === DEMO_EVALUATION_CREDENTIALS.verificationAdmin.email.toLowerCase() &&
+    cleanPass === SPECIAL_CREDENTIALS.verificationAdmin.specialPass
+  ) {
+    const verifyUser = DEMO_EVALUATION_CREDENTIALS.verificationAdmin.profile;
+    setAuthSession(verifyUser, "token-verify-session");
+    return { success: true, user: verifyUser, role: "verification_admin" };
+  }
+
+  if (
     cleanEmail === DEMO_EVALUATION_CREDENTIALS.teacher.email.toLowerCase() &&
     cleanPass === SPECIAL_CREDENTIALS.teacher.specialPass
   ) {
@@ -655,7 +700,19 @@ export async function loginStaffWithCredentials(
     return { success: true, user: teacherUser, role: "teacher" };
   }
 
-  // Fallback checks for standard admin/teacher emails with password >= 6
+  // Fallback checks for standard admin/verification/teacher emails with password >= 6
+  if ((cleanEmail.includes("verify") || cleanEmail.includes("verification")) && cleanPass.length >= 6) {
+    const verifyUser: UserProfileRecord = {
+      id: "usr-verify-01",
+      email: cleanEmail,
+      full_name: "Staff Verification Officer (Zayd)",
+      role: "verification_admin",
+      district: "Calicut",
+    };
+    setAuthSession(verifyUser, "token-verify-session");
+    return { success: true, user: verifyUser, role: "verification_admin" };
+  }
+
   if (cleanEmail.includes("admin") && cleanPass.length >= 6) {
     const adminUser: UserProfileRecord = {
       id: "usr-admin-01",
@@ -759,6 +816,15 @@ export async function loginUser(
     const adminUser = DEMO_EVALUATION_CREDENTIALS.admin.profile;
     setAuthSession(adminUser, "token-admin-demo");
     return { success: true, user: adminUser, role: "admin" };
+  }
+
+  if (
+    cleanId === DEMO_EVALUATION_CREDENTIALS.verificationAdmin.email.toLowerCase() &&
+    cleanPass === SPECIAL_CREDENTIALS.verificationAdmin.specialPass
+  ) {
+    const verifyUser = DEMO_EVALUATION_CREDENTIALS.verificationAdmin.profile;
+    setAuthSession(verifyUser, "token-verify-demo");
+    return { success: true, user: verifyUser, role: "verification_admin" };
   }
 
   if (

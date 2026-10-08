@@ -131,7 +131,7 @@ export interface DbProfile {
   id: string;
   email: string;
   full_name: string;
-  role: "student" | "teacher" | "admin";
+  role: "student" | "teacher" | "admin" | "super_admin" | "verification_admin";
   district?: string;
   whatsapp_num?: string;
   avatar_url?: string;

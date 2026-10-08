@@ -4,8 +4,6 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft,
-  User,
-  LogIn,
   LogOut,
   X,
 } from "lucide-react";

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   X,
   PlayCircle,
@@ -12,6 +12,8 @@ import {
   Pause,
   Clock,
   Eye,
+  Lock,
+  ArrowRight,
 } from "lucide-react";
 import { SelectedCourse } from "@/types/app";
 
@@ -19,6 +21,8 @@ interface CourseMaterialsModalProps {
   isOpen: boolean;
   onClose: () => void;
   selectedCourse: SelectedCourse;
+  isPaid?: boolean;
+  onEnroll?: () => void;
 }
 
 interface ChapterLesson {
@@ -36,12 +40,40 @@ export default function CourseMaterialsModal({
   isOpen,
   onClose,
   selectedCourse,
+  isPaid: isPaidProp,
+  onEnroll,
 }: CourseMaterialsModalProps) {
   const [activeTab, setActiveTab] = useState<"videos" | "pdfs">("videos");
   const [activeVideoId, setActiveVideoId] = useState<string>("ch-1");
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [downloadingPdfId, setDownloadingPdfId] = useState<string | null>(null);
   const [downloadedPdfs, setDownloadedPdfs] = useState<Record<string, boolean>>({});
+
+  // Dynamic payment resolution
+  const [internalIsPaid, setInternalIsPaid] = useState<boolean>(() => {
+    if (typeof isPaidProp === "boolean") return isPaidProp;
+    if (typeof window === "undefined") return false;
+    try {
+      const saved = localStorage.getItem("hanoon_local_payments");
+      if (saved) {
+        const list = JSON.parse(saved);
+        if (Array.isArray(list)) {
+          return list.some(
+            (p: any) => p.status === "APPROVED" || p.status === "verified"
+          );
+        }
+      }
+    } catch {}
+    return false;
+  });
+
+  useEffect(() => {
+    if (typeof isPaidProp === "boolean") {
+      setInternalIsPaid(isPaidProp);
+    }
+  }, [isPaidProp]);
+
+  const isPaid = typeof isPaidProp === "boolean" ? isPaidProp : internalIsPaid;
 
   if (!isOpen) return null;
 
@@ -130,6 +162,40 @@ export default function CourseMaterialsModal({
           <span className="font-semibold text-slate-600">Enrolled Course:</span>
           <strong className="text-purple-700 font-bold">{selectedCourse.title}</strong>
         </div>
+
+        {/* Access Restriction Banner for Unpaid Students */}
+        {!isPaid && (
+          <div className="p-3.5 rounded-2xl bg-purple-50/90 border border-purple-200 shadow-xs space-y-2.5 mb-3">
+            <div className="flex items-start gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0 border border-purple-200">
+                <Lock className="w-4 h-4" />
+              </div>
+              <div className="space-y-0.5 flex-1">
+                <h4 className="text-xs font-black text-slate-900 leading-snug">
+                  Enroll & Get Verified to Access Live Classes and Materials
+                </h4>
+                <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                  Chapter lesson handbooks, Arabic litany commentary, and notes require active verified enrollment.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (onEnroll) {
+                  onEnroll();
+                } else {
+                  onClose();
+                }
+              }}
+              className="w-full py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-[0.98] text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer"
+            >
+              <span>Enroll Now / Complete Payment</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* Tab Switcher */}
         <div className="flex items-center p-1 bg-purple-50/50 rounded-2xl border border-purple-100 mb-4 shrink-0">
@@ -246,30 +312,43 @@ export default function CourseMaterialsModal({
                     </p>
                   </div>
 
-                  <button
-                    type="button"
-                    disabled={isDownloading}
-                    onClick={() => handleDownload(ch.id)}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-xs shrink-0 ${
-                      isDownloaded
-                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                        : "bg-purple-600 hover:bg-purple-700 text-white"
-                    }`}
-                  >
-                    {isDownloaded ? (
-                      <>
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Saved</span>
-                      </>
-                    ) : isDownloading ? (
-                      <span>Saving...</span>
-                    ) : (
-                      <>
-                        <Download className="w-3.5 h-3.5" />
-                        <span>Download</span>
-                      </>
-                    )}
-                  </button>
+                  {isPaid ? (
+                    <button
+                      type="button"
+                      disabled={isDownloading}
+                      onClick={() => handleDownload(ch.id)}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-xs shrink-0 ${
+                        isDownloaded
+                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                          : "bg-purple-600 hover:bg-purple-700 text-white"
+                      }`}
+                    >
+                      {isDownloaded ? (
+                        <>
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Saved</span>
+                        </>
+                      ) : isDownloading ? (
+                        <span>Saving...</span>
+                      ) : (
+                        <>
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Download</span>
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      aria-disabled="true"
+                      title="Enroll to unlock PDF material download"
+                      className="py-2 px-3 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed select-none shrink-0"
+                    >
+                      <Lock className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Locked</span>
+                    </button>
+                  )}
                 </div>
               );
             })}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   X,
   Radio,
@@ -15,6 +15,8 @@ import {
   CheckCircle2,
   Mic,
   MessageCircle,
+  Lock,
+  ArrowRight,
 } from "lucide-react";
 import { SpecialClass } from "@/services/specialClassService";
 
@@ -23,6 +25,8 @@ interface SpecialClassModalProps {
   onClose: () => void;
   specialClass: SpecialClass | null;
   userName: string;
+  isPaid?: boolean;
+  onEnroll?: () => void;
 }
 
 export default function SpecialClassModal({
@@ -30,13 +34,57 @@ export default function SpecialClassModal({
   onClose,
   specialClass,
   userName,
+  isPaid: isPaidProp,
+  onEnroll,
 }: SpecialClassModalProps) {
   const [activeTab, setActiveTab] = useState<"live" | "materials" | "about">("live");
   const [downloadSuccess, setDownloadSuccess] = useState(false);
 
+  // Dynamic payment status resolution
+  const [internalIsPaid, setInternalIsPaid] = useState<boolean>(() => {
+    if (typeof isPaidProp === "boolean") return isPaidProp;
+    if (typeof window === "undefined") return false;
+    try {
+      const saved = localStorage.getItem("hanoon_local_payments");
+      if (saved) {
+        const list = JSON.parse(saved);
+        if (Array.isArray(list)) {
+          return list.some(
+            (p: any) => p.status === "APPROVED" || p.status === "verified"
+          );
+        }
+      }
+    } catch {}
+    return false;
+  });
+
+  useEffect(() => {
+    if (typeof isPaidProp === "boolean") {
+      setInternalIsPaid(isPaidProp);
+    }
+  }, [isPaidProp]);
+
+  // Real-time payment verification event listener
+  useEffect(() => {
+    const handlePaymentEvent = (e: Event) => {
+      const customEvt = e as CustomEvent;
+      if (customEvt.detail) {
+        const { status } = customEvt.detail;
+        if (status === "APPROVED" || status === "verified") {
+          setInternalIsPaid(true);
+        }
+      }
+    };
+    window.addEventListener("hanoon_payment_event", handlePaymentEvent);
+    return () => window.removeEventListener("hanoon_payment_event", handlePaymentEvent);
+  }, []);
+
+  const isPaid = typeof isPaidProp === "boolean" ? isPaidProp : internalIsPaid;
+
   if (!isOpen || !specialClass) return null;
 
   const handleDownloadPdf = () => {
+    if (!isPaid) return;
     setDownloadSuccess(true);
     setTimeout(() => setDownloadSuccess(false), 2500);
   };
@@ -146,27 +194,65 @@ export default function SpecialClassModal({
           {/* TAB 1: LIVE BROADCAST GATE */}
           {activeTab === "live" && (
             <div className="space-y-3">
-              <div className="p-4 rounded-2xl bg-purple-50 border border-purple-100 space-y-3">
-                <div className="flex items-center gap-2">
-                  <Mic className="w-4 h-4 text-purple-600" />
-                  <span className="text-xs font-bold text-slate-900">
-                    Live Video & Audio Transmission
-                  </span>
-                </div>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  Join Usthad for this specialized live gathering with crystal clear high-fidelity audio and two-way interaction.
-                </p>
+              {!isPaid ? (
+                <div className="p-4 rounded-2xl bg-purple-50/90 border border-purple-200 shadow-xs space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0 border border-purple-200">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <div className="space-y-1 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-700 bg-purple-200/60 px-2 py-0.5 rounded-full">
+                          Enrollment Required
+                        </span>
+                      </div>
+                      <h4 className="text-xs font-black text-slate-900 leading-snug">
+                        Enroll & Get Verified to Access Live Classes and Materials
+                      </h4>
+                      <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                        Access to Usthad&apos;s live video stream, interactive recitation microphone, and special session replay is reserved for enrolled students.
+                      </p>
+                    </div>
+                  </div>
 
-                <a
-                  href={specialClass.liveUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full py-3.5 px-4 rounded-xl font-bold text-xs text-white bg-purple-600 hover:bg-purple-700 shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Radio className="w-4 h-4 animate-pulse" />
-                  <span>Launch Live Stream ➔</span>
-                </a>
-              </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onEnroll) {
+                        onEnroll();
+                      } else {
+                        onClose();
+                      }
+                    }}
+                    className="w-full py-2.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-[0.98] text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+                  >
+                    <span>Enroll Now / Complete Payment</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <div className="p-4 rounded-2xl bg-purple-50 border border-purple-100 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Mic className="w-4 h-4 text-purple-600" />
+                    <span className="text-xs font-bold text-slate-900">
+                      Live Video & Audio Transmission
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Join Usthad for this specialized live gathering with crystal clear high-fidelity audio and two-way interaction.
+                  </p>
+
+                  <a
+                    href={specialClass.liveUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-3.5 px-4 rounded-xl font-bold text-xs text-white bg-purple-600 hover:bg-purple-700 shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Radio className="w-4 h-4 animate-pulse" />
+                    <span>Join Live Class</span>
+                  </a>
+                </div>
+              )}
             </div>
           )}
 
@@ -186,13 +272,26 @@ export default function SpecialClassModal({
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleDownloadPdf}
-                  className="p-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition-all cursor-pointer shadow-xs"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                </button>
+                {isPaid ? (
+                  <button
+                    type="button"
+                    onClick={handleDownloadPdf}
+                    className="p-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition-all cursor-pointer shadow-xs"
+                    title="Download PDF Notes"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    aria-disabled="true"
+                    title="Enroll to unlock PDF download"
+                    className="p-2 rounded-xl bg-slate-100 text-slate-400 border border-slate-200 text-xs font-bold cursor-not-allowed select-none"
+                  >
+                    <Lock className="w-3.5 h-3.5 text-slate-400" />
+                  </button>
+                )}
               </div>
 
               {downloadSuccess && (

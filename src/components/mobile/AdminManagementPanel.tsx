@@ -51,6 +51,7 @@ import {
   markPayrollAsPaid,
   createPayrollRecord,
 } from "@/services/payrollService";
+import { getCurrentSession, isSuperAdminRole } from "@/services/authService";
 
 interface AdminManagementPanelProps {
   isOpen: boolean;
@@ -72,6 +73,9 @@ export default function AdminManagementPanel({
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [rejectingPayment, setRejectingPayment] = useState<DbPayment | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+
+  const currentRole = getCurrentSession()?.user?.role;
+  const isSuperAdmin = isSuperAdminRole(currentRole);
 
   // Subjects & Special Classes
   const [subjects, setSubjects] = useState<AdaviyyaSubject[]>([]);
@@ -119,14 +123,15 @@ export default function AdminManagementPanel({
     try {
       const paymentData = await fetchPayments();
       setPayments(paymentData);
-      setSubjects(getAdaviyyaSubjects());
-      setSpecialClasses(getSpecialClasses());
 
-      const certs = await fetchCertificates();
-      setCertificates(certs);
-
-      const pays = await fetchPayroll();
-      setPayroll(pays);
+      if (isSuperAdmin) {
+        setSubjects(getAdaviyyaSubjects());
+        setSpecialClasses(getSpecialClasses());
+        const certs = await fetchCertificates();
+        setCertificates(certs);
+        const pays = await fetchPayroll();
+        setPayroll(pays);
+      }
     } catch (e) {
       console.error("Failed to load admin data:", e);
     } finally {
@@ -325,44 +330,48 @@ export default function AdminManagementPanel({
             <span>Students ({approvedPayments.length})</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab("curriculum")}
-            className={`py-2 px-3 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              activeTab === "curriculum"
-                ? "bg-purple-600 text-white shadow-xs"
-                : "text-slate-600 hover:bg-white"
-            }`}
-          >
-            <BookOpen className="w-3.5 h-3.5" />
-            <span>Curriculum & Hubs</span>
-          </button>
+          {isSuperAdmin && (
+            <>
+              <button
+                type="button"
+                onClick={() => setActiveTab("curriculum")}
+                className={`py-2 px-3 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                  activeTab === "curriculum"
+                    ? "bg-purple-600 text-white shadow-xs"
+                    : "text-slate-600 hover:bg-white"
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>Curriculum & Hubs</span>
+              </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab("certificates")}
-            className={`py-2 px-3 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              activeTab === "certificates"
-                ? "bg-purple-600 text-white shadow-xs"
-                : "text-slate-600 hover:bg-white"
-            }`}
-          >
-            <Award className="w-3.5 h-3.5" />
-            <span>Certificates ({certificates.length})</span>
-          </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("certificates")}
+                className={`py-2 px-3 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                  activeTab === "certificates"
+                    ? "bg-purple-600 text-white shadow-xs"
+                    : "text-slate-600 hover:bg-white"
+                }`}
+              >
+                <Award className="w-3.5 h-3.5" />
+                <span>Certificates ({certificates.length})</span>
+              </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab("payroll")}
-            className={`py-2 px-3 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              activeTab === "payroll"
-                ? "bg-purple-600 text-white shadow-xs"
-                : "text-slate-600 hover:bg-white"
-            }`}
-          >
-            <DollarSign className="w-3.5 h-3.5" />
-            <span>Teacher Payroll</span>
-          </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("payroll")}
+                className={`py-2 px-3 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                  activeTab === "payroll"
+                    ? "bg-purple-600 text-white shadow-xs"
+                    : "text-slate-600 hover:bg-white"
+                }`}
+              >
+                <DollarSign className="w-3.5 h-3.5" />
+                <span>Teacher Payroll</span>
+              </button>
+            </>
+          )}
         </div>
 
         {/* TAB 1: UPI PAYMENTS MANAGEMENT */}
