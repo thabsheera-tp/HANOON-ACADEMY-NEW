@@ -32,40 +32,96 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
   // Step 2: "courses" -> Course Selection View
   // Step 3: "course-details" -> Course Details & Pricing Sheet
   // Step 4: "onboarding" -> Student Onboarding Form
-  // Step 5: "payment" -> Manual UPI Payment Screen
+  // Step 5: "payment" -> Manual UPI Payment / Pending Verification Screen
   // Step 6: "dashboard" -> Student Dashboard & Profile View
-  const [currentScreen, setCurrentScreen] = useState<ScreenTab>(
-    initialUser ? "courses" : "splash"
-  );
+  const [currentScreen, setCurrentScreen] = useState<ScreenTab>(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const targetScreen = params.get("screen");
+      if (targetScreen === "payment") return "payment";
+      if (targetScreen === "courses") return "courses";
+      if (targetScreen === "dashboard") return "dashboard";
+    }
+    // Main domain / root route ("/") strictly defaults to Public Landing Page ("splash")
+    return "splash";
+  });
   const [accessNotice, setAccessNotice] = useState<string | null>(null);
 
   // User Profile
-  const [userProfile, setUserProfile] = useState<UserProfile>({
-    name: initialUser?.full_name || "",
-    phone: initialUser?.whatsapp_num || "",
-    place: initialUser?.district || "",
+  const [userProfile, setUserProfile] = useState<UserProfile>(() => {
+    let name = initialUser?.full_name || "";
+    let phone = initialUser?.whatsapp_num || "";
+    let place = initialUser?.district || "";
+
+    if (typeof window !== "undefined" && (!name || !phone)) {
+      try {
+        const pendingRaw = localStorage.getItem("hanoon_pending_payment");
+        if (pendingRaw) {
+          const p = JSON.parse(pendingRaw);
+          if (p.studentName && !name) name = p.studentName;
+          if (p.studentPhone && !phone) phone = p.studentPhone;
+        }
+      } catch {}
+    }
+    return { name, phone, place };
   });
 
-  // Selected Course (Defaults to Adaviyya)
-  const [selectedCourse, setSelectedCourse] = useState<SelectedCourse>(SHOWCASE_COURSES[0]);
+  // Selected Course (Defaults to Adaviyya or pending course)
+  const [selectedCourse, setSelectedCourse] = useState<SelectedCourse>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const pendingRaw = localStorage.getItem("hanoon_pending_payment");
+        if (pendingRaw) {
+          const p = JSON.parse(pendingRaw);
+          if (p.courseId) {
+            const found = SHOWCASE_COURSES.find((c) => c.id === p.courseId);
+            if (found) return found;
+          }
+        }
+      } catch {}
+    }
+    return SHOWCASE_COURSES[0];
+  });
 
   // Payment Details
-  const [paymentDetails, setPaymentDetails] = useState<PaymentDetails>({
-    upiTxId: "",
-    amount: SHOWCASE_COURSES[0].fee,
-    submittedAt: "",
-    status: "unpaid",
+  const [paymentDetails, setPaymentDetails] = useState<PaymentDetails>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const pendingRaw = localStorage.getItem("hanoon_pending_payment");
+        if (pendingRaw) {
+          const p = JSON.parse(pendingRaw);
+          if (p && (p.status === "PENDING" || p.status === "pending_verification")) {
+            return {
+              upiTxId: p.txId || "",
+              amount: p.amount || SHOWCASE_COURSES[0].fee,
+              submittedAt: p.submittedAt || "",
+              status: "pending_verification",
+            };
+          }
+        }
+      } catch {}
+    }
+    return {
+      upiTxId: "",
+      amount: SHOWCASE_COURSES[0].fee,
+      submittedAt: "",
+      status: "unpaid",
+    };
   });
 
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
 
-  // Check URL query parameters for access restriction notice
+  // Check URL query parameters for access restriction notice or target screen
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const noticeParam = params.get("notice");
-      if (noticeParam) {
+      const screenParam = params.get("screen");
+      if (screenParam === "payment") {
+        setCurrentScreen("payment");
+      } else if (noticeParam) {
         setAccessNotice(noticeParam);
+        setCurrentScreen("course-details");
       }
     }
   }, []);
@@ -74,20 +130,21 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
   useEffect(() => {
     let isMounted = true;
 
-    // If initialUser is not supplied (i.e. mounted at root "/"), check for active session and bypass welcome screen
+    // If initialUser is not supplied (i.e. mounted at root "/"), check for active session
     if (!initialUser) {
       const checkAndRoute = async () => {
         const session = await checkActiveSupabaseSession();
         if (!isMounted) return;
 
         if (session && session.user) {
-          if (session.user.role === "admin") {
+          if (session.user.role === "admin" || session.user.role === "super_admin") {
             router.replace("/admin");
+            return;
           } else if (session.user.role === "teacher") {
             router.replace("/teacher");
-          } else {
-            router.replace("/student");
+            return;
           }
+          // Students and guests remain on root route to view the first page
         }
       };
 
@@ -213,6 +270,31 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
           }
         }
 
+        // Also check hanoon_pending_payment if activePayment is not resolved yet
+        if (!activePayment && typeof window !== "undefined") {
+          try {
+            const pendingRaw = localStorage.getItem("hanoon_pending_payment");
+            if (pendingRaw) {
+              const pendingData = JSON.parse(pendingRaw);
+              if (
+                pendingData &&
+                (pendingData.status === "PENDING" || pendingData.status === "pending_verification")
+              ) {
+                activePayment = {
+                  id: pendingData.paymentId,
+                  upi_txid: pendingData.txId,
+                  amount: pendingData.amount,
+                  status: "PENDING",
+                  course_id: pendingData.courseId,
+                  submitted_at: pendingData.submittedAt,
+                };
+              }
+            }
+          } catch (e) {
+            console.warn("Could not read pending payment cache:", e);
+          }
+        }
+
         // 4. Resolve Enrolled Course dynamically from user's payment record
         if (activePayment && activePayment.course_id) {
           const matchedCourse = SHOWCASE_COURSES.find(
@@ -225,15 +307,17 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
           }
         }
 
-        // 5. If verified, route DIRECTLY to Student Dashboard
+        // 5. Update student payment status in state without overriding root Landing Page
         if (isVerified && activePayment) {
           setPaymentDetails({
             upiTxId: activePayment.upi_txid,
-            amount: `₹${activePayment.amount || 3000}`,
+            amount: typeof activePayment.amount === "number" ? `₹${activePayment.amount}` : activePayment.amount || "₹3000",
             submittedAt: activePayment.submitted_at || new Date().toLocaleTimeString(),
             status: "verified",
           });
-          setCurrentScreen("dashboard");
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("hanoon_pending_payment");
+          }
         } else if (
           activePayment &&
           (activePayment.status === "PENDING" ||
@@ -241,16 +325,14 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
         ) {
           setPaymentDetails({
             upiTxId: activePayment.upi_txid,
-            amount: `₹${activePayment.amount || 3000}`,
+            amount: typeof activePayment.amount === "number" ? `₹${activePayment.amount}` : activePayment.amount || SHOWCASE_COURSES[0].fee,
             submittedAt: activePayment.submitted_at || new Date().toLocaleTimeString(),
             status: "pending_verification",
           });
-          // Unpaid / pending students can ONLY view Course Details or catalog, never dashboard
-          setCurrentScreen("course-details");
-        } else {
-          // If student is authenticated but has not paid yet, route to Course Selection
-          setCurrentScreen("courses");
         }
+        // PREVENT AUTO-REDIRECT TO COURSES:
+        // Root route ("/") must strictly remain on the Public Landing Page ("splash")
+        // Users navigate to Course Catalog only when clicking "Get Started" or "Explore Courses"
       };
 
       verifyAndRoute();
@@ -260,6 +342,9 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
   // Purge global React state upon user logout
   useEffect(() => {
     const handleLogout = () => {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("hanoon_pending_payment");
+      }
       setUserProfile({ name: "", phone: "", place: "" });
       setPaymentDetails({
         upiTxId: "",
@@ -297,10 +382,14 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
                 updated &&
                 (updated.status === "APPROVED" || updated.status === "verified")
               ) {
+                if (typeof window !== "undefined") {
+                  localStorage.removeItem("hanoon_pending_payment");
+                }
                 setPaymentDetails((prev) => ({
                   ...prev,
                   status: "verified",
                 }));
+                setCurrentScreen("dashboard");
               }
             }
           )
@@ -315,10 +404,14 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
       if (customEvt.detail) {
         const { status } = customEvt.detail;
         if (status === "APPROVED" || status === "verified") {
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("hanoon_pending_payment");
+          }
           setPaymentDetails((prev) => ({
             ...prev,
             status: "verified",
           }));
+          setCurrentScreen("dashboard");
         }
       }
     };
@@ -357,14 +450,8 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
 
   const handleSaveProfile = (profile: UserProfile) => {
     setUserProfile(profile);
-    setAuthSession({
-      id: `usr-std-${Date.now()}`,
-      email: `${profile.name.toLowerCase().replace(/\s+/g, "") || "student"}@student.hanoon.academy`,
-      full_name: profile.name,
-      role: "student",
-      district: profile.place,
-      whatsapp_num: profile.phone,
-    });
+    // Treat name & phone number inputs strictly as lead/checkout info prior to payment approval.
+    // Do NOT create an active student account session before payment is approved.
   };
 
   // Step 4 -> Step 5
@@ -373,35 +460,43 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
   };
 
   // Step 5 -> Step 6 (Submit Verification)
-  const handleSubmitPayment = (txId: string) => {
-    setPaymentDetails({
+  const handleSubmitPayment = (txId: string, paymentId?: string) => {
+    const updatedDetails: PaymentDetails = {
       upiTxId: txId,
       amount: selectedCourse.fee,
       submittedAt: new Date().toLocaleTimeString(),
       status: "pending_verification",
-    });
+    };
+    setPaymentDetails(updatedDetails);
 
-    if (userProfile.name) {
-      setAuthSession({
-        id: `usr-std-${Date.now()}`,
-        email: `${userProfile.name.toLowerCase().replace(/\s+/g, "") || "student"}@student.hanoon.academy`,
-        full_name: userProfile.name,
-        role: "student",
-        district: userProfile.place,
-        whatsapp_num: userProfile.phone,
-      });
+    // Save pending payment record locally to guarantee persistence across browser refreshes
+    if (typeof window !== "undefined") {
+      const pendingRecord = {
+        txId,
+        paymentId,
+        courseId: selectedCourse.id,
+        courseTitle: selectedCourse.title,
+        amount: selectedCourse.fee,
+        submittedAt: new Date().toLocaleTimeString(),
+        studentName: userProfile.name,
+        studentPhone: userProfile.phone,
+        status: "PENDING",
+      };
+      localStorage.setItem("hanoon_pending_payment", JSON.stringify(pendingRecord));
     }
 
-    // After submitting manual payment, keep student on payment receipt/pending state until verified
+    // Keep student on pending verification screen without kicking them out
     setCurrentScreen("payment");
   };
 
   const handleBack = () => {
     if (currentScreen === "dashboard") setCurrentScreen("courses");
-    else if (currentScreen === "payment") setCurrentScreen("course-details");
+    else if (currentScreen === "payment") setCurrentScreen("splash");
     else if (currentScreen === "onboarding") setCurrentScreen("course-details");
     else if (currentScreen === "course-details") setCurrentScreen("courses");
-    else if (currentScreen === "courses") setCurrentScreen("splash");
+    else if (currentScreen === "courses") {
+      setCurrentScreen("splash");
+    }
   };
 
   const canGoBack = currentScreen !== "splash";
@@ -414,10 +509,14 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
   // Route Guard: Restrict Dashboard access strictly to APPROVED / ACTIVE students
   useEffect(() => {
     if (currentScreen === "dashboard" && !isEnrolled) {
-      setAccessNotice("Please complete enrollment to access your dashboard.");
-      setCurrentScreen("course-details");
+      if (hasPaymentSubmitted || paymentDetails.status === "pending_verification") {
+        setCurrentScreen("payment");
+      } else {
+        setAccessNotice("Please complete enrollment to access your dashboard.");
+        setCurrentScreen("course-details");
+      }
     }
-  }, [currentScreen, isEnrolled]);
+  }, [currentScreen, isEnrolled, hasPaymentSubmitted, paymentDetails.status]);
 
   const handleSelectScreen = (screen: ScreenTab) => {
     if (screen === "dashboard" && !isEnrolled) {
@@ -439,8 +538,10 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
         <MobileHeader
           currentScreen={currentScreen}
           onBack={handleBack}
+          onGoHome={() => setCurrentScreen("splash")}
           canGoBack={canGoBack}
           userProfile={userProfile}
+          isApproved={isEnrolled}
         />
 
         {/* Access Notice Banner (Displayed if an unpaid student attempts to access dashboard) */}
@@ -463,10 +564,12 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
 
         {/* Scrollable Viewport */}
         <div className="flex-1 overflow-y-auto flex flex-col relative z-10 bg-white">
-          {/* Step 1: Welcome Screen (Ultra-minimalist branding & direct route to /login) */}
+          {/* Step 1: Welcome Screen (Ultra-minimalist branding & direct route to /courses) */}
           {currentScreen === "splash" && (
             <ScreenSplash
-              onGetStarted={() => router.push("/login")}
+              onGetStarted={() => setCurrentScreen("courses")}
+              onExploreCourses={() => setCurrentScreen("courses")}
+              onStaffLogin={() => router.push("/login?portal=staff")}
             />
           )}
 

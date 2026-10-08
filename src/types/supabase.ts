@@ -142,6 +142,8 @@ export interface DbProfile {
 export interface DbAppSettings {
   id: string;
   upi_id: string;
+  upi_qr_url?: string;
+  qr_code_url?: string;
   merchant_name: string;
   auto_approval_enabled: boolean;
   contact_whatsapp: string;

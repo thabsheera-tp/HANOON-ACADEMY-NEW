@@ -14,15 +14,19 @@ import { logoutUser } from "@/services/authService";
 interface MobileHeaderProps {
   currentScreen: ScreenTab;
   onBack?: () => void;
+  onGoHome?: () => void;
   canGoBack: boolean;
   userProfile?: UserProfile;
+  isApproved?: boolean;
 }
 
 export default function MobileHeader({
   currentScreen,
   onBack,
+  onGoHome,
   canGoBack,
   userProfile,
+  isApproved = false,
 }: MobileHeaderProps) {
   const router = useRouter();
   const [isPortalMenuOpen, setIsPortalMenuOpen] = useState(false);
@@ -59,7 +63,7 @@ export default function MobileHeader({
   };
 
   return (
-    <header className="bg-white text-slate-900 shrink-0 sticky top-0 z-40 border-b border-purple-100 shadow-xs select-none">
+    <header className="w-full max-w-full overflow-x-hidden bg-white text-slate-900 shrink-0 sticky top-0 z-40 border-b border-purple-100 shadow-xs select-none">
       {/* Main Header Row */}
       <div className="px-4 py-3 flex items-center justify-between relative">
         <div className="flex items-center gap-2">
@@ -73,73 +77,93 @@ export default function MobileHeader({
             </button>
           )}
 
-          <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onGoHome || onBack}
+            className="flex items-center gap-2 cursor-pointer hover:opacity-80 active:scale-[0.98] transition-all text-left bg-transparent border-0 p-0"
+            title="Go to Home / First Page"
+          >
             <HanoonLogo size="sm" showText={false} />
             <h1 className="font-['Plus_Jakarta_Sans'] text-base font-extrabold tracking-tight text-slate-900 leading-tight">
               {getScreenTitle()}
             </h1>
-          </div>
-        </div>
-
-        {/* Profile Avatar Popover (Dynamic Student Profile) */}
-        <div className="flex items-center relative">
-          <button
-            type="button"
-            onClick={() => setIsPortalMenuOpen(!isPortalMenuOpen)}
-            title="Student Profile"
-            className="w-8 h-8 rounded-xl bg-purple-600 text-white font-extrabold text-xs flex items-center justify-center shadow-xs hover:bg-purple-700 active:scale-95 transition-all cursor-pointer"
-          >
-            {avatarLetter}
           </button>
-
-          {isPortalMenuOpen && (
-            <>
-              <div
-                className="fixed inset-0 z-40"
-                onClick={() => setIsPortalMenuOpen(false)}
-              />
-              <div className="absolute right-0 top-10 w-64 bg-white rounded-2xl shadow-xl border border-purple-100 p-2.5 z-50 animate-in fade-in zoom-in-95 duration-150 space-y-1.5">
-                <div className="flex items-center justify-between px-2 py-1.5 border-b border-purple-50">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-purple-600">
-                    Student Profile
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setIsPortalMenuOpen(false)}
-                    className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-2.5 p-2 rounded-xl bg-purple-50/60 text-slate-800">
-                  <div className="w-8 h-8 rounded-lg bg-purple-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
-                    {avatarLetter}
-                  </div>
-                  <div className="overflow-hidden">
-                    <span className="text-xs font-black text-slate-900 block leading-tight truncate">
-                      {displayName}
-                    </span>
-                    <span className="text-[10px] text-purple-700 font-semibold truncate block">
-                      {displayPhone}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="pt-1.5 border-t border-purple-50 space-y-1">
-                  <button
-                    type="button"
-                    onClick={handleSignOut}
-                    className="w-full flex items-center gap-2 p-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer text-left"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                    <span>Sign Out</span>
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
         </div>
+
+        {/* Right Header Element: Profile Avatar (Only when payment is APPROVED) OR Clean Public/Guest View */}
+        {isApproved ? (
+          <div className="flex items-center relative">
+            <button
+              type="button"
+              onClick={() => setIsPortalMenuOpen(!isPortalMenuOpen)}
+              title="Student Profile"
+              className="w-8 h-8 rounded-xl bg-purple-600 text-white font-extrabold text-xs flex items-center justify-center shadow-xs hover:bg-purple-700 active:scale-95 transition-all cursor-pointer"
+            >
+              {avatarLetter}
+            </button>
+
+            {isPortalMenuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setIsPortalMenuOpen(false)}
+                />
+                <div className="absolute right-0 top-10 w-64 bg-white rounded-2xl shadow-xl border border-purple-100 p-2.5 z-50 animate-in fade-in zoom-in-95 duration-150 space-y-1.5">
+                  <div className="flex items-center justify-between px-2 py-1.5 border-b border-purple-50">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-purple-600">
+                      Student Profile
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsPortalMenuOpen(false)}
+                      className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 p-2 rounded-xl bg-purple-50/60 text-slate-800">
+                    <div className="w-8 h-8 rounded-lg bg-purple-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                      {avatarLetter}
+                    </div>
+                    <div className="overflow-hidden">
+                      <span className="text-xs font-black text-slate-900 block leading-tight truncate">
+                        {displayName}
+                      </span>
+                      <span className="text-[10px] text-purple-700 font-semibold truncate block">
+                        {displayPhone}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="pt-1.5 border-t border-purple-50 space-y-1">
+                    <button
+                      type="button"
+                      onClick={handleSignOut}
+                      className="w-full flex items-center gap-2 p-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer text-left"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          /* Clean Public / Guest Header (No active student profile badge) */
+          <div className="flex items-center">
+            {currentScreen === "courses" || currentScreen === "course-details" ? (
+              <button
+                type="button"
+                onClick={() => router.push("/login")}
+                className="py-1 px-3 rounded-full text-[11px] font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200/80 transition-all cursor-pointer shadow-2xs"
+              >
+                Sign In
+              </button>
+            ) : null}
+          </div>
+        )}
       </div>
     </header>
   );

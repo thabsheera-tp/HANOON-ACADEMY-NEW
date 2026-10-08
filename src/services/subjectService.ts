@@ -12,6 +12,8 @@ export interface AdaviyyaSubject {
   name: string;
   subtitle: string;
   instructor: string;
+  teacher_id?: string;
+  instructorWhatsApp?: string;
   badgeGradient: string;
   iconType: "book" | "sparkles" | "scale" | "scroll" | "mic";
   liveClassUrl: string;
@@ -26,6 +28,7 @@ export const DEFAULT_ADAVIYYA_SUBJECTS: AdaviyyaSubject[] = [
     name: "Seerah",
     subtitle: "Prophetic Biography & History",
     instructor: "Usthad Dr. Faisal Al-Hanoon",
+    teacher_id: "tch-01",
     badgeGradient: "bg-gradient-to-tr from-rose-500 to-amber-400 text-white shadow-lg shadow-rose-500/25",
     iconType: "book",
     liveClassUrl: "https://zoom.us/j/hanoon-seerah",
@@ -59,7 +62,8 @@ export const DEFAULT_ADAVIYYA_SUBJECTS: AdaviyyaSubject[] = [
     id: "haddad",
     name: "Haddad",
     subtitle: "Daily Litany, Dhikr & Spiritual Guidance",
-    instructor: "Usthad Anas Nadwi",
+    instructor: "Usthad Abdul Rahman Al-Hafiz",
+    teacher_id: "tch-02",
     badgeGradient: "bg-gradient-to-tr from-emerald-500 to-teal-400 text-white shadow-lg shadow-emerald-500/25",
     iconType: "sparkles",
     liveClassUrl: "https://zoom.us/j/hanoon-haddad",
@@ -93,7 +97,8 @@ export const DEFAULT_ADAVIYYA_SUBJECTS: AdaviyyaSubject[] = [
     id: "fiqh",
     name: "Fiqh",
     subtitle: "Islamic Jurisprudence & Practical Rulings",
-    instructor: "Usthad Bilal Farooqi",
+    instructor: "Usthad Anas Nadwi",
+    teacher_id: "tch-03",
     badgeGradient: "bg-gradient-to-tr from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/25",
     iconType: "scale",
     liveClassUrl: "https://zoom.us/j/hanoon-fiqh",
@@ -127,7 +132,8 @@ export const DEFAULT_ADAVIYYA_SUBJECTS: AdaviyyaSubject[] = [
     id: "hadith",
     name: "Hadith",
     subtitle: "Prophetic Traditions & Teachings",
-    instructor: "Usthad Dr. Faisal Al-Hanoon",
+    instructor: "Usthad Bilal Farooqi",
+    teacher_id: "tch-04",
     badgeGradient: "bg-gradient-to-tr from-violet-500 to-purple-600 text-white shadow-lg shadow-violet-500/25",
     iconType: "scroll",
     liveClassUrl: "https://zoom.us/j/hanoon-hadith",
@@ -191,4 +197,58 @@ export function updateAdaviyyaSubject(id: string, updates: Partial<AdaviyyaSubje
   const current = getAdaviyyaSubjects();
   const updated = current.map((s) => (s.id === id ? { ...s, ...updates } : s));
   saveAdaviyyaSubjects(updated);
+}
+
+const TEACHER_WHATSAPP_STORAGE_KEY = "hanoon_teacher_whatsapp_directory_v1";
+
+/**
+ * Retrieves the custom WhatsApp helpline for a specific instructor.
+ */
+export function getTeacherWhatsApp(instructorName?: string): string | undefined {
+  if (typeof window === "undefined" || !instructorName) return undefined;
+  try {
+    const raw = localStorage.getItem(TEACHER_WHATSAPP_STORAGE_KEY);
+    if (raw) {
+      const directory = JSON.parse(raw);
+      const cleanTarget = instructorName.toLowerCase().trim();
+      for (const [key, val] of Object.entries(directory)) {
+        if (key.toLowerCase().includes(cleanTarget) || cleanTarget.includes(key.toLowerCase())) {
+          return val as string;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Error reading teacher WhatsApp directory:", e);
+  }
+  return undefined;
+}
+
+/**
+ * Saves or updates a faculty member's WhatsApp number and syncs their subjects.
+ */
+export function saveTeacherWhatsApp(instructorName: string, whatsapp: string): void {
+  if (typeof window === "undefined" || !instructorName) return;
+  try {
+    const raw = localStorage.getItem(TEACHER_WHATSAPP_STORAGE_KEY);
+    const directory = raw ? JSON.parse(raw) : {};
+    const formatted = whatsapp.trim();
+    directory[instructorName] = formatted;
+    localStorage.setItem(TEACHER_WHATSAPP_STORAGE_KEY, JSON.stringify(directory));
+
+    // Also update any Adaviyya subjects taught by this instructor
+    const current = getAdaviyyaSubjects();
+    const cleanTarget = instructorName.toLowerCase().trim();
+    const updated = current.map((s) => {
+      if (
+        s.instructor.toLowerCase().includes(cleanTarget) ||
+        cleanTarget.includes(s.instructor.toLowerCase())
+      ) {
+        return { ...s, instructorWhatsApp: formatted };
+      }
+      return s;
+    });
+    saveAdaviyyaSubjects(updated);
+  } catch (e) {
+    console.error("Error saving teacher WhatsApp:", e);
+  }
 }

@@ -6,7 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   Lock,
   Mail,
-  ShieldCheck,
   User,
   ArrowRight,
   Eye,
@@ -16,6 +15,8 @@ import {
   Phone,
   MapPin,
   Sparkles,
+  Calendar,
+  MessageCircle,
 } from "lucide-react";
 import HanoonLogo from "@/components/brand/HanoonLogo";
 import {
@@ -24,6 +25,7 @@ import {
   checkActiveSupabaseSession,
   getCurrentSession,
 } from "@/services/authService";
+import { getAppSettings, formatWhatsAppLink } from "@/services/settingsService";
 
 function LoginFormContent() {
   const router = useRouter();
@@ -34,8 +36,9 @@ function LoginFormContent() {
 
   // Student Input States
   const [studentName, setStudentName] = useState("");
+  const [studentAge, setStudentAge] = useState("");
   const [studentPhone, setStudentPhone] = useState("");
-  const [studentDistrict, setStudentDistrict] = useState("Malappuram");
+  const [studentDistrict, setStudentDistrict] = useState("");
 
   // Staff Input States
   const [staffEmail, setStaffEmail] = useState("");
@@ -52,6 +55,14 @@ function LoginFormContent() {
   useEffect(() => {
     let isMounted = true;
 
+    const errorParam = searchParams.get("error");
+    const reasonParam = searchParams.get("reason");
+    const portalParam = searchParams.get("portal");
+
+    if (portalParam === "staff" || errorParam === "admin_only" || errorParam === "teacher_only") {
+      setPortalCategory("staff");
+    }
+
     const checkSessionAndAutoRoute = async () => {
       const activeSession = await checkActiveSupabaseSession();
       if (!isMounted) return;
@@ -67,7 +78,13 @@ function LoginFormContent() {
         } else if (activeSession.user.role === "teacher") {
           router.replace("/teacher");
           return;
-        } else {
+        } else if (activeSession.user.role === "student") {
+          // If staff portal is explicitly requested, allow staff to login without redirecting to student/verification
+          if (portalParam === "staff") {
+            setPortalCategory("staff");
+            setCheckingAuth(false);
+            return;
+          }
           router.replace("/student");
           return;
         }
@@ -75,14 +92,6 @@ function LoginFormContent() {
 
       setCheckingAuth(false);
     };
-
-    const errorParam = searchParams.get("error");
-    const reasonParam = searchParams.get("reason");
-    const portalParam = searchParams.get("portal");
-
-    if (portalParam === "staff" || errorParam === "admin_only" || errorParam === "teacher_only") {
-      setPortalCategory("staff");
-    }
 
     if (errorParam === "admin_only") {
       setErrorMessage("Access Denied: The /admin portal requires verified Administrator credentials.");
@@ -105,22 +114,40 @@ function LoginFormContent() {
     };
   }, [searchParams, router]);
 
-  // Handle Student Login / Onboarding (Full Name & Phone Number)
+  // Handle Student Login / Onboarding (Full Name, Age, Phone, District)
   const handleStudentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setSuccessMessage(null);
 
     const cleanName = studentName.trim();
+    const cleanAge = studentAge.trim();
     const cleanPhone = studentPhone.replace(/\D/g, "");
+    const cleanPlace = studentDistrict.trim();
 
     if (!cleanName) {
-      setErrorMessage("Please enter your full name.");
+      setErrorMessage("Please enter your Student Full Name.");
+      return;
+    }
+
+    if (!cleanAge) {
+      setErrorMessage("Please enter your Age.");
+      return;
+    }
+
+    const ageNum = parseInt(cleanAge, 10);
+    if (isNaN(ageNum) || ageNum < 3 || ageNum > 100) {
+      setErrorMessage("Please enter a valid age.");
       return;
     }
 
     if (!cleanPhone || cleanPhone.length < 10) {
-      setErrorMessage("Please enter a valid 10-digit mobile or WhatsApp number.");
+      setErrorMessage("Please enter a valid 10-digit WhatsApp or mobile number.");
+      return;
+    }
+
+    if (!cleanPlace) {
+      setErrorMessage("Please enter your Place & District.");
       return;
     }
 
@@ -130,14 +157,30 @@ function LoginFormContent() {
       const result = await loginStudentWithPhone(
         studentPhone,
         cleanName,
-        studentDistrict.trim() || "Malappuram"
+        cleanPlace
       );
 
-      if (result.success && result.user) {
-        setSuccessMessage(`Welcome, ${result.user.full_name}! Redirecting to your dashboard...`);
+      // Save student profile locally including age
+      if (typeof window !== "undefined") {
+        try {
+          const profileData = {
+            name: cleanName,
+            phone: studentPhone,
+            place: cleanPlace,
+            age: cleanAge,
+          };
+          localStorage.setItem("hanoon_student_profile", JSON.stringify(profileData));
+        } catch (e) {
+          console.warn("Could not cache student profile:", e);
+        }
+      }
 
+      if (result.success && result.user) {
+        setSuccessMessage(`Welcome, ${result.user.full_name}! Redirecting to enrollment...`);
+
+        const redirectParam = searchParams.get("redirect");
         setTimeout(() => {
-          router.push("/student");
+          router.push(redirectParam || "/student");
         }, 350);
       } else {
         setErrorMessage(result.error || "Please enter a valid 10-digit mobile number.");
@@ -204,25 +247,28 @@ function LoginFormContent() {
   return (
     <div className="w-full max-w-md mx-auto space-y-5">
       {/* Brand Header */}
-      <div className="text-center space-y-2">
-        <div className="flex justify-center mb-1">
-          <HanoonLogo size="lg" />
+      {portalCategory === "staff" ? (
+        <div className="text-center space-y-2">
+          <div className="flex justify-center mb-1">
+            <HanoonLogo size="lg" />
+          </div>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">
+            Staff Login
+          </h1>
         </div>
-        <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-          {portalCategory === "staff" ? "Faculty & Administration Gateway" : "Student Portal Sign In"}
-        </h1>
-        <p className="text-xs text-slate-500 font-medium">
-          {portalCategory === "staff"
-            ? "Secure credential access for verified Teachers and Academy Administrators."
-            : "Enter your Name & Mobile Number to access your courses, live classes & student dashboard."}
-        </p>
-      </div>
+      ) : (
+        <div className="text-center pb-1">
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">
+            Student Details
+          </h1>
+        </div>
+      )}
 
       {/* Main Authentication Card */}
-      <div className="bg-white p-6 rounded-3xl border border-purple-100 shadow-md space-y-5">
+      <div className="bg-white p-5 sm:p-6 rounded-3xl border border-purple-100 shadow-md space-y-4">
         {/* Error Alert */}
         {errorMessage && (
-          <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700 flex items-start gap-2">
+          <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700 flex items-start gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <span>{errorMessage}</span>
           </div>
@@ -230,19 +276,19 @@ function LoginFormContent() {
 
         {/* Success Alert */}
         {successMessage && (
-          <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800 flex items-center gap-2">
+          <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800 flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>{successMessage}</span>
           </div>
         )}
 
         {/* ========================================================
-            1. STUDENT ONBOARDING / LOGIN FORM (Name & Phone Number)
+            1. STUDENT DETAILS / REGISTRATION FORM
             ======================================================== */}
         {portalCategory === "student" ? (
-          <form onSubmit={handleStudentSubmit} className="space-y-4">
-            {/* Student Full Name Field */}
-            <div className="space-y-1.5">
+          <form onSubmit={handleStudentSubmit} className="space-y-3.5">
+            {/* Field 1: Student Full Name * */}
+            <div className="space-y-1">
               <label className="text-xs font-bold text-slate-700 block">
                 Student Full Name <span className="text-rose-500">*</span>
               </label>
@@ -254,13 +300,33 @@ function LoginFormContent() {
                   placeholder="e.g. Fathima Zahra"
                   value={studentName}
                   onChange={(e) => setStudentName(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-semibold"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-semibold"
                 />
               </div>
             </div>
 
-            {/* Phone Number Field */}
-            <div className="space-y-1.5">
+            {/* Field 2: Age * (Short number input) */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700 block">
+                Age <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative w-32 sm:w-36">
+                <Calendar className="w-4 h-4 text-purple-600 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="number"
+                  required
+                  min="4"
+                  max="100"
+                  placeholder="e.g. 14"
+                  value={studentAge}
+                  onChange={(e) => setStudentAge(e.target.value)}
+                  className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-semibold"
+                />
+              </div>
+            </div>
+
+            {/* Field 3: WhatsApp / Mobile Number * */}
+            <div className="space-y-1">
               <label className="text-xs font-bold text-slate-700 block">
                 WhatsApp / Mobile Number <span className="text-rose-500">*</span>
               </label>
@@ -269,30 +335,28 @@ function LoginFormContent() {
                 <input
                   type="tel"
                   required
-                  placeholder="e.g. 98460 12345"
+                  placeholder="e.g. 9846012345"
                   value={studentPhone}
                   onChange={(e) => setStudentPhone(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-semibold"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-semibold"
                 />
               </div>
-              <p className="text-[10.5px] text-slate-400 font-medium">
-                No passwords required. Your session stays permanently saved on this device.
-              </p>
             </div>
 
-            {/* District Selector */}
-            <div className="space-y-1.5">
+            {/* Field 4: Place & District * */}
+            <div className="space-y-1">
               <label className="text-xs font-bold text-slate-700 block">
-                District / Region
+                Place & District <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
-                <MapPin className="w-4 h-4 text-purple-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <MapPin className="w-4 h-4 text-purple-600 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Malappuram"
+                  required
+                  placeholder="e.g. Manjeri, Malappuram"
                   value={studentDistrict}
                   onChange={(e) => setStudentDistrict(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-medium"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-semibold"
                 />
               </div>
             </div>
@@ -301,15 +365,12 @@ function LoginFormContent() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-4 px-6 rounded-2xl font-bold text-sm text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-md shadow-purple-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
+              className="w-full py-3.5 px-6 rounded-2xl font-bold text-sm text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-md shadow-purple-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-1"
             >
               {isLoading ? (
                 <span>Accessing Student Account...</span>
               ) : (
-                <>
-                  <span>Continue to Student Portal</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
+                <span>Proceed to Enrollment →</span>
               )}
             </button>
           </form>
@@ -318,52 +379,6 @@ function LoginFormContent() {
              2. STAFF AUTH FORM (Email & Password)
              ======================================================== */
           <form onSubmit={handleStaffSubmit} className="space-y-4">
-            <div className="p-3 rounded-xl bg-purple-50/70 border border-purple-100 flex items-center justify-between gap-2 text-xs font-semibold text-purple-900">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-purple-600 shrink-0" />
-                <span>Restricted entrance for Faculty & Administrators</span>
-              </div>
-            </div>
-
-            {/* Quick Demo Staff Credentials Selector */}
-            <div className="space-y-1.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70">
-              <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider block">
-                Quick Demo Accounts (Evaluation):
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStaffEmail("admin@hanoon.academy");
-                    setStaffPassword("HANOON-ADMIN-2026!");
-                  }}
-                  className="px-2 py-1 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-800 text-[11px] font-bold transition-all cursor-pointer"
-                >
-                  Super Admin
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStaffEmail("verify@hanoon.academy");
-                    setStaffPassword("HANOON-VERIFY-2026!");
-                  }}
-                  className="px-2 py-1 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-[11px] font-bold transition-all cursor-pointer"
-                >
-                  Verification Staff
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStaffEmail("teacher@hanoon.academy");
-                    setStaffPassword("HANOON-TEACHER-2026!");
-                  }}
-                  className="px-2 py-1 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-[11px] font-bold transition-all cursor-pointer"
-                >
-                  Faculty Member
-                </button>
-              </div>
-            </div>
-
             {/* Staff Email Field */}
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-700 block">
@@ -414,10 +429,10 @@ function LoginFormContent() {
               className="w-full py-4 px-6 rounded-2xl font-bold text-sm text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-md shadow-purple-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
             >
               {isLoading ? (
-                <span>Authenticating Staff Credentials...</span>
+                <span>Logging in...</span>
               ) : (
                 <>
-                  <span>Authenticate Staff & Faculty</span>
+                  <span>Login</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
@@ -457,14 +472,30 @@ function LoginFormContent() {
         </div>
       </div>
 
-      {/* Return to Home / Catalog */}
-      <div className="text-center">
-        <Link
-          href="/"
-          className="text-xs font-bold text-purple-600 hover:text-purple-700 transition-colors inline-flex items-center gap-1"
-        >
-          <span>← Return to Home / Course Catalog</span>
-        </Link>
+      {/* Return to Home / Catalog & Admin WhatsApp Help */}
+      <div className="text-center space-y-2">
+        <div>
+          <Link
+            href="/"
+            className="text-xs font-bold text-purple-600 hover:text-purple-700 transition-colors inline-flex items-center gap-1"
+          >
+            <span>← Return to Home / Course Catalog</span>
+          </Link>
+        </div>
+        <div>
+          <a
+            href={formatWhatsAppLink(
+              getAppSettings().contactWhatsApp,
+              "Assalamu Alaikum Admin, I need assistance with registration/login at Hanoon Academy."
+            )}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11.5px] font-semibold text-slate-500 hover:text-emerald-700 transition-colors inline-flex items-center gap-1.5"
+          >
+            <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Need Help? Chat with Admin on WhatsApp</span>
+          </a>
+        </div>
       </div>
     </div>
   );

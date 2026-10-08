@@ -19,6 +19,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { SpecialClass } from "@/services/specialClassService";
+import { getAppSettings, formatWhatsAppLink } from "@/services/settingsService";
 
 interface SpecialClassModalProps {
   isOpen: boolean;
@@ -316,7 +317,10 @@ export default function SpecialClassModal({
 
           {/* Mentor Support CTA */}
           <a
-            href={`https://wa.me/919846012345?text=Assalamu%20Alaikum%20Usthad,%20I%20am%20${encodeURIComponent(userName)},%20inquiring%20about%20${encodeURIComponent(specialClass.title)}.`}
+            href={formatWhatsAppLink(
+              getAppSettings().contactWhatsApp,
+              `Assalamu Alaikum Usthad, I am ${userName}, inquiring about ${specialClass.title}.`
+            )}
             target="_blank"
             rel="noopener noreferrer"
             className="w-full py-3 px-4 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-800 text-xs font-bold flex items-center justify-center gap-2 border border-purple-100 transition-all cursor-pointer"

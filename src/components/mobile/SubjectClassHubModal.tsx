@@ -20,7 +20,8 @@ import {
   Lock,
   ArrowRight,
 } from "lucide-react";
-import { AdaviyyaSubject } from "@/services/subjectService";
+import { AdaviyyaSubject, getTeacherWhatsApp } from "@/services/subjectService";
+import { getAppSettings, formatWhatsAppLink } from "@/services/settingsService";
 
 interface SubjectClassHubModalProps {
   isOpen: boolean;
@@ -373,7 +374,12 @@ export default function SubjectClassHubModal({
 
         {/* WhatsApp Doubt clearance */}
         <a
-          href={`https://wa.me/919846012345?text=Assalamu%20Alaikum%20Usthad,%20I%20am%20${encodeURIComponent(studentName)},%20studying%20Adaviyya%20${encodeURIComponent(subject.name)}.%20I%20have%20a%20doubt.`}
+          href={formatWhatsAppLink(
+            subject.instructorWhatsApp ||
+              getTeacherWhatsApp(subject.instructor) ||
+              getAppSettings().contactWhatsApp,
+            `Assalamu Alaikum ${subject.instructor}, I am ${studentName}, studying Adaviyya ${subject.name}. I have a doubt regarding today's lesson.`
+          )}
           target="_blank"
           rel="noopener noreferrer"
           className="w-full py-2.5 px-3 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-800 font-bold text-xs flex items-center justify-center gap-2 border border-purple-100 transition-all cursor-pointer shrink-0"

@@ -377,6 +377,19 @@ export default function ScreenCourseDetails({
             {selectedCourse.title}
           </h1>
         </div>
+      ) : isHomeTuition ? (
+        /* HOME TUITION: Minimal title & badge only, no secondary description */
+        <div className="neumorphic-card p-5 rounded-3xl space-y-2">
+          <div>
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-700 bg-purple-100 px-2.5 py-0.5 rounded-full border border-purple-200 inline-block">
+              1-on-1 Personalized Mentorship
+            </span>
+          </div>
+
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight leading-tight">
+            {selectedCourse.title}
+          </h1>
+        </div>
       ) : (
         /* Other Courses: Standard Header */
         <div className="neumorphic-card p-5 rounded-3xl space-y-3">
@@ -388,7 +401,7 @@ export default function ScreenCourseDetails({
             {selectedCourse.tagline || selectedCourse.subtitle}
           </p>
 
-          {!isHomeTuition && selectedCourse.highlights && selectedCourse.highlights.length > 0 && (
+          {selectedCourse.highlights && selectedCourse.highlights.length > 0 && (
             <div className="pt-2 border-t border-purple-50 flex flex-wrap gap-1.5">
               {selectedCourse.highlights.map((item, idx) => (
                 <span
@@ -443,8 +456,41 @@ export default function ScreenCourseDetails({
             </button>
           ))}
         </div>
+      ) : isHomeTuition ? (
+        /* HOME TUITION: Clean module overview cards without bullet points or secondary fluff */
+        <div className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-2">
+              <Layers className="w-4 h-4 text-purple-600" />
+              <h2 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
+                Curriculum Modules
+              </h2>
+            </div>
+            <span className="text-[10px] font-bold text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full">
+              Full Term
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            {syllabusModules.map((mod) => (
+              <div
+                key={mod.number}
+                className="neumorphic-card p-3.5 rounded-2xl flex items-center justify-between"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-black text-purple-600 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-100">
+                    Module {mod.number}
+                  </span>
+                  <h3 className="text-xs font-extrabold text-slate-900">
+                    {mod.title}
+                  </h3>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       ) : (
-        /* Non-Adaviyya: Structured Syllabus Modules */
+        /* Non-Adaviyya / Non-HomeTuition: Structured Syllabus Modules */
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-2">
@@ -533,24 +579,15 @@ export default function ScreenCourseDetails({
 
       {/* 4. Compact Pricing & Enrollment Card */}
       {isAthaviy ? (
-        /* ADAVIYYA: Single compact card with essential fees & primary action */
+        /* ADAVIYYA: Single clean card with immediate payable amount */
         <div className="neumorphic-card p-5 rounded-3xl space-y-4 mb-6">
-          <div className="flex items-center justify-between pb-3 border-b border-purple-50">
-            <span className="text-xs font-bold text-slate-500">
-              Total Course Fee
-            </span>
-            <span className="text-sm font-black text-slate-800">
-              ₹3,000
-            </span>
-          </div>
-
           <div className="flex items-baseline justify-between">
             <div>
               <span className="text-xs font-bold text-purple-700 block">
-                Amount Payable Now
+                Admission Fee (Immediate Payable)
               </span>
               <span className="text-[10px] text-slate-400">
-                Admission Fee to Unlock Course
+                Unlock instant access to materials & live hubs (Total ₹3,000)
               </span>
             </div>
             <span className="text-2xl font-black text-purple-700">
@@ -574,19 +611,24 @@ export default function ScreenCourseDetails({
                 onClick={onProceedToRegister}
                 className="w-full py-3.5 px-5 rounded-2xl font-extrabold text-xs text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-md shadow-purple-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <span>Pay ₹500 & Enroll</span>
+                <span>Pay ₹500 Admission Fee & Enroll</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             )}
           </div>
         </div>
       ) : isHomeTuition ? (
-        /* HOME TUITION: Clean minimal pricing tag & primary enrollment action button */
+        /* HOME TUITION: Single clean card with immediate payable amount */
         <div className="neumorphic-card p-5 rounded-3xl space-y-4 mb-6">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-600">
-              Total Course Fee
-            </span>
+          <div className="flex items-baseline justify-between">
+            <div>
+              <span className="text-xs font-bold text-purple-700 block">
+                Tuition Fee (Immediate Payable)
+              </span>
+              <span className="text-[10px] text-slate-400">
+                1-on-1 personalized academic coaching
+              </span>
+            </div>
             <span className="text-2xl font-black text-purple-700">
               {selectedCourse.fee || "₹2,000"}
             </span>
@@ -608,7 +650,7 @@ export default function ScreenCourseDetails({
                 onClick={onProceedToRegister}
                 className="w-full py-3.5 px-5 rounded-2xl font-extrabold text-xs text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-md shadow-purple-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <span>Enroll in this Course</span>
+                <span>Pay ₹2,000 & Enroll Now</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             )}

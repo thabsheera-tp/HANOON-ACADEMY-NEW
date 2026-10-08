@@ -2,6 +2,7 @@ export interface UserProfile {
   name: string;
   phone: string;
   place: string;
+  age?: string | number;
 }
 
 export interface SelectedCourse {

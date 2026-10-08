@@ -26,9 +26,10 @@ import {
   Download,
   CreditCard,
   Users,
+  MessageCircle,
 } from "lucide-react";
 import { DbPayment, PaymentStatus, DbCertificate, DbPayroll } from "@/types/supabase";
-import { fetchPayments, updatePaymentStatus } from "@/services/paymentService";
+import { fetchPayments, updatePaymentStatus, getWhatsAppWelcomeUrl } from "@/services/paymentService";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import {
   AdaviyyaSubject,
@@ -117,6 +118,12 @@ export default function AdminManagementPanel({
 
   const [searchFilter, setSearchFilter] = useState("");
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const [approvedWhatsAppNotice, setApprovedWhatsAppNotice] = useState<{
+    studentName: string;
+    courseName: string;
+    phone: string;
+    whatsappUrl: string;
+  } | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -155,8 +162,21 @@ export default function AdminManagementPanel({
       if (onPaymentApproved) {
         onPaymentApproved(payment.student?.full_name, payment.course_id);
       }
-      setSaveSuccessMsg(`Payment Approved! Course unlocked for ${payment.student?.full_name || "student"}.`);
-      setTimeout(() => setSaveSuccessMsg(null), 3000);
+
+      const sName = payment.student?.full_name || "Student";
+      const cName = payment.course?.title_en || (payment.course_id === "adaviyya" ? "Adaviyya" : payment.course_id) || "Adaviyya";
+      const phone = payment.student?.whatsapp_num || "";
+      const waUrl = getWhatsAppWelcomeUrl(sName, cName, phone);
+
+      setApprovedWhatsAppNotice({
+        studentName: sName,
+        courseName: cName,
+        phone,
+        whatsappUrl: waUrl,
+      });
+
+      setSaveSuccessMsg(`Payment Approved! Course unlocked for ${sName}.`);
+      setTimeout(() => setSaveSuccessMsg(null), 4000);
     } catch (e) {
       console.error("Error approving payment:", e);
     } finally {
@@ -386,6 +406,44 @@ export default function AdminManagementPanel({
               </span>
             </div>
 
+            {/* Post-Approval WhatsApp Notification Prompt */}
+            {approvedWhatsAppNotice && (
+              <div className="p-3.5 rounded-2xl bg-emerald-50 border-2 border-emerald-300 text-emerald-950 flex flex-col gap-2.5 animate-fade-in shadow-xs">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                      <MessageCircle className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h5 className="text-xs font-black text-emerald-950">
+                        {approvedWhatsAppNotice.studentName} Approved!
+                      </h5>
+                      <span className="text-[10px] text-emerald-700 font-semibold block">
+                        Enrollment unlocked. Send welcome message via WhatsApp:
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setApprovedWhatsAppNotice(null)}
+                    className="p-1 text-emerald-700 hover:text-emerald-950 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <a
+                  href={approvedWhatsAppNotice.whatsappUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>💬 Send Welcome Message on WhatsApp</span>
+                </a>
+              </div>
+            )}
+
             {pendingPayments.length === 0 ? (
               <div className="p-6 text-center rounded-2xl bg-purple-50/50 border border-purple-100 space-y-2">
                 <CheckCircle className="w-8 h-8 text-emerald-500 mx-auto" />
@@ -554,13 +612,28 @@ export default function AdminManagementPanel({
                       </p>
                     </div>
 
-                    <div className="text-right">
-                      <span className="text-xs font-bold text-purple-700">
-                        ₹{pay.amount}
-                      </span>
-                      <span className="text-[10px] text-slate-400 block font-mono">
-                        {pay.upi_txid.slice(0, 8)}...
-                      </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="text-right">
+                        <span className="text-xs font-bold text-purple-700">
+                          ₹{pay.amount}
+                        </span>
+                        <span className="text-[10px] text-slate-400 block font-mono">
+                          {pay.upi_txid.slice(0, 8)}...
+                        </span>
+                      </div>
+                      <a
+                        href={getWhatsAppWelcomeUrl(
+                          pay.student?.full_name || "Student",
+                          pay.course?.title_en || (pay.course_id === "adaviyya" ? "Adaviyya" : pay.course_id) || "Adaviyya",
+                          pay.student?.whatsapp_num || ""
+                        )}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors shadow-2xs cursor-pointer"
+                        title="Send Welcome Message on WhatsApp"
+                      >
+                        <MessageCircle className="w-4 h-4 text-emerald-600" />
+                      </a>
                     </div>
                   </div>
                 ))}

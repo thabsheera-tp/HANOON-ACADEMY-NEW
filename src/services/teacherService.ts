@@ -10,6 +10,8 @@ export interface LiveClassSession {
   platform: "Zoom" | "Google Meet";
   status: "SCHEDULED" | "LIVE_NOW" | "COMPLETED";
   attendeesCount: number;
+  teacher_id?: string;
+  teacherName?: string;
 }
 
 export interface CourseMaterial {
@@ -22,6 +24,8 @@ export interface CourseMaterial {
   sizeOrDuration: string;
   uploadedAt: string;
   downloadCount: number;
+  teacher_id?: string;
+  teacherName?: string;
 }
 
 export interface TeacherStudentItem {
@@ -53,6 +57,8 @@ export const DEFAULT_CLASSES: LiveClassSession[] = [
     platform: "Zoom",
     status: "SCHEDULED",
     attendeesCount: 142,
+    teacher_id: "tch-01",
+    teacherName: "Usthad Dr. Faisal Al-Hanoon",
   },
   {
     id: "cls-02",
@@ -66,6 +72,8 @@ export const DEFAULT_CLASSES: LiveClassSession[] = [
     platform: "Google Meet",
     status: "SCHEDULED",
     attendeesCount: 96,
+    teacher_id: "tch-04",
+    teacherName: "Usthad Bilal Farooqi",
   },
   {
     id: "cls-03",
@@ -79,6 +87,8 @@ export const DEFAULT_CLASSES: LiveClassSession[] = [
     platform: "Zoom",
     status: "COMPLETED",
     attendeesCount: 156,
+    teacher_id: "tch-02",
+    teacherName: "Usthad Abdul Rahman Al-Hafiz",
   },
 ];
 
@@ -93,6 +103,8 @@ export const DEFAULT_MATERIALS: CourseMaterial[] = [
     sizeOrDuration: "4.8 MB",
     uploadedAt: "Oct 2, 2026",
     downloadCount: 128,
+    teacher_id: "tch-01",
+    teacherName: "Usthad Dr. Faisal Al-Hanoon",
   },
   {
     id: "mat-02",
@@ -104,6 +116,8 @@ export const DEFAULT_MATERIALS: CourseMaterial[] = [
     sizeOrDuration: "52 mins",
     uploadedAt: "Oct 1, 2026",
     downloadCount: 194,
+    teacher_id: "tch-03",
+    teacherName: "Usthad Anas Nadwi",
   },
   {
     id: "mat-03",
@@ -115,6 +129,8 @@ export const DEFAULT_MATERIALS: CourseMaterial[] = [
     sizeOrDuration: "6.2 MB",
     uploadedAt: "Sep 28, 2026",
     downloadCount: 84,
+    teacher_id: "tch-04",
+    teacherName: "Usthad Bilal Farooqi",
   },
   {
     id: "mat-04",
@@ -126,6 +142,8 @@ export const DEFAULT_MATERIALS: CourseMaterial[] = [
     sizeOrDuration: "48 mins",
     uploadedAt: "Sep 25, 2026",
     downloadCount: 72,
+    teacher_id: "tch-04",
+    teacherName: "Usthad Bilal Farooqi",
   },
 ];
 

@@ -34,7 +34,7 @@ import SubjectClassHubModal from "@/components/mobile/SubjectClassHubModal";
 import { getAdaviyyaSubjects, AdaviyyaSubject } from "@/services/subjectService";
 import AttendanceDonutChart from "@/components/charts/AttendanceDonutChart";
 import ProgressScoreBarChart from "@/components/charts/ProgressScoreBarChart";
-import { getAppSettings } from "@/services/settingsService";
+import { getAppSettings, formatWhatsAppLink } from "@/services/settingsService";
 
 interface ScreenDashboardProps {
   userProfile: UserProfile;
@@ -593,7 +593,10 @@ export default function ScreenDashboard({
       {/* 6. COMPACT ACTION UTILITIES: MENTOR WHATSAPP & FEE RECEIPT */}
       <div className="grid grid-cols-2 gap-2.5 pt-0.5">
         <a
-          href={`https://wa.me/${getAppSettings().contactWhatsApp || "919846012345"}?text=Assalamu%20Alaikum%20Usthad,%20I%20am%20${encodeURIComponent(studentName)},%20enrolled%20in%20${encodeURIComponent(selectedCourse.title)}.%20I%20need%20academic%20assistance.`}
+          href={formatWhatsAppLink(
+            getAppSettings().contactWhatsApp,
+            `Assalamu Alaikum Usthad, I am ${studentName}, enrolled in ${selectedCourse.title}. I need academic assistance.`
+          )}
           target="_blank"
           rel="noopener noreferrer"
           className="p-2.5 rounded-2xl bg-white border border-purple-100 hover:border-purple-300 shadow-xs flex items-center gap-2 transition-all cursor-pointer group active:scale-[0.98]"

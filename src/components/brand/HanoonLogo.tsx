@@ -7,6 +7,7 @@ interface HanoonLogoProps {
   showText?: boolean;
   showSubtitle?: boolean;
   textColor?: string;
+  compactMobile?: boolean;
 }
 
 export default function HanoonLogo({
@@ -15,6 +16,7 @@ export default function HanoonLogo({
   showText = true,
   showSubtitle = false,
   textColor = "text-slate-900",
+  compactMobile = false,
 }: HanoonLogoProps) {
   const sizeClasses = {
     sm: { iconBox: "w-8 h-8 rounded-xl", icon: "w-4 h-4", title: "text-sm", sub: "text-[9px]" },
@@ -24,7 +26,7 @@ export default function HanoonLogo({
   }[size];
 
   return (
-    <div className={`flex items-center gap-3 ${className}`}>
+    <div className={`flex items-center ${compactMobile ? "gap-2 sm:gap-3" : "gap-3"} min-w-0 ${className}`}>
       {/* Icon Emblem */}
       <div
         className={`${sizeClasses.iconBox} bg-purple-600 text-white flex items-center justify-center shadow-md shadow-purple-600/20 shrink-0 relative overflow-hidden`}
@@ -35,20 +37,24 @@ export default function HanoonLogo({
 
       {/* Brand Title */}
       {showText && (
-        <div className="flex flex-col select-none leading-none">
-          <div className="flex items-center gap-1.5">
+        <div className="flex flex-col select-none leading-none min-w-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
             <span
-              className={`${sizeClasses.title} font-extrabold tracking-tight ${textColor} font-['Plus_Jakarta_Sans']`}
+              className={`${sizeClasses.title} font-extrabold tracking-tight ${textColor} font-['Plus_Jakarta_Sans'] shrink-0`}
             >
               Hanoon
             </span>
-            <span className={`${sizeClasses.title} font-extrabold tracking-tight text-purple-600 font-['Plus_Jakarta_Sans']`}>
+            <span
+              className={`${sizeClasses.title} font-extrabold tracking-tight text-purple-600 font-['Plus_Jakarta_Sans'] ${
+                compactMobile ? "hidden sm:inline" : ""
+              }`}
+            >
               Academy
             </span>
           </div>
           {showSubtitle && (
             <span
-              className={`${sizeClasses.sub} font-semibold uppercase tracking-wider text-slate-500 mt-1 font-['Plus_Jakarta_Sans']`}
+              className={`${sizeClasses.sub} font-semibold uppercase tracking-wider text-slate-500 mt-1 font-['Plus_Jakarta_Sans'] truncate`}
             >
               Empowering Minds & Ethics
             </span>

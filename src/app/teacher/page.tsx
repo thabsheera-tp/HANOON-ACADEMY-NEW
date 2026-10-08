@@ -23,8 +23,11 @@ import {
   X,
   MessageCircle,
   BarChart3,
+  Phone,
+  Check,
+  ShieldCheck,
 } from "lucide-react";
-import { getCurrentSession, logoutUser, UserProfileRecord } from "@/services/authService";
+import { getCurrentSession, logoutUser, setAuthSession, UserProfileRecord } from "@/services/authService";
 import HanoonLogo from "@/components/brand/HanoonLogo";
 import TeacherEngagementDonut from "@/components/charts/TeacherEngagementDonut";
 import {
@@ -41,13 +44,28 @@ import {
   DEFAULT_STUDENTS,
 } from "@/services/teacherService";
 import { fetchStudents } from "@/services/studentService";
+import { getTeacherWhatsApp, saveTeacherWhatsApp } from "@/services/subjectService";
+import { formatWhatsAppLink } from "@/services/settingsService";
+import {
+  resolveTeacherId,
+  getAssignmentForUser,
+  canTeacherAccessCourse,
+  filterClassesByTeacher,
+  filterMaterialsByTeacher,
+  filterStudentsByTeacher,
+} from "@/services/teacherAssignmentService";
 
 export default function TeacherDashboardPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<UserProfileRecord | null>(null);
 
   // Tab navigation for mobile & desktop agility
-  const [activeTab, setActiveTab] = useState<"overview" | "schedule" | "materials" | "students">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "schedule" | "materials" | "students" | "profile">("overview");
+
+  // State for Teacher WhatsApp Hotline
+  const [teacherWhatsApp, setTeacherWhatsApp] = useState("");
+  const [whatsappSavedNotice, setWhatsappSavedNotice] = useState<string | null>(null);
+  const [isSavingWhatsApp, setIsSavingWhatsApp] = useState(false);
 
   // State for Live Classes & Broadcast
   const [classes, setClasses] = useState<LiveClassSession[]>([]);
@@ -87,6 +105,41 @@ export default function TeacherDashboardPage() {
   const [studentSearch, setStudentSearch] = useState("");
   const [selectedCourseFilter, setSelectedCourseFilter] = useState("ALL");
 
+  // RBAC Assignment & Role Derivations
+  const isSuperAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
+  const userAssignment = useMemo(() => getAssignmentForUser(currentUser), [currentUser]);
+
+  // Available academic tracks strictly assigned to this teacher (or all for Super Admin)
+  const availableTracks = useMemo(() => {
+    const allTracks = [
+      { id: "adaviyya", name: "Adaviyya" },
+      { id: "shamail", name: "الشمائل المحمدية" },
+      { id: "hometuition", name: "Home Tuition" },
+      { id: "fashion", name: "Fashion Designing" },
+      { id: "tajweed", name: "Tajweed Special Class" },
+      { id: "burdah", name: "Burdah Live Gathering" },
+    ];
+    if (isSuperAdmin) return allTracks;
+    return allTracks.filter(
+      (t) => canTeacherAccessCourse(t.id, currentUser) || canTeacherAccessCourse(t.name, currentUser)
+    );
+  }, [isSuperAdmin, currentUser]);
+
+  // RBAC Filtered Classes: Only classes assigned specifically to this teacher
+  const accessibleClasses = useMemo(() => {
+    return filterClassesByTeacher(classes, currentUser);
+  }, [classes, currentUser]);
+
+  // RBAC Filtered Materials: Only materials belonging to this teacher's assigned tracks
+  const accessibleMaterials = useMemo(() => {
+    return filterMaterialsByTeacher(materials, currentUser);
+  }, [materials, currentUser]);
+
+  // RBAC Filtered Students: Only students in courses assigned to this teacher
+  const accessibleStudents = useMemo(() => {
+    return filterStudentsByTeacher(students, currentUser);
+  }, [students, currentUser]);
+
   useEffect(() => {
     const session = getCurrentSession();
     if (!session || !session.user || (session.user.role !== "teacher" && session.user.role !== "admin")) {
@@ -94,6 +147,8 @@ export default function TeacherDashboardPage() {
       return;
     }
     setCurrentUser(session.user);
+    const initialPhone = getTeacherWhatsApp(session.user.full_name) || session.user.whatsapp_num || "";
+    setTeacherWhatsApp(initialPhone);
 
     // Load initial data
     const loadedClasses = getTeacherClasses();
@@ -168,10 +223,16 @@ export default function TeacherDashboardPage() {
     setTimeout(() => setBroadcastAlertToast(null), 4000);
   };
 
-  // Schedule New Class
+  // Schedule New Class (RBAC Enforced: Teacher can only schedule into assigned courses)
   const handleScheduleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newScheduleForm.title.trim()) return;
+
+    if (!canTeacherAccessCourse(newScheduleForm.courseId, currentUser)) {
+      setScheduleSuccessMsg("Access Denied: You can only schedule classes for your assigned tracks.");
+      setTimeout(() => setScheduleSuccessMsg(null), 4000);
+      return;
+    }
 
     const courseMap: Record<string, string> = {
       adaviyya: "Adaviyya",
@@ -182,6 +243,7 @@ export default function TeacherDashboardPage() {
       burdah: "Burdah Live Gathering",
     };
 
+    const teacherId = resolveTeacherId(currentUser);
     const created = scheduleNewClass({
       title: newScheduleForm.title.trim(),
       courseId: newScheduleForm.courseId,
@@ -191,6 +253,8 @@ export default function TeacherDashboardPage() {
       duration: newScheduleForm.duration,
       meetingLink: newScheduleForm.meetingLink.trim() || "https://zoom.us/j/hanoon-faculty-live",
       platform: newScheduleForm.platform,
+      teacher_id: teacherId,
+      teacherName: currentUser?.full_name || "Faculty",
     });
 
     setClasses(getTeacherClasses());
@@ -198,8 +262,8 @@ export default function TeacherDashboardPage() {
     setScheduleSuccessMsg(`"${created.title}" scheduled for ${created.date} at ${created.time} IST!`);
     setNewScheduleForm({
       title: "",
-      courseId: "adaviyya",
-      courseName: "Adaviyya",
+      courseId: availableTracks[0]?.id || "adaviyya",
+      courseName: availableTracks[0]?.name || "Adaviyya",
       date: new Date().toISOString().split("T")[0],
       time: "19:30",
       duration: "60 mins",
@@ -209,10 +273,16 @@ export default function TeacherDashboardPage() {
     setTimeout(() => setScheduleSuccessMsg(null), 4000);
   };
 
-  // Upload Course Materials
+  // Upload Course Materials (RBAC Enforced: Teacher can only publish to assigned courses)
   const handleUploadSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUploadForm.title.trim()) return;
+
+    if (!canTeacherAccessCourse(newUploadForm.courseId, currentUser)) {
+      setUploadSuccessMsg("Access Denied: You can only publish notes for your assigned tracks.");
+      setTimeout(() => setUploadSuccessMsg(null), 4000);
+      return;
+    }
 
     const courseMap: Record<string, string> = {
       adaviyya: "Adaviyya",
@@ -221,6 +291,7 @@ export default function TeacherDashboardPage() {
       fashion: "Fashion Designing",
     };
 
+    const teacherId = resolveTeacherId(currentUser);
     const uploaded = uploadCourseMaterial({
       title: newUploadForm.title.trim(),
       courseId: newUploadForm.courseId,
@@ -233,6 +304,8 @@ export default function TeacherDashboardPage() {
           : "https://youtube.com/watch?v=hanoon-rec"),
       sizeOrDuration:
         uploadContentType === "PDF" ? newUploadForm.pdfSize : newUploadForm.videoDuration,
+      teacher_id: teacherId,
+      teacherName: currentUser?.full_name || "Faculty",
     });
 
     setMaterials(getCourseMaterials());
@@ -241,8 +314,8 @@ export default function TeacherDashboardPage() {
     );
     setNewUploadForm({
       title: "",
-      courseId: "adaviyya",
-      courseName: "Adaviyya",
+      courseId: availableTracks[0]?.id || "adaviyya",
+      courseName: availableTracks[0]?.name || "Adaviyya",
       fileOrUrl: "",
       pdfSize: "5.4 MB",
       videoDuration: "45 mins",
@@ -250,14 +323,25 @@ export default function TeacherDashboardPage() {
     setTimeout(() => setUploadSuccessMsg(null), 4000);
   };
 
+  // RBAC Protected Deletion
   const handleDeleteMaterial = (id: string) => {
+    const target = materials.find((m) => m.id === id);
+    if (target && !isSuperAdmin) {
+      const teacherId = resolveTeacherId(currentUser);
+      const isOwner = target.teacher_id === teacherId;
+      const isAssigned = canTeacherAccessCourse(target.courseId, currentUser);
+      if (!isOwner && !isAssigned) {
+        alert("Access Denied: You cannot delete study materials created by other teachers.");
+        return;
+      }
+    }
     deleteCourseMaterial(id);
     setMaterials(getCourseMaterials());
   };
 
-  // Filtered Students List
+  // Filtered Students List: Derived strictly from accessibleStudents for RBAC integrity
   const filteredStudents = useMemo(() => {
-    return students.filter((s) => {
+    return accessibleStudents.filter((s) => {
       const matchesSearch =
         s.fullName.toLowerCase().includes(studentSearch.toLowerCase()) ||
         s.whatsappNum.includes(studentSearch) ||
@@ -266,7 +350,33 @@ export default function TeacherDashboardPage() {
         selectedCourseFilter === "ALL" || s.courseName === selectedCourseFilter;
       return matchesSearch && matchesCourse;
     });
-  }, [students, studentSearch, selectedCourseFilter]);
+  }, [accessibleStudents, studentSearch, selectedCourseFilter]);
+
+  // Handle Save Teacher WhatsApp Hotline
+  const handleSaveTeacherWhatsApp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingWhatsApp(true);
+    const cleanPhone = teacherWhatsApp.replace(/\D/g, "");
+    const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+
+    if (!formattedPhone || formattedPhone.length < 10) {
+      setWhatsappSavedNotice("Please enter a valid 10-digit WhatsApp number.");
+      setIsSavingWhatsApp(false);
+      setTimeout(() => setWhatsappSavedNotice(null), 3500);
+      return;
+    }
+
+    if (currentUser) {
+      saveTeacherWhatsApp(currentUser.full_name, formattedPhone);
+      const updatedUser = { ...currentUser, whatsapp_num: formattedPhone };
+      setCurrentUser(updatedUser);
+      setAuthSession(updatedUser);
+    }
+
+    setIsSavingWhatsApp(false);
+    setWhatsappSavedNotice("Faculty WhatsApp Hotline active! Students will now reach you directly.");
+    setTimeout(() => setWhatsappSavedNotice(null), 4000);
+  };
 
   if (!currentUser) {
     return (
@@ -298,35 +408,26 @@ export default function TeacherDashboardPage() {
         </div>
       )}
 
-      {/* Top Faculty Header Bar */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-purple-100 shadow-xs">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <HanoonLogo size="sm" />
-            <div className="hidden sm:block">
-              <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 bg-purple-100 px-2.5 py-0.5 rounded-full">
-                Faculty Portal
-              </span>
-            </div>
+      {/* Top Faculty Header Bar (Minimal Role Isolation: Logo, Instructor Desk badge, Sign Out) */}
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-purple-100 shadow-xs w-full max-w-full overflow-x-hidden">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-2 min-w-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 shrink">
+            <HanoonLogo size="sm" compactMobile />
+            <div className="h-4 w-px bg-purple-200 shrink-0 hidden sm:block" />
+            <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-purple-700 bg-purple-100 px-2 sm:px-2.5 py-0.5 rounded-full shrink-0">
+              Instructor Desk
+            </span>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-2.5">
-            <Link
-              href="/"
-              className="py-2 px-3 sm:px-3.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-800 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Student View</span>
-            </Link>
-
-
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
               type="button"
               onClick={handleSignOut}
-              className="py-2 px-3 sm:px-3.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border border-rose-200"
+              title="Sign Out"
+              className="py-1.5 sm:py-2 px-2.5 sm:px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border border-rose-200 shrink-0"
             >
-              <LogOut className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Sign Out</span>
+              <LogOut className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden sm:inline text-xs">Sign Out</span>
             </button>
           </div>
         </div>
@@ -334,6 +435,31 @@ export default function TeacherDashboardPage() {
 
       {/* Main Container */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 space-y-6">
+        {/* RBAC Role-Based Access Control Banner */}
+        {isSuperAdmin ? (
+          <div className="p-3.5 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-900 text-xs font-bold flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs">
+            <div className="flex items-center gap-2.5">
+              <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
+              <span>Super Admin Oversight Mode: Full visibility across all 4 faculty members, courses, live classes, and notes.</span>
+            </div>
+            <span className="text-[10px] uppercase font-black px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 self-start sm:self-auto border border-indigo-200">
+              Unrestricted Institutional Access
+            </span>
+          </div>
+        ) : (
+          <div className="p-3.5 rounded-2xl bg-purple-50/80 border border-purple-200 text-purple-900 text-xs font-bold flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs">
+            <div className="flex items-center gap-2.5">
+              <ShieldCheck className="w-4 h-4 text-purple-600 shrink-0" />
+              <span>
+                Faculty Scope Active: You have authorized access strictly to your assigned academic tracks ({userAssignment?.assignedCourseNames.join(", ") || "Adaviyya Track"}).
+              </span>
+            </div>
+            <span className="text-[10px] uppercase font-black px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-700 self-start sm:self-auto border border-purple-200">
+              Assigned Faculty Portfolio
+            </span>
+          </div>
+        )}
+
         {/* Welcome & Live Broadcast Action Hero */}
         <section className="bg-white rounded-2xl border border-purple-100 p-5 sm:p-6 shadow-md relative overflow-hidden">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 relative z-10">
@@ -358,7 +484,9 @@ export default function TeacherDashboardPage() {
                 Welcome back, {currentUser.full_name}
               </h1>
               <p className="text-xs sm:text-sm text-slate-600">
-                Manage your live classes, share offline study materials, and monitor real-time student engagement.
+                {isSuperAdmin
+                  ? "Manage all curriculum tracks, schedule faculty lectures, and monitor live engagement across the entire academy."
+                  : `Managing your assigned academic tracks: ${userAssignment?.assignedCourseNames.join(", ") || "Adaviyya"}.`}
               </p>
             </div>
 
@@ -466,7 +594,7 @@ export default function TeacherDashboardPage() {
             }`}
           >
             <Calendar className="w-3.5 h-3.5" />
-            <span>Class Timetable ({classes.length})</span>
+            <span>Class Timetable ({accessibleClasses.length})</span>
           </button>
 
           <button
@@ -479,7 +607,7 @@ export default function TeacherDashboardPage() {
             }`}
           >
             <Upload className="w-3.5 h-3.5" />
-            <span>Course Content & Notes ({materials.length})</span>
+            <span>Course Content & Notes ({accessibleMaterials.length})</span>
           </button>
 
           <button
@@ -492,11 +620,31 @@ export default function TeacherDashboardPage() {
             }`}
           >
             <Users className="w-3.5 h-3.5" />
-            <span>Student Roster ({students.length})</span>
+            <span>Student Roster ({accessibleStudents.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("profile")}
+            className={`py-2.5 px-4 rounded-xl font-extrabold text-xs flex items-center gap-2 whitespace-nowrap transition-all cursor-pointer ${
+              activeTab === "profile"
+                ? "bg-purple-600 text-white shadow-sm"
+                : "bg-white text-slate-600 hover:bg-purple-50 border border-purple-100"
+            }`}
+          >
+            <MessageCircle className="w-3.5 h-3.5" />
+            <span>WhatsApp & Profile Settings</span>
           </button>
         </div>
 
         {/* Success Notifications */}
+        {whatsappSavedNotice && (
+          <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2.5 shadow-sm animate-in fade-in">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{whatsappSavedNotice}</span>
+          </div>
+        )}
+
         {scheduleSuccessMsg && (
           <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2.5 shadow-sm">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -568,14 +716,96 @@ export default function TeacherDashboardPage() {
               </button>
             </div>
 
+            {/* Faculty Student Doubt Clearance WhatsApp Hotline Card */}
+            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-purple-100 shadow-md space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-purple-50 gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center shrink-0">
+                    <MessageCircle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-black text-slate-900">
+                        Student Doubt Clearance WhatsApp Hotline
+                      </h3>
+                      <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                        Live Link
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 font-medium">
+                      Configure your WhatsApp number. When enrolled students tap &quot;Ask {currentUser.full_name} on WhatsApp&quot;, it opens your chat directly.
+                    </p>
+                  </div>
+                </div>
+
+                {teacherWhatsApp && (
+                  <a
+                    href={formatWhatsAppLink(
+                      teacherWhatsApp,
+                      `Assalamu Alaikum ${currentUser.full_name}, this is a test inquiry from Hanoon Academy.`
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold transition-all self-start sm:self-auto cursor-pointer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Test My WhatsApp Link</span>
+                  </a>
+                )}
+              </div>
+
+              <form onSubmit={handleSaveTeacherWhatsApp} className="space-y-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-extrabold text-slate-700 block">
+                    Your Official Faculty WhatsApp Number *
+                  </label>
+                  <div className="flex flex-col sm:flex-row gap-2.5">
+                    <div className="relative flex-1">
+                      <Phone className="w-4 h-4 text-purple-600 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        required
+                        value={teacherWhatsApp}
+                        onChange={(e) => setTeacherWhatsApp(e.target.value)}
+                        placeholder="e.g. 9846012345 or +91 9846012345"
+                        className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-purple-50/50 border border-purple-200 focus:border-purple-600 focus:bg-white text-xs sm:text-sm font-bold text-slate-900 outline-none transition-all placeholder:text-slate-400 font-mono"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isSavingWhatsApp}
+                      className="py-2.5 px-5 rounded-xl font-bold text-xs text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-sm shadow-purple-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shrink-0"
+                    >
+                      {isSavingWhatsApp ? (
+                        <span>Saving...</span>
+                      ) : (
+                        <>
+                          <Check className="w-4 h-4" />
+                          <span>Save WhatsApp Number</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-purple-50/60 border border-purple-100 text-[11px] text-purple-900 leading-relaxed space-y-1">
+                  <p className="font-semibold">
+                    💡 <strong>Student Experience:</strong> Enrolled students viewing your curriculum subjects (Seerah, Haddad, Fiqh, Hadith) will see the <strong className="text-purple-700">&quot;Ask {currentUser.full_name} on WhatsApp&quot;</strong> button. Clicking it connects directly to this number with their student name and subject doubt pre-filled.
+                  </p>
+                </div>
+              </form>
+            </div>
+
             {/* Quick Metrics Grid */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-white p-4.5 rounded-2xl border border-purple-100 shadow-md space-y-1">
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
                   Enrolled Students
                 </span>
-                <h3 className="text-2xl font-black text-slate-900">{students.length}</h3>
-                <p className="text-[11px] text-purple-600 font-bold">Across 4 academic tracks</p>
+                <h3 className="text-2xl font-black text-slate-900">{accessibleStudents.length}</h3>
+                <p className="text-[11px] text-purple-600 font-bold">
+                  {isSuperAdmin ? "Across all 6 tracks" : `Assigned: ${availableTracks.length} track${availableTracks.length > 1 ? "s" : ""}`}
+                </p>
               </div>
 
               <div className="bg-white p-4.5 rounded-2xl border border-purple-100 shadow-md space-y-1">
@@ -598,8 +828,8 @@ export default function TeacherDashboardPage() {
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
                   Notes & Recordings
                 </span>
-                <h3 className="text-2xl font-black text-slate-900">{materials.length}</h3>
-                <p className="text-[11px] text-purple-600 font-bold">Available offline</p>
+                <h3 className="text-2xl font-black text-slate-900">{accessibleMaterials.length}</h3>
+                <p className="text-[11px] text-purple-600 font-bold">Assigned materials</p>
               </div>
             </div>
 
@@ -640,40 +870,46 @@ export default function TeacherDashboardPage() {
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {classes.slice(0, 2).map((cls) => (
-                  <div
-                    key={cls.id}
-                    className="p-4 rounded-xl bg-purple-50/40 border border-purple-100 flex flex-col justify-between space-y-3"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[10px] font-black uppercase text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
-                          {cls.courseName}
-                        </span>
-                        <span className="text-[11px] font-semibold text-slate-500">
-                          {cls.date} • {cls.time} IST
-                        </span>
+              {accessibleClasses.length === 0 ? (
+                <div className="p-6 text-center text-slate-500 bg-purple-50/20 rounded-xl border border-dashed border-purple-200 text-xs">
+                  No upcoming live classes scheduled for your assigned courses. Click &quot;View All&quot; to schedule a session.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {accessibleClasses.slice(0, 2).map((cls) => (
+                    <div
+                      key={cls.id}
+                      className="p-4 rounded-xl bg-purple-50/40 border border-purple-100 flex flex-col justify-between space-y-3"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[10px] font-black uppercase text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
+                            {cls.courseName}
+                          </span>
+                          <span className="text-[11px] font-semibold text-slate-500">
+                            {cls.date} • {cls.time} IST
+                          </span>
+                        </div>
+                        <h4 className="text-xs font-extrabold text-slate-900">{cls.title}</h4>
                       </div>
-                      <h4 className="text-xs font-extrabold text-slate-900">{cls.title}</h4>
-                    </div>
 
-                    <div className="flex items-center justify-between pt-2 border-t border-purple-100/60">
-                      <span className="text-[11px] text-slate-500 font-medium">
-                        Platform: <strong className="text-slate-800">{cls.platform}</strong>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleStartLiveClass(cls)}
-                        className="py-1.5 px-3 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs flex items-center gap-1 shadow-xs cursor-pointer"
-                      >
-                        <Radio className="w-3 h-3" />
-                        <span>Go Live</span>
-                      </button>
+                      <div className="flex items-center justify-between pt-2 border-t border-purple-100/60">
+                        <span className="text-[11px] text-slate-500 font-medium">
+                          Platform: <strong className="text-slate-800">{cls.platform}</strong>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleStartLiveClass(cls)}
+                          className="py-1.5 px-3 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs flex items-center gap-1 shadow-xs cursor-pointer"
+                        >
+                          <Radio className="w-3 h-3" />
+                          <span>Go Live</span>
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -704,95 +940,104 @@ export default function TeacherDashboardPage() {
 
               {/* Classes Table / Cards */}
               <div className="space-y-3">
-                {classes.map((cls) => {
-                  const isLive = cls.status === "LIVE_NOW";
-                  const isDone = cls.status === "COMPLETED";
+                {accessibleClasses.length === 0 ? (
+                  <div className="p-8 text-center text-slate-500 bg-purple-50/20 rounded-2xl border border-dashed border-purple-200">
+                    <p className="font-bold text-slate-700 text-sm">No live classes scheduled for your assigned tracks.</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Click the &quot;Schedule New Class&quot; button above to create a live session for your students.
+                    </p>
+                  </div>
+                ) : (
+                  accessibleClasses.map((cls) => {
+                    const isLive = cls.status === "LIVE_NOW";
+                    const isDone = cls.status === "COMPLETED";
 
-                  return (
-                    <div
-                      key={cls.id}
-                      className={`p-4 rounded-2xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
-                        isLive
-                          ? "bg-purple-50/90 border-purple-300 shadow-sm"
-                          : "bg-white border-purple-100 hover:border-purple-200"
-                      }`}
-                    >
-                      <div className="space-y-1.5 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 bg-purple-100 px-2.5 py-0.5 rounded-full">
-                            {cls.courseName}
-                          </span>
-                          {isLive && (
-                            <span className="text-[10px] font-black uppercase text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-ping" />
-                              Active Live Now
-                            </span>
-                          )}
-                          {isDone && (
-                            <span className="text-[10px] font-bold uppercase text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-                              Completed
-                            </span>
-                          )}
-                        </div>
-
-                        <h3 className="text-sm font-extrabold text-slate-900">{cls.title}</h3>
-
-                        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                          <span className="flex items-center gap-1 font-semibold text-slate-700">
-                            <Clock className="w-3.5 h-3.5 text-purple-600" />
-                            {cls.date} at {cls.time} IST ({cls.duration})
-                          </span>
-                          <span>•</span>
-                          <span>Platform: <strong className="text-slate-800">{cls.platform}</strong></span>
-                          <span>•</span>
-                          <span>Expected: <strong className="text-purple-700">{cls.attendeesCount} Students</strong></span>
-                        </div>
-                      </div>
-
-                      {/* Action buttons */}
-                      <div className="flex items-center gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-purple-50">
-                        {isLive ? (
+                    return (
+                      <div
+                        key={cls.id}
+                        className={`p-4 rounded-2xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                          isLive
+                            ? "bg-purple-50/90 border-purple-300 shadow-sm"
+                            : "bg-white border-purple-100 hover:border-purple-200"
+                        }`}
+                      >
+                        <div className="space-y-1.5 flex-1">
                           <div className="flex items-center gap-2">
-                            <a
-                              href={cls.meetingLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="py-2 px-3.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-sm"
-                            >
-                              <ExternalLink className="w-3.5 h-3.5" />
-                              <span>Join Room</span>
-                            </a>
+                            <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 bg-purple-100 px-2.5 py-0.5 rounded-full">
+                              {cls.courseName}
+                            </span>
+                            {isLive && (
+                              <span className="text-[10px] font-black uppercase text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-ping" />
+                                Active Live Now
+                              </span>
+                            )}
+                            {isDone && (
+                              <span className="text-[10px] font-bold uppercase text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                                Completed
+                              </span>
+                            )}
+                          </div>
+
+                          <h3 className="text-sm font-extrabold text-slate-900">{cls.title}</h3>
+
+                          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                            <span className="flex items-center gap-1 font-semibold text-slate-700">
+                              <Clock className="w-3.5 h-3.5 text-purple-600" />
+                              {cls.date} at {cls.time} IST ({cls.duration})
+                            </span>
+                            <span>•</span>
+                            <span>Platform: <strong className="text-slate-800">{cls.platform}</strong></span>
+                            <span>•</span>
+                            <span>Expected: <strong className="text-purple-700">{cls.attendeesCount} Students</strong></span>
+                          </div>
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="flex items-center gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-purple-50">
+                          {isLive ? (
+                            <div className="flex items-center gap-2">
+                              <a
+                                href={cls.meetingLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="py-2 px-3.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-sm"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                <span>Join Room</span>
+                              </a>
+                              <button
+                                type="button"
+                                onClick={handleStopLiveClass}
+                                className="py-2 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs"
+                              >
+                                End
+                              </button>
+                            </div>
+                          ) : isDone ? (
                             <button
                               type="button"
-                              onClick={handleStopLiveClass}
-                              className="py-2 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs"
+                              onClick={() => handleStartLiveClass(cls)}
+                              className="py-2 px-3.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs flex items-center gap-1 cursor-pointer"
                             >
-                              End
+                              <Radio className="w-3.5 h-3.5" />
+                              <span>Re-run Session</span>
                             </button>
-                          </div>
-                        ) : isDone ? (
-                          <button
-                            type="button"
-                            onClick={() => handleStartLiveClass(cls)}
-                            className="py-2 px-3.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs flex items-center gap-1 cursor-pointer"
-                          >
-                            <Radio className="w-3.5 h-3.5" />
-                            <span>Re-run Session</span>
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleStartLiveClass(cls)}
-                            className="py-2 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer transition-all"
-                          >
-                            <Radio className="w-3.5 h-3.5 text-purple-200" />
-                            <span>Start Class Now</span>
-                          </button>
-                        )}
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleStartLiveClass(cls)}
+                              className="py-2 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer transition-all"
+                            >
+                              <Radio className="w-3.5 h-3.5 text-purple-200" />
+                              <span>Start Class Now</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
             </div>
           </div>
@@ -853,10 +1098,11 @@ export default function TeacherDashboardPage() {
                     }
                     className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-semibold outline-none focus:border-purple-400"
                   >
-                    <option value="adaviyya">Adaviyya Track</option>
-                    <option value="shamail">الشمائل المحمدية</option>
-                    <option value="hometuition">Home Tuition</option>
-                    <option value="fashion">Fashion Designing</option>
+                    {availableTracks.map((trk) => (
+                      <option key={trk.id} value={trk.id}>
+                        {trk.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -964,74 +1210,83 @@ export default function TeacherDashboardPage() {
                     <span>Offline Access Materials Library</span>
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    {materials.length} lessons available for student offline download and revision.
+                    {accessibleMaterials.length} lessons available for student offline download and revision.
                   </p>
                 </div>
               </div>
 
               <div className="space-y-3">
-                {materials.map((mat) => {
-                  const isPdf = mat.type === "PDF";
+                {accessibleMaterials.length === 0 ? (
+                  <div className="p-8 text-center text-slate-500 bg-purple-50/20 rounded-2xl border border-dashed border-purple-200">
+                    <p className="font-bold text-slate-700 text-sm">No materials published for your assigned tracks yet.</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Upload PDFs or video lectures on the left to make them available offline for your students.
+                    </p>
+                  </div>
+                ) : (
+                  accessibleMaterials.map((mat) => {
+                    const isPdf = mat.type === "PDF";
 
-                  return (
-                    <div
-                      key={mat.id}
-                      className="p-3.5 rounded-xl bg-purple-50/40 border border-purple-100 flex items-start justify-between gap-3 hover:bg-purple-50/70 transition-colors"
-                    >
-                      <div className="flex items-start gap-3">
-                        <div
-                          className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                            isPdf
-                              ? "bg-purple-100 text-purple-700"
-                              : "bg-rose-100 text-rose-600"
-                          }`}
-                        >
-                          {isPdf ? (
-                            <FileText className="w-5 h-5" />
-                          ) : (
-                            <Video className="w-5 h-5" />
-                          )}
-                        </div>
-
-                        <div className="space-y-0.5">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-black uppercase text-purple-700 bg-purple-100/70 px-2 py-0.5 rounded-md">
-                              {mat.courseName}
-                            </span>
-                            <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
-                              Offline Ready
-                            </span>
+                    return (
+                      <div
+                        key={mat.id}
+                        className="p-3.5 rounded-xl bg-purple-50/40 border border-purple-100 flex items-start justify-between gap-3 hover:bg-purple-50/70 transition-colors"
+                      >
+                        <div className="flex items-start gap-3">
+                          <div
+                            className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                              isPdf
+                                ? "bg-purple-100 text-purple-700"
+                                : "bg-rose-100 text-rose-600"
+                            }`}
+                          >
+                            {isPdf ? (
+                              <FileText className="w-5 h-5" />
+                            ) : (
+                              <Video className="w-5 h-5" />
+                            )}
                           </div>
 
-                          <h4 className="text-xs font-bold text-slate-900">{mat.title}</h4>
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-black uppercase text-purple-700 bg-purple-100/70 px-2 py-0.5 rounded-md">
+                                {mat.courseName}
+                              </span>
+                              <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                                Offline Ready
+                              </span>
+                            </div>
 
-                          <p className="text-[11px] text-slate-500">
-                            {isPdf ? "PDF Document" : "HD Video Stream"} • {mat.sizeOrDuration} • Uploaded {mat.uploadedAt}
-                          </p>
+                            <h4 className="text-xs font-bold text-slate-900">{mat.title}</h4>
+
+                            <p className="text-[11px] text-slate-500">
+                              {isPdf ? "PDF Document" : "HD Video Stream"} • {mat.sizeOrDuration} • Uploaded {mat.uploadedAt}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => alert(`Simulating download / preview of "${mat.title}"`)}
+                            title="Preview or Download"
+                            className="p-2 rounded-lg text-purple-700 hover:bg-purple-100 transition-colors cursor-pointer"
+                          >
+                            <Download className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteMaterial(mat.id)}
+                            title="Delete Material"
+                            className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
-
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => alert(`Simulating download / preview of "${mat.title}"`)}
-                          title="Preview or Download"
-                          className="p-2 rounded-lg text-purple-700 hover:bg-purple-100 transition-colors cursor-pointer"
-                        >
-                          <Download className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteMaterial(mat.id)}
-                          title="Delete Material"
-                          className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
             </div>
           </div>
@@ -1069,11 +1324,12 @@ export default function TeacherDashboardPage() {
                   onChange={(e) => setSelectedCourseFilter(e.target.value)}
                   className="py-2 px-3 rounded-xl bg-purple-50/50 border border-purple-100 text-xs font-bold text-slate-700 outline-none"
                 >
-                  <option value="ALL">All Tracks</option>
-                  <option value="Adaviyya">Adaviyya</option>
-                  <option value="الشمائل المحمدية">الشمائل المحمدية</option>
-                  <option value="Home Tuition">Home Tuition</option>
-                  <option value="Fashion Designing">Fashion Designing</option>
+                  <option value="ALL">All Assigned Tracks</option>
+                  {availableTracks.map((trk) => (
+                    <option key={trk.id} value={trk.name}>
+                      {trk.name}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -1182,6 +1438,146 @@ export default function TeacherDashboardPage() {
             </div>
           </div>
         )}
+
+        {/* TAB 5: FACULTY PROFILE & WHATSAPP HOTLINE */}
+        {activeTab === "profile" && (
+          <div className="space-y-6 animate-in fade-in">
+            {/* Header Card */}
+            <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-purple-800 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
+              <div className="relative z-10 space-y-2 max-w-2xl">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-purple-200 text-xs font-bold backdrop-blur-xs border border-white/10">
+                  <ShieldCheck className="w-3.5 h-3.5 text-purple-300" />
+                  <span>Authorized Faculty Profile</span>
+                </div>
+                <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
+                  Faculty Contact &amp; Student WhatsApp Settings
+                </h1>
+                <p className="text-xs sm:text-sm text-purple-200/90 leading-relaxed font-medium">
+                  Manage your direct communication channels for enrolled students. When learners tap &quot;Ask {currentUser.full_name} on WhatsApp&quot;, they connect with you instantly.
+                </p>
+              </div>
+            </div>
+
+            {/* Profile Overview & WhatsApp Form Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* WhatsApp Configuration Form */}
+              <div className="lg:col-span-7 bg-white p-6 rounded-3xl border border-purple-100 shadow-md space-y-5">
+                <div className="flex items-center gap-2.5 pb-3 border-b border-purple-50">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center font-bold">
+                    <MessageCircle className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-extrabold text-slate-900">
+                      Live Doubt Clearance WhatsApp Number
+                    </h2>
+                    <p className="text-[11px] text-slate-500">
+                      Direct hotline used by enrolled learners in the Curriculum Hub
+                    </p>
+                  </div>
+                </div>
+
+                <form onSubmit={handleSaveTeacherWhatsApp} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-extrabold text-slate-800 flex items-center justify-between">
+                      <span>WhatsApp Number (VPA/Phone) *</span>
+                      <span className="text-[10px] text-emerald-600 font-bold uppercase">Active Hotline</span>
+                    </label>
+                    <div className="relative">
+                      <Phone className="w-4 h-4 text-purple-600 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        required
+                        value={teacherWhatsApp}
+                        onChange={(e) => setTeacherWhatsApp(e.target.value)}
+                        placeholder="e.g. 9846012345 or +91 9846012345"
+                        className="w-full pl-10 pr-4 py-3 rounded-2xl bg-purple-50/50 border border-purple-200 focus:border-purple-600 focus:bg-white text-sm font-bold text-slate-900 outline-none transition-all placeholder:text-slate-400 font-mono"
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-500 font-medium">
+                      Enter your 10-digit number. The system automatically formats it for direct WhatsApp messaging.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
+                    <button
+                      type="submit"
+                      disabled={isSavingWhatsApp}
+                      className="flex-1 py-3.5 px-6 rounded-2xl font-bold text-xs text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-md shadow-purple-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      {isSavingWhatsApp ? (
+                        <span>Saving...</span>
+                      ) : (
+                        <>
+                          <Check className="w-4 h-4" />
+                          <span>Save &amp; Update Student Hotline</span>
+                        </>
+                      )}
+                    </button>
+
+                    {teacherWhatsApp && (
+                      <a
+                        href={formatWhatsAppLink(
+                          teacherWhatsApp,
+                          `Assalamu Alaikum ${currentUser.full_name}, this is a test student query from Hanoon Academy.`
+                        )}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="py-3.5 px-5 rounded-2xl font-bold text-xs text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-2xs"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Test WhatsApp Link</span>
+                      </a>
+                    )}
+                  </div>
+                </form>
+              </div>
+
+              {/* Faculty Identity Card */}
+              <div className="lg:col-span-5 bg-white p-6 rounded-3xl border border-purple-100 shadow-md space-y-4">
+                <div className="flex items-center gap-3 pb-3 border-b border-purple-50">
+                  <div className="w-12 h-12 rounded-2xl bg-purple-600 text-white font-black text-lg flex items-center justify-center shadow-sm">
+                    {currentUser.full_name.charAt(0)}
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-slate-900 leading-tight">
+                      {currentUser.full_name}
+                    </h3>
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-700 bg-purple-100 px-2.5 py-0.5 rounded-full inline-block mt-1">
+                      Faculty Member
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-3 text-xs">
+                  <div className="flex justify-between items-center py-1.5 border-b border-slate-50">
+                    <span className="text-slate-500 font-medium">Email Account:</span>
+                    <strong className="text-slate-800 font-mono text-[11px]">{currentUser.email}</strong>
+                  </div>
+                  <div className="flex justify-between items-center py-1.5 border-b border-slate-50">
+                    <span className="text-slate-500 font-medium">Assigned Tracks:</span>
+                    <strong className="text-purple-700 font-bold">
+                      {isSuperAdmin
+                        ? "Super Admin (All Tracks & Subjects)"
+                        : (userAssignment?.assignedCourseNames.join(", ") || "Adaviyya Track")}
+                    </strong>
+                  </div>
+                  <div className="flex justify-between items-center py-1.5 border-b border-slate-50">
+                    <span className="text-slate-500 font-medium">Active WhatsApp:</span>
+                    <strong className="text-emerald-700 font-bold font-mono">
+                      {teacherWhatsApp || "Not Configured Yet"}
+                    </strong>
+                  </div>
+                  <div className="flex justify-between items-center py-1.5">
+                    <span className="text-slate-500 font-medium">Class Status:</span>
+                    <span className="text-emerald-700 font-bold uppercase text-[10px] bg-emerald-50 px-2 py-0.5 rounded-md">
+                      Live Broadcast Ready
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* SCHEDULE NEW CLASS MODAL */}
@@ -1232,12 +1628,11 @@ export default function TeacherDashboardPage() {
                   }
                   className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none focus:border-purple-400"
                 >
-                  <option value="adaviyya">Adaviyya Track</option>
-                  <option value="shamail">الشمائل المحمدية</option>
-                  <option value="hometuition">Home Tuition</option>
-                  <option value="fashion">Fashion Designing</option>
-                  <option value="tajweed">Tajweed Special Class</option>
-                  <option value="burdah">Burdah Live Gathering</option>
+                  {availableTracks.map((trk) => (
+                    <option key={trk.id} value={trk.id}>
+                      {trk.name}
+                    </option>
+                  ))}
                 </select>
               </div>
 

@@ -3,6 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { GraduationCap, Mail, Phone, MapPin, MessageCircle, Heart } from "lucide-react";
+import { getAppSettings, formatWhatsAppLink } from "@/services/settingsService";
 
 export default function Footer() {
   return (
@@ -31,7 +32,7 @@ export default function Footer() {
 
             <div className="pt-2 flex items-center gap-3">
               <a
-                href="https://wa.me/919846012345"
+                href={formatWhatsAppLink(getAppSettings().contactWhatsApp)}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#047857] hover:bg-[#035e44] text-white text-xs font-bold transition-all shadow-sm"
@@ -114,7 +115,7 @@ export default function Footer() {
               </li>
               <li className="flex items-center gap-2.5">
                 <Phone className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span className="text-xs">+91 98765 43210 / +91 483 200000</span>
+                <span className="text-xs">+91 98460 12345</span>
               </li>
               <li className="flex items-center gap-2.5">
                 <Mail className="w-4 h-4 text-emerald-400 shrink-0" />

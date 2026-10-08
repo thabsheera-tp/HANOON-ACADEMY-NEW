@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   Copy,
   Check,
@@ -14,11 +15,13 @@ import {
   User,
   Phone,
   RefreshCw,
+  MessageCircle,
+  Lock,
 } from "lucide-react";
 import { SelectedCourse, PaymentDetails, UserProfile } from "@/types/app";
 import { registerStudentAndPayment } from "@/services/studentService";
-import { subscribeToPaymentStatus } from "@/services/paymentService";
-import { getAppSettings, fetchAppSettings, subscribeToAppSettings } from "@/services/settingsService";
+import { subscribeToPaymentStatus, checkPaymentStatusByIdOrTx } from "@/services/paymentService";
+import { getAppSettings, fetchAppSettings, subscribeToAppSettings, formatWhatsAppLink } from "@/services/settingsService";
 
 interface ScreenPaymentProps {
   userProfile?: UserProfile;
@@ -40,13 +43,14 @@ export default function ScreenPayment({
   onSimulateAdminApproval,
   onSaveProfile,
 }: ScreenPaymentProps) {
+  const router = useRouter();
   const [studentName, setStudentName] = useState(userProfile.name || "");
   const [studentPhone, setStudentPhone] = useState(userProfile.phone || "");
   const [txId, setTxId] = useState(paymentDetails.upiTxId || "");
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showQR, setShowQR] = useState(false);
+  const [showQR, setShowQR] = useState(true);
   const [verifiedStatus, setVerifiedStatus] = useState<"unpaid" | "pending" | "verified">(
     paymentDetails.status === "verified"
       ? "verified"
@@ -54,6 +58,13 @@ export default function ScreenPayment({
       ? "pending"
       : "unpaid"
   );
+
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+  const [statusFeedback, setStatusFeedback] = useState<{
+    message: string;
+    type: "success" | "info" | "error";
+  } | null>(null);
+  const [showEditForm, setShowEditForm] = useState(false);
 
   const [appSettings, setAppSettings] = useState(getAppSettings());
 
@@ -67,27 +78,102 @@ export default function ScreenPayment({
 
   const upiId = appSettings.upiId || "hanoonacademy@upi";
 
+  // Sync state if parent props update
+  useEffect(() => {
+    if (paymentDetails.status === "verified") {
+      setVerifiedStatus("verified");
+    } else if (paymentDetails.status === "pending_verification") {
+      setVerifiedStatus("pending");
+    }
+  }, [paymentDetails.status]);
+
+  useEffect(() => {
+    if (paymentDetails.upiTxId && !txId) {
+      setTxId(paymentDetails.upiTxId);
+    }
+  }, [paymentDetails.upiTxId]);
+
   // Subscribe to real-time status updates when a TxID is submitted
   useEffect(() => {
-    if (!paymentDetails.upiTxId) return;
+    const activeKey = paymentDetails.upiTxId || txId;
+    if (!activeKey) return;
 
     const unsubscribe = subscribeToPaymentStatus(
-      paymentDetails.upiTxId,
+      activeKey,
       (newStatus) => {
         if (newStatus === "APPROVED") {
           setVerifiedStatus("verified");
+          setStatusFeedback({
+            message: "🎉 Payment Approved! Your course and dashboard are now unlocked.",
+            type: "success",
+          });
           if (onSimulateAdminApproval) {
             onSimulateAdminApproval();
           }
         } else if (newStatus === "REJECTED") {
           setVerifiedStatus("unpaid");
           setError("Payment was flagged or rejected by admin. Please check UTR.");
+          setStatusFeedback({
+            message: "Payment was flagged or rejected by admin. Please check your UTR number.",
+            type: "error",
+          });
         }
       }
     );
 
     return () => unsubscribe();
-  }, [paymentDetails.upiTxId, onSimulateAdminApproval]);
+  }, [paymentDetails.upiTxId, txId, onSimulateAdminApproval]);
+
+  const handleCheckVerificationStatus = async () => {
+    const targetTx = paymentDetails.upiTxId || txId;
+    if (!targetTx) {
+      setStatusFeedback({ message: "No transaction ID found to check.", type: "info" });
+      return;
+    }
+
+    setIsCheckingStatus(true);
+    setStatusFeedback(null);
+
+    try {
+      const res = await checkPaymentStatusByIdOrTx(targetTx);
+      if (res) {
+        if (res.status === "APPROVED" || (res.status as string) === "verified") {
+          setVerifiedStatus("verified");
+          setStatusFeedback({
+            message: "🎉 Payment Approved! Your course and dashboard are now unlocked.",
+            type: "success",
+          });
+          if (onSimulateAdminApproval) {
+            onSimulateAdminApproval();
+          }
+        } else if (res.status === "REJECTED") {
+          setVerifiedStatus("unpaid");
+          setError(res.rejectionReason || "Payment was rejected. Please verify your TxID/UTR and try again.");
+          setStatusFeedback({
+            message: "Payment was flagged or rejected by admin. Please check your UTR number.",
+            type: "error",
+          });
+        } else {
+          setStatusFeedback({
+            message: "⏳ Payment is currently under review by Hanoon Academy Admin. Usually takes 5–15 minutes.",
+            type: "info",
+          });
+        }
+      } else {
+        setStatusFeedback({
+          message: "⏳ Transaction queued in Supabase. Verification in progress.",
+          type: "info",
+        });
+      }
+    } catch {
+      setStatusFeedback({
+        message: "Status check completed. Real-time notifications will auto-unlock once approved.",
+        type: "info",
+      });
+    } finally {
+      setIsCheckingStatus(false);
+    }
+  };
 
   const handleCopyUPI = () => {
     navigator.clipboard.writeText(upiId);
@@ -145,9 +231,7 @@ export default function ScreenPayment({
 
       setVerifiedStatus("pending");
       onSubmitPayment(cleanTxId, res.payment.id);
-      if (onGoToDashboard) {
-        onGoToDashboard();
-      }
+      // Student remains on pending verification screen until payment is approved by admin
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Submission failed. Please check network.";
       setError(msg);
@@ -224,33 +308,130 @@ export default function ScreenPayment({
         </div>
       )}
 
-      {/* PENDING VERIFICATION NOTICE BANNER */}
+      {/* PENDING VERIFICATION DEDICATED STATUS CARD */}
       {isPending && !isVerified && (
-        <div className="neumorphic-card bg-amber-50/40 border border-amber-200/90 p-5 rounded-3xl space-y-3.5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-amber-600 animate-spin" />
-              <span className="text-xs font-black text-amber-900 uppercase tracking-wide">
-                Verification Pending
-              </span>
-            </div>
-            <span className="text-[10px] font-black text-amber-800 bg-amber-100 border border-amber-200 px-2.5 py-0.5 rounded-full">
-              STATUS: PENDING
-            </span>
+        <div className="neumorphic-card bg-amber-50/50 border border-amber-200/90 p-6 rounded-3xl space-y-5 animate-fade-in text-center">
+          {/* Icon: ⏳ Pending Review Icon */}
+          <div className="w-16 h-16 rounded-2xl bg-amber-100 border-2 border-amber-300 text-amber-700 flex items-center justify-center mx-auto shadow-xs text-3xl select-none">
+            ⏳
           </div>
 
-          <p className="text-xs text-amber-800 leading-relaxed font-medium">
-            Your UPI Transaction ID (<code className="font-mono font-bold text-amber-900">{paymentDetails.upiTxId || txId}</code>) is queued for Admin review in Supabase. Verification takes 5–15 mins.
+          <div className="space-y-1.5">
+            <span className="text-[10px] font-black uppercase tracking-wider text-amber-900 bg-amber-200/80 border border-amber-300 px-3 py-1 rounded-full inline-block">
+              Status: Verification Pending
+            </span>
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-tight">
+              Payment Submitted for Verification!
+            </h2>
+          </div>
+
+          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed max-w-sm mx-auto font-medium">
+            Thank you! Your UPI Transaction ID has been sent to Hanoon Academy Admin for review. Your course dashboard and study materials will automatically unlock once verified.
           </p>
 
-          <div className="p-2.5 rounded-xl bg-amber-100/70 text-amber-900 text-[11px] font-semibold text-center border border-amber-200/80">
-            🔒 Dashboard access unlocks immediately once verification is approved by the admin.
+          {/* Transaction Metadata Card */}
+          <div className="p-4 rounded-2xl bg-white border border-amber-200/80 text-left space-y-2 text-xs text-slate-700 shadow-2xs">
+            <div className="flex justify-between items-center pb-1.5 border-b border-amber-100">
+              <span className="text-slate-500 font-semibold">Course Program:</span>
+              <strong className="text-slate-900 font-bold">{selectedCourse.title}</strong>
+            </div>
+            <div className="flex justify-between items-center pb-1.5 border-b border-amber-100">
+              <span className="text-slate-500 font-semibold">Submitted Amount:</span>
+              <strong className="text-purple-700 font-extrabold">{payableFeeFormatted}</strong>
+            </div>
+            <div className="flex justify-between items-center pb-1.5 border-b border-amber-100">
+              <span className="text-slate-500 font-semibold">UPI TxID / UTR:</span>
+              <code className="font-mono font-bold text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                {paymentDetails.upiTxId || txId}
+              </code>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500 font-semibold">Student Name:</span>
+              <span className="font-bold text-slate-800">{studentName || userProfile.name}</span>
+            </div>
+          </div>
+
+          {/* Real-time check feedback alert */}
+          {statusFeedback && (
+            <div
+              className={`p-3 rounded-xl text-xs font-bold border transition-all animate-fade-in ${
+                statusFeedback.type === "success"
+                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                  : statusFeedback.type === "error"
+                  ? "bg-rose-50 text-rose-800 border-rose-200"
+                  : "bg-purple-50 text-purple-800 border-purple-200"
+              }`}
+            >
+              {statusFeedback.message}
+            </div>
+          )}
+
+          {/* Action Buttons: Check Verification Status & Contact Admin on WhatsApp */}
+          <div className="space-y-2.5 pt-1">
+            <button
+              type="button"
+              onClick={handleCheckVerificationStatus}
+              disabled={isCheckingStatus}
+              className="w-full py-3.5 px-4 rounded-2xl font-extrabold text-xs text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-md shadow-purple-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+            >
+              <RefreshCw className={`w-4 h-4 ${isCheckingStatus ? "animate-spin" : ""}`} />
+              <span>{isCheckingStatus ? "Checking Status in Supabase..." : "Check Verification Status"}</span>
+            </button>
+
+            <a
+              href={formatWhatsAppLink(
+                appSettings.contactWhatsApp,
+                `Assalamu Alaikum Admin, I have submitted UPI payment of ${payableFeeFormatted} for ${selectedCourse.title} with UTR: ${
+                  paymentDetails.upiTxId || txId
+                }. Please verify my enrollment.`
+              )}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full py-3.5 px-4 rounded-2xl font-extrabold text-xs text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
+            >
+              <MessageCircle className="w-4 h-4 text-emerald-600" />
+              <span>Contact Admin on WhatsApp</span>
+            </a>
+          </div>
+
+          <div className="pt-2 text-center space-y-2">
+            <button
+              type="button"
+              onClick={() => setShowEditForm((prev) => !prev)}
+              className="text-[11px] font-bold text-slate-400 hover:text-purple-700 underline cursor-pointer block mx-auto"
+            >
+              {showEditForm ? "Hide Re-entry Form" : "Need to correct your 12-digit UTR?"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => router.push("/login?portal=staff")}
+              className="text-[11px] font-semibold text-purple-700 hover:text-purple-900 transition-colors py-1 cursor-pointer inline-flex items-center gap-1.5"
+            >
+              <Lock className="w-3.5 h-3.5 text-purple-600" />
+              <span>Institute Staff? Login Here</span>
+            </button>
+
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    localStorage.removeItem("hanoon_pending_payment");
+                  } catch {}
+                  window.location.href = "/";
+                }}
+                className="text-[11px] font-bold text-slate-500 hover:text-purple-700 underline cursor-pointer"
+              >
+                ← Return to Home / New Admission
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* PAYMENT EXPLANATION & PROCESS CARD (When not verified) */}
-      {!isVerified && (
+      {/* PAYMENT EXPLANATION & PROCESS CARD (Shown only if not verified AND (not pending OR student toggled edit)) */}
+      {!isVerified && (!isPending || showEditForm) && (
         <div className="neumorphic-card p-5 rounded-3xl space-y-5">
           {/* Header Explanation */}
           <div>
@@ -330,33 +511,43 @@ export default function ScreenPayment({
             </button>
           </div>
 
-          {/* Toggleable QR Code Display */}
-          <div className="border border-purple-100 rounded-2xl p-3.5 bg-purple-50/30 flex flex-col items-center space-y-2">
-            <button
-              type="button"
-              onClick={() => setShowQR((prev) => !prev)}
-              className="w-full flex items-center justify-between text-xs font-bold text-purple-700 cursor-pointer"
-            >
+          {/* Dynamic Admin-Configured QR Code Display */}
+          <div className="border border-purple-100 rounded-2xl p-4 bg-purple-50/40 flex flex-col items-center space-y-3">
+            <div className="w-full flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <QrCode className="w-4 h-4 text-purple-600" />
-                <span>{showQR ? "Hide Payment QR Code" : "Show Instant Scan QR Code"}</span>
+                <span className="text-xs font-black text-slate-900">Institute Official UPI QR Code</span>
               </div>
-              <span className="text-[11px] underline">
-                {showQR ? "Collapse" : "View QR"}
-              </span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setShowQR((prev) => !prev)}
+                className="text-[11px] font-bold text-purple-700 hover:text-purple-900 underline cursor-pointer"
+              >
+                {showQR ? "Collapse QR" : "Show QR"}
+              </button>
+            </div>
 
             {showQR && (
-              <div className="pt-2 flex flex-col items-center space-y-1.5">
-                <div className="w-32 h-32 rounded-2xl bg-white border border-purple-200 p-3 flex flex-col items-center justify-center shadow-xs">
-                  <QrCode className="w-20 h-20 text-purple-700" />
-                  <span className="text-[8px] font-black text-purple-800 tracking-wider uppercase mt-1">
-                    Scan in GPay / PhonePe
-                  </span>
+              <div className="pt-1 flex flex-col items-center space-y-2 w-full animate-fade-in">
+                <div className="w-44 h-44 rounded-2xl bg-white border-2 border-purple-200 p-2.5 flex items-center justify-center shadow-md overflow-hidden">
+                  <img
+                    src={
+                      appSettings.upiQrUrl ||
+                      appSettings.qrCodeUrl ||
+                      `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi%3A%2F%2Fpay%3Fpa%3D${encodeURIComponent(upiId)}%26pn%3DHanoon%2520Academy%26am%3D${payableAmount}%26cu%3DINR`
+                    }
+                    alt="Official UPI Payment QR Code"
+                    className="w-full h-full object-contain rounded-xl"
+                  />
                 </div>
-                <p className="text-[10px] text-slate-400 font-medium">
-                  Scan using any UPI app camera
-                </p>
+                <div className="text-center space-y-0.5">
+                  <span className="text-[11px] font-extrabold text-purple-800 tracking-wide block uppercase">
+                    Scan in GPay • PhonePe • Paytm • BHIM
+                  </span>
+                  <p className="text-[10px] text-slate-500 font-medium">
+                    Pre-linked to <code className="font-mono font-bold text-purple-700">{upiId}</code> for {payableFeeFormatted}
+                  </p>
+                </div>
               </div>
             )}
           </div>
@@ -442,11 +633,7 @@ export default function ScreenPayment({
                 </span>
               ) : (
                 <>
-                  <span>
-                    {isAdaviyya
-                      ? `Submit ${payableFeeFormatted} Admission Fee for Approval`
-                      : "Submit Payment for Approval"}
-                  </span>
+                  <span>Submit for Verification</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}

@@ -103,6 +103,7 @@ CREATE TABLE IF NOT EXISTS public.courses (
 CREATE TABLE IF NOT EXISTS public.course_subjects (
     id TEXT PRIMARY KEY,
     course_id TEXT NOT NULL REFERENCES public.courses(id) ON DELETE CASCADE,
+    teacher_id TEXT REFERENCES public.teachers(id) ON DELETE SET NULL,
     name TEXT NOT NULL,
     subtitle TEXT NOT NULL,
     instructor TEXT NOT NULL,
@@ -113,6 +114,9 @@ CREATE TABLE IF NOT EXISTS public.course_subjects (
     chapters JSONB DEFAULT '[]'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- Migration safety: ensure teacher_id column exists on course_subjects
+ALTER TABLE public.course_subjects ADD COLUMN IF NOT EXISTS teacher_id TEXT REFERENCES public.teachers(id) ON DELETE SET NULL;
 
 -- ==============================================================================
 -- 5. SPECIAL CLASSES (Tajweed, Burdah Live, etc.)
@@ -235,11 +239,11 @@ CREATE TABLE IF NOT EXISTS public.teacher_payroll (
 );
 
 -- ==============================================================================
--- 12. GLOBAL APP SETTINGS TABLE (Multi-Device Institute Configuration)
--- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.app_settings (
     id TEXT PRIMARY KEY DEFAULT 'global',
     upi_id TEXT NOT NULL DEFAULT 'hanoonacademy@upi',
+    upi_qr_url TEXT,
+    qr_code_url TEXT,
     merchant_name TEXT NOT NULL DEFAULT 'Hanoon Academy of Islamic Studies',
     auto_approval_enabled BOOLEAN DEFAULT false,
     contact_whatsapp TEXT DEFAULT '919846012345',
@@ -253,6 +257,29 @@ CREATE TABLE IF NOT EXISTS public.app_settings (
     }'::jsonb,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- Migration safety for app_settings
+ALTER TABLE public.app_settings ADD COLUMN IF NOT EXISTS upi_qr_url TEXT;
+ALTER TABLE public.app_settings ADD COLUMN IF NOT EXISTS qr_code_url TEXT;
+
+-- Dedicated public.settings table for universal settings integration
+CREATE TABLE IF NOT EXISTS public.settings (
+    id TEXT PRIMARY KEY DEFAULT 'global',
+    upi_id TEXT NOT NULL DEFAULT 'hanoonacademy@upi',
+    upi_qr_url TEXT,
+    qr_code_url TEXT,
+    merchant_name TEXT NOT NULL DEFAULT 'Hanoon Academy of Islamic Studies',
+    auto_approval_enabled BOOLEAN DEFAULT false,
+    contact_whatsapp TEXT DEFAULT '919846012345',
+    course_pricing JSONB DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS upi_id TEXT DEFAULT 'hanoonacademy@upi';
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS upi_qr_url TEXT;
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS qr_code_url TEXT;
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS merchant_name TEXT DEFAULT 'Hanoon Academy of Islamic Studies';
+
 
 -- ==============================================================================
 -- 13. AUDIT LOGS TABLE
@@ -322,8 +349,23 @@ CREATE POLICY "Public subjects read access" ON public.course_subjects
     FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Admin manage course subjects" ON public.course_subjects;
-CREATE POLICY "Admin manage course subjects" ON public.course_subjects
-    FOR ALL USING (public.is_super_admin()) WITH CHECK (public.is_super_admin());
+DROP POLICY IF EXISTS "Admin and Assigned Teachers can manage subjects" ON public.course_subjects;
+CREATE POLICY "Admin and Assigned Teachers can manage subjects" ON public.course_subjects
+    FOR ALL USING (
+        public.is_super_admin() OR (
+            public.is_teacher() AND teacher_id IN (
+                SELECT id FROM public.teachers 
+                WHERE email = (SELECT email FROM public.profiles WHERE id = auth.uid())
+            )
+        )
+    ) WITH CHECK (
+        public.is_super_admin() OR (
+            public.is_teacher() AND teacher_id IN (
+                SELECT id FROM public.teachers 
+                WHERE email = (SELECT email FROM public.profiles WHERE id = auth.uid())
+            )
+        )
+    );
 
 DROP POLICY IF EXISTS "Public special classes read access" ON public.special_classes;
 CREATE POLICY "Public special classes read access" ON public.special_classes
@@ -396,8 +438,23 @@ CREATE POLICY "Public can view live classes" ON public.live_classes
 
 DROP POLICY IF EXISTS "Teachers and Admin can manage live classes" ON public.live_classes;
 DROP POLICY IF EXISTS "Teachers can update live classes" ON public.live_classes;
-CREATE POLICY "Teachers and Admin can manage live classes" ON public.live_classes
-    FOR ALL USING (public.is_teacher()) WITH CHECK (public.is_teacher());
+DROP POLICY IF EXISTS "Scoped teacher live class policy" ON public.live_classes;
+CREATE POLICY "Scoped teacher live class policy" ON public.live_classes
+    FOR ALL USING (
+        public.is_super_admin() OR (
+            public.is_teacher() AND teacher_id IN (
+                SELECT id FROM public.teachers 
+                WHERE email = (SELECT email FROM public.profiles WHERE id = auth.uid())
+            )
+        )
+    ) WITH CHECK (
+        public.is_super_admin() OR (
+            public.is_teacher() AND teacher_id IN (
+                SELECT id FROM public.teachers 
+                WHERE email = (SELECT email FROM public.profiles WHERE id = auth.uid())
+            )
+        )
+    );
 
 -- 6. Certificates
 DROP POLICY IF EXISTS "Public can view verified certificates" ON public.certificates;
@@ -435,6 +492,16 @@ DROP POLICY IF EXISTS "Only Admin can update app settings" ON public.app_setting
 CREATE POLICY "Only Admin can update app settings" ON public.app_settings
     FOR UPDATE USING (public.is_super_admin()) WITH CHECK (public.is_super_admin());
 
+-- Settings policies
+ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public can read settings" ON public.settings;
+CREATE POLICY "Public can read settings" ON public.settings
+    FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Only Admin can update settings" ON public.settings;
+CREATE POLICY "Only Admin can update settings" ON public.settings
+    FOR ALL USING (public.is_verification_admin()) WITH CHECK (public.is_verification_admin());
+
 -- 9. Audit Logs (Super Admin can read; Verification Admin can insert action entries)
 DROP POLICY IF EXISTS "Only Admin can read audit logs" ON public.audit_logs;
 CREATE POLICY "Only Admin can read audit logs" ON public.audit_logs
@@ -466,6 +533,11 @@ BEGIN
 
     BEGIN
         ALTER PUBLICATION supabase_realtime ADD TABLE public.app_settings;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
+
+    BEGIN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
     EXCEPTION WHEN duplicate_object THEN NULL;
     END;
 END $$;
@@ -544,13 +616,16 @@ ON CONFLICT (id) DO UPDATE SET
     highlights = EXCLUDED.highlights;
 
 -- 3. Adaviyya Sub-Hubs (Seerah, Haddad, Fiqh, Hadith)
-INSERT INTO public.course_subjects (id, course_id, name, subtitle, instructor, schedule_time, live_url, description, order_num)
+INSERT INTO public.course_subjects (id, course_id, teacher_id, name, subtitle, instructor, schedule_time, live_url, description, order_num)
 VALUES
-    ('seerah', 'adaviyya', 'Seerah', 'Prophetic Biography & Historic Milestones', 'Usthad Dr. Faisal Al-Hanoon', 'Mondays & Wednesdays • 07:30 PM IST', 'https://zoom.us/j/hanoon-seerah', 'Chronological exploration of the blessed life, sublime moral qualities, and pivotal events of Prophet Muhammad ﷺ.', 1),
-    ('haddad', 'adaviyya', 'Haddad', 'Daily Litany, Dhikr & Spiritual Guidance', 'Usthad Anas Nadwi', 'Tuesdays & Fridays • 06:30 PM IST', 'https://zoom.us/j/hanoon-haddad', 'Comprehensive commentary, word-by-word tajweed, and spiritual contemplation of the renowned Ratib al-Haddad.', 2),
-    ('fiqh', 'adaviyya', 'Fiqh', 'Islamic Jurisprudence & Practical Rulings', 'Usthad Bilal Farooqi', 'Thursdays & Saturdays • 08:00 PM IST', 'https://zoom.us/j/hanoon-fiqh', 'Systematic study of daily worship (Taharah, Salah, Sawm, Zakah) and modern living jurisprudence.', 3),
-    ('hadith', 'adaviyya', 'Hadith', 'Prophetic Traditions & Ethical Virtues', 'Usthad Abdul Rahman Al-Hafiz', 'Sundays • 10:00 AM IST', 'https://zoom.us/j/hanoon-hadith', 'In-depth textual analysis of classical Prophetic sayings with practical moral applications for contemporary life.', 4)
-ON CONFLICT (id) DO NOTHING;
+    ('seerah', 'adaviyya', 'tch-01', 'Seerah', 'Prophetic Biography & Historic Milestones', 'Usthad Dr. Faisal Al-Hanoon', 'Mondays & Wednesdays • 07:30 PM IST', 'https://zoom.us/j/hanoon-seerah', 'Chronological exploration of the blessed life, sublime moral qualities, and pivotal events of Prophet Muhammad ﷺ.', 1),
+    ('haddad', 'adaviyya', 'tch-02', 'Haddad', 'Daily Litany, Dhikr & Spiritual Guidance', 'Usthad Anas Nadwi', 'Tuesdays & Fridays • 06:30 PM IST', 'https://zoom.us/j/hanoon-haddad', 'Comprehensive commentary, word-by-word tajweed, and spiritual contemplation of the renowned Ratib al-Haddad.', 2),
+    ('fiqh', 'adaviyya', 'tch-03', 'Fiqh', 'Islamic Jurisprudence & Practical Rulings', 'Usthad Bilal Farooqi', 'Thursdays & Saturdays • 08:00 PM IST', 'https://zoom.us/j/hanoon-fiqh', 'Systematic study of daily worship (Taharah, Salah, Sawm, Zakah) and modern living jurisprudence.', 3),
+    ('hadith', 'adaviyya', 'tch-04', 'Hadith', 'Prophetic Traditions & Ethical Virtues', 'Usthad Abdul Rahman Al-Hafiz', 'Sundays • 10:00 AM IST', 'https://zoom.us/j/hanoon-hadith', 'In-depth textual analysis of classical Prophetic sayings with practical moral applications for contemporary life.', 4)
+ON CONFLICT (id) DO UPDATE SET
+    teacher_id = EXCLUDED.teacher_id,
+    instructor = EXCLUDED.instructor,
+    schedule_time = EXCLUDED.schedule_time;
 
 -- 4. Special Classes Module (Tajweed, Burdah Live)
 INSERT INTO public.special_classes (id, title, subtitle, instructor, category, schedule_time, status, live_url, description)

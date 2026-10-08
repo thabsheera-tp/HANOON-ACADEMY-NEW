@@ -35,25 +35,29 @@ export default function DashboardRouteGuardPage() {
       // 2. Query Supabase for student's payment / enrollment verification status
       const cleanPhone = (session.user.whatsapp_num || "").replace(/\D/g, "");
       let isApproved = false;
+      let isPending = false;
 
       if (cleanPhone && supabase) {
         try {
           const { data: dbPayments, error } = await supabase
             .from("payments")
-            .select("*")
+            .select("*, student:students(*)")
             .order("created_at", { ascending: false });
 
           if (!error && dbPayments && dbPayments.length > 0) {
             const studentPayment = dbPayments.find(
               (p: any) =>
+                p.student?.whatsapp_num === cleanPhone ||
                 p.student_phone === cleanPhone ||
-                (p.upi_txid && p.upi_txid.includes(cleanPhone))
+                (p.upi_txid && cleanPhone && p.upi_txid.includes(cleanPhone))
             );
 
             if (studentPayment) {
               const st = (studentPayment.status || "").toUpperCase();
               if (st === "APPROVED" || st === "VERIFIED" || st === "ACTIVE") {
                 isApproved = true;
+              } else if (st === "PENDING" || st === "PENDING_VERIFICATION") {
+                isPending = true;
               }
             }
           }
@@ -62,19 +66,36 @@ export default function DashboardRouteGuardPage() {
         }
       }
 
-      // Fallback check in local storage if offline/demo
-      if (!isApproved && typeof window !== "undefined") {
+      // Check local storage for pending or approved payments
+      if (typeof window !== "undefined") {
         try {
-          const localPayments = JSON.parse(localStorage.getItem("hanoon_payments") || "[]");
+          // Check hanoon_pending_payment cache
+          const pendingRaw = localStorage.getItem("hanoon_pending_payment");
+          if (pendingRaw) {
+            const pending = JSON.parse(pendingRaw);
+            if (pending && (pending.status === "PENDING" || pending.status === "pending_verification")) {
+              isPending = true;
+            }
+          }
+
+          // Check hanoon_local_payments
+          const localPayments = JSON.parse(
+            localStorage.getItem("hanoon_local_payments") ||
+            localStorage.getItem("hanoon_payments") ||
+            "[]"
+          );
           const localMatch = localPayments.find(
             (p: any) =>
               p.student?.id === session.user.id ||
+              p.student_id === session.user.id ||
               (cleanPhone && p.student?.whatsapp_num === cleanPhone)
           );
           if (localMatch) {
             const st = (localMatch.status || "").toUpperCase();
             if (st === "APPROVED" || st === "VERIFIED" || st === "ACTIVE") {
               isApproved = true;
+            } else if (st === "PENDING" || st === "PENDING_VERIFICATION") {
+              isPending = true;
             }
           }
         } catch (e) {
@@ -84,9 +105,13 @@ export default function DashboardRouteGuardPage() {
 
       if (!isMounted) return;
 
-      // 3. IF the user status is NOT 'APPROVED' (i.e., 'UNPAID', 'PENDING', or 'NOT_ENROLLED'):
-      // Redirect immediately to Course Catalog / Details with notice
+      // 3. IF the user status is NOT 'APPROVED':
+      // Gracefully direct pending students to the Pending Verification screen, NEVER kick out
       if (!isApproved) {
+        if (isPending) {
+          router.replace("/student?screen=payment");
+          return;
+        }
         const noticeParam = encodeURIComponent("Please complete enrollment to access your dashboard.");
         router.replace(`/student?notice=${noticeParam}`);
         return;

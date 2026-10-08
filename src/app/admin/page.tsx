@@ -36,6 +36,12 @@ import {
   Phone,
   Copy,
   ShieldAlert,
+  QrCode,
+  Upload,
+  Trash2,
+  Image as ImageIcon,
+  MessageCircle,
+  X,
 } from "lucide-react";
 import {
   getCurrentSession,
@@ -48,7 +54,7 @@ import {
 } from "@/services/authService";
 import HanoonLogo from "@/components/brand/HanoonLogo";
 import MonthlyRevenueBarChart from "@/components/charts/MonthlyRevenueBarChart";
-import { fetchPayments, updatePaymentStatus } from "@/services/paymentService";
+import { fetchPayments, updatePaymentStatus, getWhatsAppWelcomeUrl } from "@/services/paymentService";
 import { fetchStudents } from "@/services/studentService";
 import { fetchPayroll, markPayrollAsPaid, createPayrollRecord } from "@/services/payrollService";
 import {
@@ -113,8 +119,8 @@ export default function AdminDashboardPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<UserProfileRecord | null>(null);
 
-  // Active Main Tab: overview, teachers, payroll, settings
-  const [activeTab, setActiveTab] = useState<"overview" | "teachers" | "payroll" | "settings">("overview");
+  // Active Main Tab: overview, upi, teachers, payroll, settings
+  const [activeTab, setActiveTab] = useState<"overview" | "upi" | "teachers" | "payroll" | "settings">("overview");
 
   // Data States
   const [payments, setPayments] = useState<DbPayment[]>([]);
@@ -156,10 +162,59 @@ export default function AdminDashboardPage() {
     month_year: "April 2026",
   });
 
-  // Settings State Form
+  // Settings State Form & QR Management
   const [settingsForm, setSettingsForm] = useState<AppSettings>(getAppSettings());
   const [copiedUtr, setCopiedUtr] = useState<string | null>(null);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const [qrUploadNotice, setQrUploadNotice] = useState<string | null>(null);
+  const [testCopiedUpi, setTestCopiedUpi] = useState(false);
+  const [approvedWhatsAppNotice, setApprovedWhatsAppNotice] = useState<{
+    studentName: string;
+    courseName: string;
+    phone: string;
+    whatsappUrl: string;
+  } | null>(null);
+
+  const handleQrFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert("File size exceeds 5MB limit. Please upload a smaller image.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      if (dataUrl) {
+        setSettingsForm((prev) => ({
+          ...prev,
+          upiQrUrl: dataUrl,
+          qrCodeUrl: dataUrl,
+        }));
+        setQrUploadNotice(`QR image "${file.name}" loaded! Click "Save" to apply.`);
+        setTimeout(() => setQrUploadNotice(null), 4000);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleClearQrImage = () => {
+    setSettingsForm((prev) => ({
+      ...prev,
+      upiQrUrl: "",
+      qrCodeUrl: "",
+    }));
+    setQrUploadNotice("Custom QR image removed. Reset to auto-generated UPI QR.");
+    setTimeout(() => setQrUploadNotice(null), 3000);
+  };
+
+  const handleTestCopyUpi = () => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(settingsForm.upiId);
+      setTestCopiedUpi(true);
+      setTimeout(() => setTestCopiedUpi(false), 2000);
+    }
+  };
 
   const isSuperAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
   const isVerificationAdmin = currentUser?.role === "verification_admin";
@@ -324,8 +379,21 @@ export default function AdminDashboardPage() {
         details: `Approved ₹${payment.amount} (TxID: ${payment.upi_txid}) for student ${payment.student?.full_name || "Student"}.`,
       });
       setAuditLogs(getAuditLogs());
-      setSaveSuccessMsg(`Payment approved! Course unlocked for ${payment.student?.full_name || "student"}.`);
-      setTimeout(() => setSaveSuccessMsg(null), 3000);
+
+      const sName = payment.student?.full_name || "Student";
+      const cName = payment.course?.title_en || (payment.course_id === "adaviyya" ? "Adaviyya" : payment.course_id) || "Adaviyya";
+      const phone = payment.student?.whatsapp_num || "";
+      const waUrl = getWhatsAppWelcomeUrl(sName, cName, phone);
+
+      setApprovedWhatsAppNotice({
+        studentName: sName,
+        courseName: cName,
+        phone,
+        whatsappUrl: waUrl,
+      });
+
+      setSaveSuccessMsg(`Payment approved! Course unlocked for ${sName}.`);
+      setTimeout(() => setSaveSuccessMsg(null), 4000);
     } catch (e) {
       console.error("Error approving payment:", e);
     } finally {
@@ -459,8 +527,20 @@ export default function AdminDashboardPage() {
   // Settings Save Action
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    await saveAppSettings(settingsForm);
-    setSettings(settingsForm);
+    const cleanWhatsApp = settingsForm.contactWhatsApp.replace(/\D/g, "");
+    const formattedWhatsApp =
+      cleanWhatsApp.length === 10
+        ? `91${cleanWhatsApp}`
+        : cleanWhatsApp || "919846012345";
+
+    const payload = {
+      ...settingsForm,
+      contactWhatsApp: formattedWhatsApp,
+    };
+
+    await saveAppSettings(payload);
+    setSettings(payload);
+    setSettingsForm(payload);
     const updatedLogs = await fetchAuditLogs();
     setAuditLogs(updatedLogs);
     setSaveSuccessMsg("Global application settings saved & synced to Supabase!");
@@ -499,10 +579,10 @@ export default function AdminDashboardPage() {
   return (
     <div className="min-h-screen bg-purple-50 text-slate-900 font-['Plus_Jakarta_Sans'] select-none w-full overflow-x-hidden">
       {/* Top Admin Navigation Header */}
-      <header className="bg-white border-b border-purple-100 shadow-xs sticky top-0 z-40 w-full overflow-x-hidden">
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3.5 flex items-center justify-between gap-2 min-w-0">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0 shrink">
-            <HanoonLogo size="sm" />
+      <header className="bg-white border-b border-purple-100 shadow-xs sticky top-0 z-40 w-full max-w-full overflow-x-hidden">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3.5 flex items-center justify-between gap-1.5 sm:gap-2 min-w-0 max-w-full">
+          <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 shrink">
+            <HanoonLogo size="sm" compactMobile />
             <div className="hidden md:block h-5 w-px bg-purple-200 shrink-0" />
             <span
               className={`text-[9.5px] sm:text-[11px] font-black uppercase tracking-wider px-2 sm:px-2.5 py-0.5 rounded-full shrink-0 truncate ${
@@ -511,11 +591,12 @@ export default function AdminDashboardPage() {
                   : "bg-emerald-100 text-emerald-800 border border-emerald-200/60"
               }`}
             >
-              {isSuperAdmin ? "Super Admin" : "Verification Staff"}
+              <span className="sm:hidden">{isSuperAdmin ? "Admin" : "Verifier"}</span>
+              <span className="hidden sm:inline">{isSuperAdmin ? "Super Admin" : "Verification Staff"}</span>
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             <span className="text-xs font-bold text-slate-600 hidden lg:inline max-w-[130px] truncate">
               {currentUser.full_name}
             </span>
@@ -539,10 +620,10 @@ export default function AdminDashboardPage() {
               <Link
                 href="/teacher"
                 title="Faculty Portal"
-                className="py-1.5 sm:py-2 px-2 sm:px-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-xs font-bold text-purple-700 flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                className="p-1.5 sm:py-2 sm:px-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-xs font-bold text-purple-700 flex items-center gap-1 transition-colors cursor-pointer shrink-0"
               >
                 <GraduationCap className="w-3.5 h-3.5 shrink-0" />
-                <span className="hidden md:inline">Faculty View</span>
+                <span className="hidden md:inline">Faculty</span>
               </Link>
             )}
 
@@ -550,13 +631,10 @@ export default function AdminDashboardPage() {
             <Link
               href="/"
               title="Student View"
-              className="py-1.5 sm:py-2 px-2.5 sm:px-3 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-xs font-bold text-purple-700 flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+              className="p-1.5 sm:py-2 sm:px-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-xs font-bold text-purple-700 flex items-center gap-1 transition-colors cursor-pointer shrink-0"
             >
               <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
-              <span className="text-[11px] sm:text-xs font-bold">
-                <span className="sm:hidden">Student</span>
-                <span className="hidden sm:inline">Student View</span>
-              </span>
+              <span className="hidden sm:inline text-xs font-bold">Student</span>
             </Link>
 
             {/* Sign Out Button */}
@@ -564,10 +642,10 @@ export default function AdminDashboardPage() {
               type="button"
               onClick={handleSignOut}
               title="Sign Out"
-              className="py-1.5 sm:py-2 px-2 sm:px-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs font-bold text-rose-700 flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+              className="p-1.5 sm:py-2 sm:px-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs font-bold text-rose-700 flex items-center gap-1 transition-colors cursor-pointer shrink-0"
             >
               <LogOut className="w-3.5 h-3.5 shrink-0" />
-              <span className="hidden md:inline text-xs">Sign Out</span>
+              <span className="hidden sm:inline text-xs">Sign Out</span>
             </button>
           </div>
         </div>
@@ -592,6 +670,19 @@ export default function AdminDashboardPage() {
                     {pendingPaymentsCount}
                   </span>
                 )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab("upi")}
+                className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-xs border-b-2 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all shrink-0 ${
+                  activeTab === "upi"
+                    ? "border-purple-600 text-purple-700 font-extrabold"
+                    : "border-transparent text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                <QrCode className="w-4 h-4 shrink-0" />
+                <span>UPI Payment Settings</span>
               </button>
 
               <button
@@ -909,6 +1000,50 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
+              {/* Post-Approval WhatsApp Notification Trigger Prompt */}
+              {approvedWhatsAppNotice && (
+                <div className="p-4 rounded-2xl bg-emerald-50 border-2 border-emerald-300 text-emerald-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in shadow-md">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <MessageCircle className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-200/80 px-2 py-0.5 rounded-full border border-emerald-300">
+                          Payment Approved
+                        </span>
+                        <h4 className="text-xs sm:text-sm font-extrabold text-emerald-950">
+                          {approvedWhatsAppNotice.studentName} is Enrolled!
+                        </h4>
+                      </div>
+                      <p className="text-[11px] text-emerald-800 mt-0.5 font-medium">
+                        Send the official Malayalam welcome message with dashboard access link via WhatsApp:
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <a
+                      href={approvedWhatsAppNotice.whatsappUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-xs flex items-center gap-2 shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      <span>💬 Send Welcome Message on WhatsApp</span>
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => setApprovedWhatsAppNotice(null)}
+                      className="p-2 text-emerald-700 hover:text-emerald-950 hover:bg-emerald-100 rounded-xl transition-colors cursor-pointer"
+                      title="Dismiss notice"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Mobile View: Clean Verification Card List (sm:hidden) */}
               <div className="block sm:hidden space-y-3 w-full">
                 {filteredPayments.length === 0 ? (
@@ -1010,6 +1145,20 @@ export default function AdminDashboardPage() {
                                 <span>Reject</span>
                               </button>
                             </div>
+                          ) : isApproved ? (
+                            <a
+                              href={getWhatsAppWelcomeUrl(
+                                payment.student?.full_name || "Student",
+                                payment.course?.title_en || (payment.course_id === "adaviyya" ? "Adaviyya" : payment.course_id) || "Adaviyya",
+                                payment.student?.whatsapp_num || ""
+                              )}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="py-1.5 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-extrabold text-[10.5px] flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>💬 Send Welcome Message on WhatsApp</span>
+                            </a>
                           ) : (
                             <span className="text-[10px] font-semibold text-slate-400">
                               Completed
@@ -1140,6 +1289,23 @@ export default function AdminDashboardPage() {
                                     <span>Reject</span>
                                   </button>
                                 </div>
+                              ) : isApproved ? (
+                                <div className="flex items-center justify-end">
+                                  <a
+                                    href={getWhatsAppWelcomeUrl(
+                                      payment.student?.full_name || "Student",
+                                      payment.course?.title_en || (payment.course_id === "adaviyya" ? "Adaviyya" : payment.course_id) || "Adaviyya",
+                                      payment.student?.whatsapp_num || ""
+                                    )}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="py-1 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-extrabold text-[11px] flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer whitespace-nowrap"
+                                    title="Send Welcome Message on WhatsApp"
+                                  >
+                                    <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                                    <span>💬 Send Welcome Message on WhatsApp</span>
+                                  </a>
+                                </div>
                               ) : (
                                 <span className="text-[11px] font-semibold text-slate-400">
                                   Action Completed
@@ -1154,6 +1320,331 @@ export default function AdminDashboardPage() {
                 </table>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ========================================================
+            TAB: DEDICATED UPI PAYMENT & QR CODE MANAGEMENT
+            ======================================================== */}
+        {activeTab === "upi" && isSuperAdmin && (
+          <div className="space-y-6 animate-fade-in">
+            {/* Header Card */}
+            <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-purple-800 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
+              <div className="absolute right-0 top-0 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+              <div className="relative z-10 space-y-2 max-w-2xl">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-purple-200 text-xs font-bold backdrop-blur-xs border border-white/10">
+                  <QrCode className="w-3.5 h-3.5 text-purple-300" />
+                  <span>Universal Institute Finance & Checkout Configuration</span>
+                </div>
+                <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
+                  UPI & QR Code Payment Settings
+                </h1>
+                <p className="text-xs sm:text-sm text-purple-200/90 leading-relaxed font-medium">
+                  Configure the official Institute receiving UPI ID and QR code image. Changes are instantly saved to Supabase (<code className="bg-black/30 px-1.5 py-0.5 rounded text-amber-300">app_settings</code> &amp; <code className="bg-black/30 px-1.5 py-0.5 rounded text-amber-300">settings</code>) and synchronize live across all student checkout and enrollment modals.
+                </p>
+              </div>
+            </div>
+
+            {/* Notification alert banner if image loaded or settings saved */}
+            {qrUploadNotice && (
+              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold flex items-center justify-between shadow-xs animate-in fade-in">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>{qrUploadNotice}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setQrUploadNotice(null)}
+                  className="text-amber-700 hover:text-amber-950 p-1 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveSettings} className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Left Column: UPI Configuration Fields */}
+              <div className="lg:col-span-7 space-y-6">
+                {/* 1. UPI ID & Account Settings */}
+                <div className="bg-white p-6 rounded-3xl border border-purple-100 shadow-md space-y-5">
+                  <div className="flex items-center gap-2.5 pb-3 border-b border-purple-50">
+                    <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+                      <CreditCard className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-extrabold text-slate-900">
+                        Official Institute UPI Credentials
+                      </h2>
+                      <p className="text-[11px] text-slate-500">
+                        Enter the official VPA where student fees are collected
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    {/* UPI ID Field */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-extrabold text-slate-800 flex items-center justify-between">
+                        <span>Institute UPI ID (VPA) *</span>
+                        <span className="text-[10px] text-purple-600 font-bold uppercase">Primary Receiving Address</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={settingsForm.upiId}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, upiId: e.target.value.trim() })}
+                          placeholder="e.g. hanoon@upi or hanoonacademy@okhdfcbank"
+                          required
+                          className="w-full pl-4 pr-24 py-3 rounded-2xl bg-purple-50/50 border border-purple-200 focus:border-purple-600 focus:bg-white text-sm font-mono font-bold text-slate-900 outline-none transition-all"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleTestCopyUpi}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1.5 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-800 text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          {testCopiedUpi ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              <span className="text-emerald-700">Copied</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5" />
+                              <span>Copy</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-slate-500 font-medium">
+                        Students will send payments to this address. Supports GPay, PhonePe, Paytm, and BHIM.
+                      </p>
+                    </div>
+
+                    {/* Merchant Legal Name */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-extrabold text-slate-800 block">
+                        Merchant Account Title *
+                      </label>
+                      <input
+                        type="text"
+                        value={settingsForm.merchantName}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, merchantName: e.target.value })}
+                        required
+                        placeholder="e.g. Hanoon Academy of Islamic Studies"
+                        className="w-full px-4 py-3 rounded-2xl bg-purple-50/50 border border-purple-200 focus:border-purple-600 focus:bg-white text-xs font-bold text-slate-900 outline-none transition-all"
+                      />
+                      <p className="text-[11px] text-slate-500 font-medium">
+                        Official organization name displayed under UPI apps and official receipts.
+                      </p>
+                    </div>
+
+                    {/* WhatsApp Support Hotline */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-extrabold text-slate-800 flex items-center justify-between">
+                        <span>Official Payment Helpdesk WhatsApp *</span>
+                        <span className="text-[10px] text-emerald-600 font-bold uppercase">Live Chat Link</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={settingsForm.contactWhatsApp}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, contactWhatsApp: e.target.value })}
+                        placeholder="e.g. 9846012345 or 919846012345"
+                        className="w-full px-4 py-3 rounded-2xl bg-purple-50/50 border border-purple-200 focus:border-purple-600 focus:bg-white text-xs font-medium text-slate-900 outline-none transition-all"
+                      />
+                      <p className="text-[11px] text-slate-500 font-medium">
+                        Students clicking &quot;Contact Admin on WhatsApp&quot; during enrollment and payment verification will message this number directly. Enter your 10-digit number or with country code (91).
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. QR Code Image Management */}
+                <div className="bg-white p-6 rounded-3xl border border-purple-100 shadow-md space-y-5">
+                  <div className="flex items-center gap-2.5 pb-3 border-b border-purple-50">
+                    <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+                      <QrCode className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-extrabold text-slate-900">
+                        Official UPI QR Code Image
+                      </h2>
+                      <p className="text-[11px] text-slate-500">
+                        Upload custom QR image or specify a hosted image URL
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    {/* File Upload Option */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-extrabold text-slate-800 block">
+                        Option A: Upload QR Code Image (File)
+                      </label>
+                      <div className="border-2 border-dashed border-purple-200 hover:border-purple-500 rounded-2xl p-5 text-center bg-purple-50/30 transition-colors">
+                        <input
+                          type="file"
+                          id="qr-file-upload"
+                          accept="image/*"
+                          onChange={handleQrFileUpload}
+                          className="hidden"
+                        />
+                        <label
+                          htmlFor="qr-file-upload"
+                          className="flex flex-col items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <div className="w-12 h-12 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center shadow-xs">
+                            <Upload className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <span className="text-xs font-extrabold text-purple-700 block hover:underline">
+                              Click to choose a QR image file
+                            </span>
+                            <span className="text-[10.5px] text-slate-500 font-medium">
+                              PNG, JPG, WEBP, or SVG (Up to 5MB)
+                            </span>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="h-px bg-purple-100 flex-1" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">OR</span>
+                      <div className="h-px bg-purple-100 flex-1" />
+                    </div>
+
+                    {/* Image URL Option */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-extrabold text-slate-800 block">
+                        Option B: Remote Image URL (CDN / Cloud Hosted)
+                      </label>
+                      <input
+                        type="url"
+                        value={settingsForm.upiQrUrl?.startsWith("data:") ? "" : settingsForm.upiQrUrl || ""}
+                        onChange={(e) =>
+                          setSettingsForm({
+                            ...settingsForm,
+                            upiQrUrl: e.target.value.trim(),
+                            qrCodeUrl: e.target.value.trim(),
+                          })
+                        }
+                        placeholder="https://example.com/hanoon-official-qr.png"
+                        className="w-full px-4 py-3 rounded-2xl bg-purple-50/50 border border-purple-200 focus:border-purple-600 focus:bg-white text-xs font-mono text-slate-900 outline-none transition-all placeholder:text-slate-400"
+                      />
+                      <p className="text-[10px] text-slate-400">
+                        Provide a publicly accessible URL to your institute QR code graphic.
+                      </p>
+                    </div>
+
+                    {/* Reset QR Button */}
+                    {(settingsForm.upiQrUrl || settingsForm.qrCodeUrl) && (
+                      <div className="pt-2 flex justify-start">
+                        <button
+                          type="button"
+                          onClick={handleClearQrImage}
+                          className="py-2 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer border border-rose-200"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Remove Custom QR Image & Use Auto-Generated</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Save Button Action */}
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="submit"
+                    className="py-3.5 px-8 rounded-2xl bg-purple-600 hover:bg-purple-700 active:scale-[0.98] text-white font-extrabold text-xs flex items-center gap-2 shadow-lg shadow-purple-600/30 transition-all cursor-pointer"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>Save UPI Payment & QR Code Settings</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Right Column: Live Student Checkout Preview Card */}
+              <div className="lg:col-span-5 space-y-4">
+                <div className="sticky top-20 bg-white p-6 rounded-3xl border border-purple-100 shadow-xl space-y-5">
+                  <div className="flex items-center justify-between pb-3 border-b border-purple-50">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
+                      <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                        Live Student Checkout Preview
+                      </h3>
+                    </div>
+                    <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-100">
+                      Real-Time Mirror
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-slate-500">
+                    This is the exact QR Code and payment information students will see during course enrollment:
+                  </p>
+
+                  {/* QR Code Presentation Box */}
+                  <div className="rounded-3xl bg-purple-50/60 border border-purple-100 p-5 flex flex-col items-center space-y-3.5">
+                    <div className="w-52 h-52 rounded-2xl bg-white border border-purple-200 p-3 shadow-md flex items-center justify-center relative overflow-hidden">
+                      {settingsForm.upiQrUrl ? (
+                        <img
+                          src={settingsForm.upiQrUrl}
+                          alt="Configured Institute UPI QR Code"
+                          className="w-full h-full object-contain rounded-xl"
+                        />
+                      ) : (
+                        <img
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(
+                            `upi://pay?pa=${settingsForm.upiId || "hanoonacademy@upi"}&pn=${encodeURIComponent(
+                              settingsForm.merchantName || "Hanoon Academy"
+                            )}&cu=INR`
+                          )}`}
+                          alt="Auto-Generated UPI QR Code"
+                          className="w-full h-full object-contain rounded-xl"
+                        />
+                      )}
+                    </div>
+
+                    <div className="text-center space-y-1">
+                      <span className="inline-block px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800 text-[10px] font-extrabold uppercase tracking-wider">
+                        {settingsForm.upiQrUrl ? "Custom Uploaded QR" : "Auto-Generated UPI QR"}
+                      </span>
+                      <p className="text-[10.5px] text-slate-600 font-semibold">
+                        Scan with GPay, PhonePe, Paytm, or BHIM
+                      </p>
+                    </div>
+
+                    {/* Simulated Student UPI ID Display Box */}
+                    <div className="w-full p-3 rounded-2xl bg-white border border-purple-200/80 shadow-2xs space-y-1">
+                      <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400 block">
+                        Recipient UPI ID
+                      </span>
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-xs font-black text-slate-900 truncate">
+                          {settingsForm.upiId || "hanoonacademy@upi"}
+                        </span>
+                        <span className="text-[10px] text-purple-700 font-bold px-2 py-0.5 rounded-lg bg-purple-50 border border-purple-100">
+                          1-Click Copy
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-600 block pt-0.5 truncate">
+                        {settingsForm.merchantName || "Hanoon Academy of Islamic Studies"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-900 text-xs font-medium space-y-1">
+                    <p className="font-bold flex items-center gap-1.5 text-emerald-800">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>Instant Dynamic Synchronization</span>
+                    </p>
+                    <p className="text-[11px] text-emerald-700 leading-relaxed">
+                      Whenever you click &quot;Save&quot;, all student devices listening on Supabase Realtime update their QR code and payment address immediately without needing a page refresh.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </form>
           </div>
         )}
 
@@ -1652,6 +2143,67 @@ export default function AdminDashboardPage() {
                         Enable Experimental Instant UPI Auto-Approval
                       </span>
                     </label>
+                  </div>
+
+                  {/* QR Code Configuration Section */}
+                  <div className="sm:col-span-2 pt-2 border-t border-purple-50 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-700 block">
+                        Official UPI QR Code Image
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab("upi")}
+                        className="text-[11px] font-extrabold text-purple-700 hover:text-purple-900 underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <QrCode className="w-3.5 h-3.5" />
+                        <span>Open Full QR Studio Tab</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                      <div className="space-y-2">
+                        <input
+                          type="file"
+                          id="settings-qr-file"
+                          accept="image/*"
+                          onChange={handleQrFileUpload}
+                          className="hidden"
+                        />
+                        <label
+                          htmlFor="settings-qr-file"
+                          className="flex items-center justify-center gap-2 p-3 rounded-xl border border-dashed border-purple-300 hover:bg-purple-50 cursor-pointer text-xs font-bold text-purple-700"
+                        >
+                          <Upload className="w-4 h-4" />
+                          <span>Upload New QR Image</span>
+                        </label>
+                        <input
+                          type="url"
+                          placeholder="Or paste QR Image URL..."
+                          value={settingsForm.upiQrUrl?.startsWith("data:") ? "" : settingsForm.upiQrUrl || ""}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, upiQrUrl: e.target.value.trim(), qrCodeUrl: e.target.value.trim() })}
+                          className="w-full px-3 py-2 rounded-xl bg-purple-50/50 border border-purple-200 text-xs text-slate-800 outline-none"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-3 bg-purple-50/50 p-2.5 rounded-xl border border-purple-100">
+                        <div className="w-14 h-14 rounded-lg bg-white border border-purple-200 p-1 flex items-center justify-center shrink-0">
+                          {settingsForm.upiQrUrl ? (
+                            <img src={settingsForm.upiQrUrl} alt="QR" className="w-full h-full object-contain" />
+                          ) : (
+                            <QrCode className="w-8 h-8 text-purple-600" />
+                          )}
+                        </div>
+                        <div className="space-y-0.5 text-[11px]">
+                          <span className="font-extrabold text-slate-900 block">
+                            {settingsForm.upiQrUrl ? "Custom QR Image Active" : "Auto-Generated UPI QR Active"}
+                          </span>
+                          <span className="text-slate-500 block">
+                            Saved directly to Supabase settings
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
