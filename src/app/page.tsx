@@ -11,6 +11,7 @@ import ScreenOnboarding from "@/components/mobile/ScreenOnboarding";
 import ScreenPayment from "@/components/mobile/ScreenPayment";
 import ScreenDashboard from "@/components/mobile/ScreenDashboard";
 import ReceiptModal from "@/components/mobile/ReceiptModal";
+import StudentRegisterModal from "@/components/mobile/StudentRegisterModal";
 import { Lock, X } from "lucide-react";
 import { UserProfile, SelectedCourse, PaymentDetails, ScreenTab } from "@/types/app";
 import {
@@ -110,6 +111,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
   });
 
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
+  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
 
   // Check URL query parameters for access restriction notice or target screen
   useEffect(() => {
@@ -446,7 +448,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
   // Step 3 -> Step 4 (Progressive Enrollment)
   const handleProceedToRegister = () => {
     if (!userProfile.name || !userProfile.phone) {
-      setCurrentScreen("onboarding");
+      setIsRegisterModalOpen(true);
     } else {
       setCurrentScreen("payment");
     }
@@ -571,7 +573,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
           {/* Step 1: Welcome Screen (Ultra-minimalist branding & direct route to /courses) */}
           {currentScreen === "splash" && (
             <ScreenSplash
-              onGetStarted={() => setCurrentScreen("onboarding")}
+              onGetStarted={() => setIsRegisterModalOpen(true)}
               onExploreCourses={() => setCurrentScreen("courses")}
               onStaffLogin={() => router.push("/login?portal=staff")}
             />
@@ -598,15 +600,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
           {currentScreen === "onboarding" && (
             <ScreenOnboarding
               userProfile={userProfile}
-              selectedCourse={selectedCourse}
               onSaveProfile={handleSaveProfile}
-              onSelectCourse={(course) => {
-                setSelectedCourse(course);
-                setPaymentDetails((prev) => ({
-                  ...prev,
-                  amount: course.admissionFee || course.fee,
-                }));
-              }}
               onProceedToPayment={handleProceedToPayment}
               onBackToCourse={() => setCurrentScreen("splash")}
             />
@@ -645,6 +639,22 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
           hasPaymentSubmitted={hasPaymentSubmitted}
         />
       </div>
+
+      {/* Student Registration Modal / Popup (Opens ONLY when Get Started is clicked) */}
+      <StudentRegisterModal
+        isOpen={isRegisterModalOpen}
+        onClose={() => setIsRegisterModalOpen(false)}
+        onSubmit={(profile) => {
+          handleSaveProfile(profile);
+          setIsRegisterModalOpen(false);
+          if (currentScreen === "course-details") {
+            setCurrentScreen("payment");
+          } else {
+            setCurrentScreen("courses");
+          }
+        }}
+        initialProfile={userProfile}
+      />
 
       {/* Official Fee Receipt Modal */}
       <ReceiptModal

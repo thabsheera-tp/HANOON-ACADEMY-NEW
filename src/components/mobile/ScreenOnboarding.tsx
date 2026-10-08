@@ -1,24 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  User,
-  Phone,
-  MapPin,
-  Calendar,
-  ShieldCheck,
-  Lock,
-  BookOpen,
-  ChevronDown,
-} from "lucide-react";
+import { User, Phone, MapPin, Calendar, Lock } from "lucide-react";
 import { UserProfile, SelectedCourse } from "@/types/app";
-import { SHOWCASE_COURSES } from "@/components/mobile/ScreenCoursesList";
-import { getActiveCourses } from "@/services/courseService";
 
 interface ScreenOnboardingProps {
   userProfile: UserProfile;
-  selectedCourse: SelectedCourse;
+  selectedCourse?: SelectedCourse;
   onSaveProfile: (profile: UserProfile) => void;
   onSelectCourse?: (course: SelectedCourse) => void;
   onProceedToPayment: () => void;
@@ -27,53 +16,16 @@ interface ScreenOnboardingProps {
 
 export default function ScreenOnboarding({
   userProfile,
-  selectedCourse,
   onSaveProfile,
-  onSelectCourse,
   onProceedToPayment,
   onBackToCourse,
 }: ScreenOnboardingProps) {
   const router = useRouter();
-  const [courses, setCourses] = useState<SelectedCourse[]>(SHOWCASE_COURSES);
-  const [currentCourse, setCurrentCourse] = useState<SelectedCourse>(
-    selectedCourse || SHOWCASE_COURSES[0]
-  );
   const [name, setName] = useState(userProfile.name || "");
-  const [age, setAge] = useState(userProfile.age ? String(userProfile.age) : "");
   const [phone, setPhone] = useState(userProfile.phone || "");
   const [place, setPlace] = useState(userProfile.place || "");
+  const [age, setAge] = useState(userProfile.age ? String(userProfile.age) : "");
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    getActiveCourses().then((data) => {
-      if (data && data.length > 0) {
-        setCourses(data);
-        const match = data.find((c) => c.id === currentCourse.id);
-        if (match) {
-          setCurrentCourse(match);
-        }
-      }
-    });
-  }, [currentCourse.id]);
-
-  // Sync if parent updates selectedCourse
-  useEffect(() => {
-    if (selectedCourse && selectedCourse.id !== currentCourse.id) {
-      setCurrentCourse(selectedCourse);
-    }
-  }, [selectedCourse]);
-
-  const handleCourseChange = (courseId: string) => {
-    const chosen =
-      courses.find((c) => c.id === courseId) ||
-      SHOWCASE_COURSES.find((c) => c.id === courseId);
-    if (chosen) {
-      setCurrentCourse(chosen);
-      if (onSelectCourse) {
-        onSelectCourse(chosen);
-      }
-    }
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,53 +53,25 @@ export default function ScreenOnboarding({
     setError(null);
     onSaveProfile({
       name: name.trim(),
-      age: age.trim() || undefined,
       phone: phone.trim(),
       place: place.trim(),
+      age: age.trim() || undefined,
     });
-
-    if (onSelectCourse) {
-      onSelectCourse(currentCourse);
-    }
 
     onProceedToPayment();
   };
 
   return (
-    <div className="w-full max-w-md mx-auto px-4 py-5 flex-1 flex flex-col justify-between space-y-4 select-none font-['Plus_Jakarta_Sans'] bg-purple-50/30">
+    <div className="w-full max-w-md mx-auto px-4 py-6 flex-1 flex flex-col justify-between space-y-4 select-none font-['Plus_Jakarta_Sans'] bg-purple-50/30">
       <div className="space-y-4">
-        {/* Selected Course Summary Banner */}
-        <div className="bg-white p-4 rounded-2xl border border-purple-100 shadow-sm flex items-center justify-between">
-          <div className="space-y-0.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600 block">
-              Admission Registration
-            </span>
-            <h3 className="text-base font-extrabold text-slate-900 leading-tight">
-              {currentCourse.title}
-            </h3>
-            <p className="text-xs text-slate-500">
-              {currentCourse.duration}
-            </p>
-          </div>
-
-          <div className="text-right">
-            <span className="text-base font-black text-purple-700 block">
-              {currentCourse.admissionFee || currentCourse.fee}
-            </span>
-            <span className="text-[10px] text-slate-400 font-medium">
-              {currentCourse.admissionFee ? "Admission Fee" : "Course Fee"}
-            </span>
-          </div>
-        </div>
-
         {/* Form Card */}
-        <div className="bg-white p-5 rounded-2xl border border-purple-100 shadow-sm space-y-4">
+        <div className="bg-white p-5 rounded-3xl border border-purple-100 shadow-sm space-y-4">
           <div>
             <h2 className="text-xl font-black text-slate-900 tracking-tight">
-              Student Details
+              Student Registration
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Enter your details to initiate enrollment & study access.
+              Please enter your details to get started.
             </p>
           </div>
 
@@ -158,34 +82,7 @@ export default function ScreenOnboarding({
           )}
 
           <form onSubmit={handleSubmit} className="space-y-3.5">
-            {/* Field 1: Course Choice * */}
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
-                <span>
-                  Course Choice <span className="text-rose-500">*</span>
-                </span>
-                <span className="text-[11px] font-bold text-purple-600">
-                  {currentCourse.admissionFee || currentCourse.fee}
-                </span>
-              </label>
-              <div className="relative">
-                <BookOpen className="w-4 h-4 text-purple-600 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <select
-                  value={currentCourse.id}
-                  onChange={(e) => handleCourseChange(e.target.value)}
-                  className="w-full pl-10 pr-9 py-2.5 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all font-semibold appearance-none cursor-pointer"
-                >
-                  {courses.map((course) => (
-                    <option key={course.id} value={course.id}>
-                      {course.title} — {course.admissionFee ? `${course.admissionFee} admission` : course.fee}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              </div>
-            </div>
-
-            {/* Field 2: Student Full Name * */}
+            {/* Field 1: Student Full Name * */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-700 block">
                 Student Full Name <span className="text-rose-500">*</span>
@@ -203,7 +100,7 @@ export default function ScreenOnboarding({
               </div>
             </div>
 
-            {/* Field 3: WhatsApp / Mobile Number * */}
+            {/* Field 2: WhatsApp / Mobile Number * */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-700 block">
                 WhatsApp / Mobile Number <span className="text-rose-500">*</span>
@@ -221,7 +118,7 @@ export default function ScreenOnboarding({
               </div>
             </div>
 
-            {/* Field 4: Place & District * */}
+            {/* Field 3: Place & District * */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-700 block">
                 Place & District <span className="text-rose-500">*</span>
@@ -239,7 +136,7 @@ export default function ScreenOnboarding({
               </div>
             </div>
 
-            {/* Field 5: Age (Optional) */}
+            {/* Field 4: Age (Optional) */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-700 block">
                 Age <span className="text-slate-400 font-normal">(Optional)</span>
@@ -258,19 +155,13 @@ export default function ScreenOnboarding({
               </div>
             </div>
 
-            {/* Security Note */}
-            <div className="p-3 rounded-xl bg-purple-50/70 border border-purple-100 flex items-center gap-2 text-xs text-purple-800">
-              <ShieldCheck className="w-4 h-4 text-purple-600 shrink-0" />
-              <span>Your details are securely transmitted & encrypted.</span>
-            </div>
-
             {/* Submit */}
-            <div className="pt-1">
+            <div className="pt-2">
               <button
                 type="submit"
-                className="w-full py-3.5 px-6 rounded-2xl font-bold text-sm text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-md shadow-purple-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full py-3.5 px-6 rounded-2xl font-bold text-sm text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-md shadow-purple-600/25 transition-all flex items-center justify-center cursor-pointer"
               >
-                <span>Proceed to Enrollment & Fee Payment →</span>
+                <span>Submit</span>
               </button>
             </div>
           </form>
