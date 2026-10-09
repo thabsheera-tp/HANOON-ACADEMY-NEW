@@ -74,7 +74,8 @@ export default function EnrollModal({
 
   if (!isOpen) return null;
 
-  const upiId = appSettings.upiId || "hanoonacademy@upi";
+  const upiId = "mubeennk203@okhdfcbank";
+  const receiverName = "Hanoon Academy";
 
   const getCoursePricing = (courseStr: string) => {
     if (courseStr.toLowerCase().includes("adaviyya") || courseStr.toLowerCase().includes("athaviy")) {
@@ -92,14 +93,10 @@ export default function EnrollModal({
   const currentPricing = getCoursePricing(upiData.course);
 
   const qrImageSrc =
-    appSettings.upiQrUrl ||
-    appSettings.qrCodeUrl ||
-    `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi%3A%2F%2Fpay%3Fpa%3D${encodeURIComponent(
-      upiId
-    )}%26pn%3DHanoon%2520Academy%26am%3D${currentPricing.rawAmount}%26cu%3DINR`;
+    "https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi%3A%2F%2Fpay%3Fpa%3Dmubeennk203%40okhdfcbank%26pn%3DHanoon%2520Academy%26cu%3DINR";
 
   const handleCopyUPI = () => {
-    navigator.clipboard.writeText(upiId);
+    navigator.clipboard.writeText("mubeennk203@okhdfcbank");
     setCopiedUpi(true);
     setTimeout(() => setCopiedUpi(false), 2000);
   };
@@ -323,10 +320,10 @@ export default function EnrollModal({
                   <div className="w-full p-2.5 rounded-xl bg-white border border-purple-100 flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <span className="text-[9px] font-black uppercase text-purple-700 block">
-                        Official Institute UPI ID
+                        Receiver: Hanoon Academy
                       </span>
-                      <span className="font-mono text-xs font-black text-slate-900 truncate block">
-                        {upiId}
+                      <span className="font-mono text-xs font-black text-slate-900 truncate block select-all">
+                        mubeennk203@okhdfcbank
                       </span>
                     </div>
                     <button

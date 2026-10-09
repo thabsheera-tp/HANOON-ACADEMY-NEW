@@ -28,10 +28,10 @@ export interface AuditLogItem {
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  upiId: "hanoonacademy@upi",
+  upiId: "mubeennk203@okhdfcbank",
   upiQrUrl: "",
   qrCodeUrl: "",
-  merchantName: "Hanoon Academy of Islamic Studies",
+  merchantName: "Hanoon Academy",
   autoApprovalEnabled: false,
   contactWhatsApp: "919846012345",
   notificationAlerts: true,

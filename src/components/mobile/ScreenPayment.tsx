@@ -50,7 +50,6 @@ export default function ScreenPayment({
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showQR, setShowQR] = useState(true);
   const [verifiedStatus, setVerifiedStatus] = useState<"unpaid" | "pending" | "verified">(
     paymentDetails.status === "verified"
       ? "verified"
@@ -76,7 +75,9 @@ export default function ScreenPayment({
     return () => unsubscribeSettings();
   }, []);
 
-  const upiId = appSettings.upiId || "hanoonacademy@upi";
+  // Permanent hardcoded UPI Details (No environment variables or conditional fallback)
+  const upiId = "mubeennk203@okhdfcbank";
+  const receiverName = "Hanoon Academy";
 
   // Sync state if parent props update
   useEffect(() => {
@@ -176,7 +177,7 @@ export default function ScreenPayment({
   };
 
   const handleCopyUPI = () => {
-    navigator.clipboard.writeText(upiId);
+    navigator.clipboard.writeText("mubeennk203@okhdfcbank");
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -278,6 +279,70 @@ export default function ScreenPayment({
             💡 <strong>Pay the ₹500 admission fee now to unlock the course.</strong> Total Course Fee is ₹3,000; the balance can be paid later in installments.
           </div>
         )}
+      </div>
+
+      {/* Permanent Official UPI Payment Details & QR Code (Unconditionally visible to all visitors) */}
+      <div className="neumorphic-card p-5 rounded-3xl space-y-4 bg-white border border-purple-100 shadow-xs">
+        <div className="flex items-center justify-between pb-2 border-b border-purple-100/70">
+          <div className="flex items-center gap-2">
+            <QrCode className="w-4 h-4 text-purple-600" />
+            <h2 className="text-sm font-black text-slate-900 tracking-tight">
+              UPI Payment Details
+            </h2>
+          </div>
+          <span className="text-[10px] font-extrabold text-purple-700 bg-purple-100/80 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+            Hanoon Academy
+          </span>
+        </div>
+
+        {/* Permanent QR Code Display */}
+        <div className="flex flex-col items-center justify-center p-3.5 bg-purple-50/50 rounded-2xl border border-purple-100 space-y-2">
+          <div className="w-44 h-44 bg-white border-2 border-purple-200 p-2.5 rounded-2xl shadow-xs flex items-center justify-center overflow-hidden">
+            <img
+              src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi%3A%2F%2Fpay%3Fpa%3Dmubeennk203%40okhdfcbank%26pn%3DHanoon%2520Academy%26cu%3DINR"
+              alt="Hanoon Academy UPI QR Code"
+              className="w-full h-full object-contain rounded-xl"
+            />
+          </div>
+          <div className="text-center">
+            <span className="text-[11px] font-extrabold text-purple-800 tracking-wide block uppercase">
+              Scan with GPay • PhonePe • Paytm • BHIM
+            </span>
+            <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+              Account / Receiver: <strong className="text-slate-800">Hanoon Academy</strong>
+            </p>
+          </div>
+        </div>
+
+        {/* Official UPI ID 1-Click Copy Box */}
+        <div className="p-3.5 rounded-2xl bg-white border border-purple-100 flex items-center justify-between gap-3 shadow-2xs">
+          <div className="space-y-0.5 min-w-0">
+            <span className="text-[9px] font-extrabold uppercase tracking-wider text-purple-600 block">
+              UPI ID / Payment Address
+            </span>
+            <span className="font-mono text-xs sm:text-sm font-black text-slate-900 select-all block truncate">
+              mubeennk203@okhdfcbank
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleCopyUPI}
+            className="py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-xs font-bold text-white flex items-center gap-1.5 transition-all cursor-pointer shadow-xs shrink-0 active:scale-95"
+          >
+            {copied ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-white" />
+                <span>Copied!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3.5 h-3.5" />
+                <span>Copy ID</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* VERIFIED SUCCESS BANNER */}
@@ -463,7 +528,7 @@ export default function ScreenPayment({
                   2
                 </span>
                 <span>
-                  Pay exact amount <strong className="text-purple-700">{payableFeeFormatted}</strong> to our Institute UPI ID or QR.
+                  Pay exact amount <strong className="text-purple-700">{payableFeeFormatted}</strong> to UPI ID <code className="font-mono font-bold text-purple-700">mubeennk203@okhdfcbank</code> (Hanoon Academy) or scan the QR code above.
                 </span>
               </div>
               <div className="flex items-start gap-2">
@@ -481,75 +546,33 @@ export default function ScreenPayment({
             </div>
           </div>
 
-          {/* Official UPI ID Copy Box */}
-          <div className="neumorphic-button p-4 rounded-2xl flex items-center justify-between">
-            <div className="space-y-0.5">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-600 block">
-                Official UPI ID
+          {/* Quick UPI Details Reminder */}
+          <div className="neumorphic-inset p-3.5 rounded-2xl flex items-center justify-between text-xs">
+            <div className="min-w-0">
+              <span className="text-[10px] text-purple-700 font-extrabold uppercase tracking-wide block">
+                Receiver: Hanoon Academy
               </span>
-              <span className="font-mono text-sm font-black text-slate-900 select-all">
-                {upiId}
+              <span className="font-mono text-xs font-bold text-slate-900 block truncate select-all">
+                mubeennk203@okhdfcbank
               </span>
             </div>
-
             <button
               type="button"
               onClick={handleCopyUPI}
-              className="py-2 px-3 rounded-xl bg-purple-50 hover:bg-purple-100 text-xs font-bold text-purple-700 flex items-center gap-1.5 transition-colors cursor-pointer border border-purple-100 shadow-xs"
+              className="px-2.5 py-1.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 text-[11px] font-extrabold flex items-center gap-1 transition-all cursor-pointer shrink-0 border border-purple-100"
             >
               {copied ? (
                 <>
-                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                  <span className="text-emerald-700">Copied!</span>
+                  <Check className="w-3 h-3 text-emerald-600" />
+                  <span className="text-emerald-700">Copied</span>
                 </>
               ) : (
                 <>
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>Copy ID</span>
+                  <Copy className="w-3 h-3" />
+                  <span>Copy</span>
                 </>
               )}
             </button>
-          </div>
-
-          {/* Dynamic Admin-Configured QR Code Display */}
-          <div className="border border-purple-100 rounded-2xl p-4 bg-purple-50/40 flex flex-col items-center space-y-3">
-            <div className="w-full flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <QrCode className="w-4 h-4 text-purple-600" />
-                <span className="text-xs font-black text-slate-900">Institute Official UPI QR Code</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowQR((prev) => !prev)}
-                className="text-[11px] font-bold text-purple-700 hover:text-purple-900 underline cursor-pointer"
-              >
-                {showQR ? "Collapse QR" : "Show QR"}
-              </button>
-            </div>
-
-            {showQR && (
-              <div className="pt-1 flex flex-col items-center space-y-2 w-full animate-fade-in">
-                <div className="w-44 h-44 rounded-2xl bg-white border-2 border-purple-200 p-2.5 flex items-center justify-center shadow-md overflow-hidden">
-                  <img
-                    src={
-                      appSettings.upiQrUrl ||
-                      appSettings.qrCodeUrl ||
-                      `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi%3A%2F%2Fpay%3Fpa%3D${encodeURIComponent(upiId)}%26pn%3DHanoon%2520Academy%26am%3D${payableAmount}%26cu%3DINR`
-                    }
-                    alt="Official UPI Payment QR Code"
-                    className="w-full h-full object-contain rounded-xl"
-                  />
-                </div>
-                <div className="text-center space-y-0.5">
-                  <span className="text-[11px] font-extrabold text-purple-800 tracking-wide block uppercase">
-                    Scan in GPay • PhonePe • Paytm • BHIM
-                  </span>
-                  <p className="text-[10px] text-slate-500 font-medium">
-                    Pre-linked to <code className="font-mono font-bold text-purple-700">{upiId}</code> for {payableFeeFormatted}
-                  </p>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Error notice */}
