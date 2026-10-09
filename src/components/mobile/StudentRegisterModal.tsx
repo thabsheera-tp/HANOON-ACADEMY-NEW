@@ -1,14 +1,15 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, User, Phone, MapPin, Calendar, Copy, Check } from "lucide-react";
+import { X, User, Phone, MapPin, Calendar, GraduationCap } from "lucide-react";
 import { UserProfile } from "@/types/app";
 
 interface StudentRegisterModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (profile: UserProfile) => void;
+  onSubmit: (profile: UserProfile, courseChoice?: string) => void;
   initialProfile?: UserProfile;
+  initialCourseId?: string;
 }
 
 export default function StudentRegisterModal({
@@ -16,19 +17,14 @@ export default function StudentRegisterModal({
   onClose,
   onSubmit,
   initialProfile = { name: "", phone: "", place: "" },
+  initialCourseId = "adaviyya",
 }: StudentRegisterModalProps) {
+  const [courseChoice, setCourseChoice] = useState(initialCourseId);
   const [name, setName] = useState(initialProfile.name || "");
   const [phone, setPhone] = useState(initialProfile.phone || "");
   const [place, setPlace] = useState(initialProfile.place || "");
   const [age, setAge] = useState(initialProfile.age ? String(initialProfile.age) : "");
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  const handleCopyUPI = () => {
-    navigator.clipboard.writeText("mubeennk203@okhdfcbank");
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   if (!isOpen) return null;
 
@@ -56,12 +52,15 @@ export default function StudentRegisterModal({
     }
 
     setError(null);
-    onSubmit({
-      name: name.trim(),
-      phone: phone.trim(),
-      place: place.trim(),
-      age: age.trim() || undefined,
-    });
+    onSubmit(
+      {
+        name: name.trim(),
+        phone: phone.trim(),
+        place: place.trim(),
+        age: age.trim() || undefined,
+      },
+      courseChoice
+    );
   };
 
   return (
@@ -94,7 +93,26 @@ export default function StudentRegisterModal({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-3.5">
-          {/* Field 1: Student Full Name * */}
+          {/* Field 1: Course Choice * */}
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-700 block">
+              Course Choice <span className="text-rose-500">*</span>
+            </label>
+            <div className="relative">
+              <GraduationCap className="w-4 h-4 text-purple-600 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <select
+                value={courseChoice}
+                onChange={(e) => setCourseChoice(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all font-semibold appearance-none cursor-pointer"
+              >
+                <option value="adaviyya">Athaviy (അഥവിയ)</option>
+                <option value="home-tuition">Home Tuition (ഹോം ട്യൂഷൻ)</option>
+                <option value="fashion-designing">Fashion Designing (ഫാഷൻ ഡിസൈനിങ്)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Field 2: Student Full Name * */}
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-700 block">
               Student Full Name <span className="text-rose-500">*</span>
@@ -112,7 +130,7 @@ export default function StudentRegisterModal({
             </div>
           </div>
 
-          {/* Field 2: WhatsApp / Mobile Number * */}
+          {/* Field 3: WhatsApp / Mobile Number * */}
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-700 block">
               WhatsApp / Mobile Number <span className="text-rose-500">*</span>
@@ -130,7 +148,7 @@ export default function StudentRegisterModal({
             </div>
           </div>
 
-          {/* Field 3: Place & District * */}
+          {/* Field 4: Place & District * */}
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-700 block">
               Place & District <span className="text-rose-500">*</span>
@@ -148,7 +166,7 @@ export default function StudentRegisterModal({
             </div>
           </div>
 
-          {/* Field 4: Age (Optional) */}
+          {/* Field 5: Age (Optional) */}
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-700 block">
               Age <span className="text-slate-400 font-normal">(Optional)</span>
@@ -167,53 +185,7 @@ export default function StudentRegisterModal({
             </div>
           </div>
 
-          {/* Permanent Hardcoded Official UPI Payment Details & QR Code */}
-          <div className="pt-3 border-t border-purple-100 flex flex-col items-center text-center space-y-2.5">
-            <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 bg-purple-50 px-3 py-1 rounded-full border border-purple-100">
-              Official UPI Payment QR Code
-            </span>
-
-            {/* Centered QR Code Image */}
-            <div className="w-52 max-w-[210px] bg-white border-2 border-purple-200 p-2 rounded-2xl shadow-xs overflow-hidden flex items-center justify-center mx-auto">
-              <img
-                src="/qr-code.png"
-                alt="Hanoon Academy UPI QR Code"
-                className="w-full h-auto object-contain rounded-xl"
-              />
-            </div>
-
-            <div className="w-full bg-purple-50/50 border border-purple-100 rounded-2xl p-3 text-left text-xs space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Account / Receiver:</span>
-                <strong className="text-slate-900 font-extrabold text-xs">Hanoon Academy</strong>
-              </div>
-              <div className="flex justify-between items-center gap-2 pt-2 border-t border-purple-100">
-                <div className="min-w-0">
-                  <span className="text-[9px] text-purple-700 font-extrabold uppercase tracking-wider block">UPI ID:</span>
-                  <span className="font-mono text-xs font-black text-slate-900 truncate block select-all">mubeennk203@okhdfcbank</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleCopyUPI}
-                  className="py-1.5 px-2.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer shrink-0"
-                >
-                  {copied ? (
-                    <>
-                      <Check className="w-3 h-3 text-white" />
-                      <span>Copied!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3 h-3" />
-                      <span>Copy</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Submit Button */}
+          {/* Submit Registration Button Directly Below Inputs */}
           <div className="pt-2">
             <button
               type="submit"

@@ -644,8 +644,18 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
       <StudentRegisterModal
         isOpen={isRegisterModalOpen}
         onClose={() => setIsRegisterModalOpen(false)}
-        onSubmit={(profile) => {
+        onSubmit={(profile, courseChoice) => {
           handleSaveProfile(profile);
+          if (courseChoice) {
+            const found = SHOWCASE_COURSES.find((c) => c.id === courseChoice);
+            if (found) {
+              setSelectedCourse(found);
+              setPaymentDetails((prev) => ({
+                ...prev,
+                amount: found.fee,
+              }));
+            }
+          }
           setIsRegisterModalOpen(false);
           if (currentScreen === "course-details") {
             setCurrentScreen("payment");
@@ -654,6 +664,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
           }
         }}
         initialProfile={userProfile}
+        initialCourseId={selectedCourse.id}
       />
 
       {/* Official Fee Receipt Modal */}
