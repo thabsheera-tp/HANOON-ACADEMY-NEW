@@ -54,6 +54,7 @@ import {
 } from "@/services/authService";
 import HanoonLogo from "@/components/brand/HanoonLogo";
 import MonthlyRevenueBarChart from "@/components/charts/MonthlyRevenueBarChart";
+import TeacherManagementSection from "@/components/admin/TeacherManagementSection";
 import { fetchPayments, updatePaymentStatus, getWhatsAppWelcomeUrl } from "@/services/paymentService";
 import { fetchStudents } from "@/services/studentService";
 import { fetchPayroll, markPayrollAsPaid, createPayrollRecord } from "@/services/payrollService";
@@ -695,7 +696,7 @@ export default function AdminDashboardPage() {
                 }`}
               >
                 <GraduationCap className="w-4 h-4 shrink-0" />
-                <span>Faculty Oversight</span>
+                <span>Manage Teachers & Subjects</span>
               </button>
 
               <button
@@ -1652,176 +1653,17 @@ export default function AdminDashboardPage() {
             ======================================================== */}
         {activeTab === "teachers" && isSuperAdmin && (
           <div className="space-y-6 animate-fade-in">
-            {/* 1. Super Admin Oversight Metrics */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-white p-5 rounded-2xl border border-purple-100 shadow-md space-y-2">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-                  <span className="uppercase tracking-wider text-[10px]">Active Faculty</span>
-                  <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-                    <GraduationCap className="w-4 h-4" />
-                  </div>
-                </div>
-                <div className="space-y-0.5">
-                  <h3 className="text-2xl font-black text-slate-900 tracking-tight">4 Faculty Members</h3>
-                  <p className="text-[11px] text-emerald-600 font-bold flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" />
-                    <span>All verified & appointed</span>
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-white p-5 rounded-2xl border border-purple-100 shadow-md space-y-2">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-                  <span className="uppercase tracking-wider text-[10px]">Live Broadcasts</span>
-                  <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
-                    <Radio className="w-4 h-4 animate-pulse" />
-                  </div>
-                </div>
-                <div className="space-y-0.5">
-                  <h3 className="text-2xl font-black text-slate-900 tracking-tight">
-                    {teacherClasses.filter((c) => c.status === "LIVE_NOW").length} On-Air
-                  </h3>
-                  <p className="text-[11px] text-rose-600 font-bold">
-                    {teacherClasses.filter((c) => c.status === "LIVE_NOW").length > 0 ? "Active broadcast streaming" : "No broadcast active"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-white p-5 rounded-2xl border border-purple-100 shadow-md space-y-2">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-                  <span className="uppercase tracking-wider text-[10px]">Scheduled Classes</span>
-                  <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-                    <Calendar className="w-4 h-4" />
-                  </div>
-                </div>
-                <div className="space-y-0.5">
-                  <h3 className="text-2xl font-black text-slate-900 tracking-tight">
-                    {teacherClasses.filter((c) => c.status === "SCHEDULED").length} Upcoming
-                  </h3>
-                  <p className="text-[11px] text-purple-600 font-semibold">Interactive lecture rooms</p>
-                </div>
-              </div>
-
-              <div className="bg-white p-5 rounded-2xl border border-purple-100 shadow-md space-y-2">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-                  <span className="uppercase tracking-wider text-[10px]">Total Hours Taught</span>
-                  <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                    <Clock className="w-4 h-4" />
-                  </div>
-                </div>
-                <div className="space-y-0.5">
-                  <h3 className="text-2xl font-black text-slate-900 tracking-tight">
-                    {payroll.reduce((acc, p) => acc + (p.classes_taken || 0), 0) || 48} Hours
-                  </h3>
-                  <p className="text-[11px] text-slate-500 font-semibold">Total faculty teaching time</p>
-                </div>
-              </div>
-            </div>
-
-            {/* 2. Faculty Staff & Subject Assignments */}
-            <div className="bg-white rounded-2xl border border-purple-100 shadow-md p-5 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-base font-extrabold text-slate-900">
-                    Faculty Staff & Academic Assignments
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Super Admin oversight of instructors, compensation agreements, and department responsibilities.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setIsSchedulingClass(true)}
-                  className="py-2.5 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer self-start sm:self-auto"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>+ Schedule Live Class for Faculty</span>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {FACULTY_MEMBERS.map((fac) => {
-                  const teacherClassCount = teacherClasses.filter(
-                    (c) =>
-                      c.title.toLowerCase().includes(fac.shortName.toLowerCase()) ||
-                      c.courseName.toLowerCase().includes(fac.course.toLowerCase())
-                  ).length;
-
-                  return (
-                    <div
-                      key={fac.id}
-                      className="p-4 rounded-2xl border border-purple-100 bg-purple-50/20 hover:bg-purple-50/40 transition-all flex flex-col justify-between space-y-3"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-11 h-11 rounded-2xl bg-purple-600 text-white font-extrabold text-sm flex items-center justify-center shadow-xs">
-                            {fac.name.charAt(0)}
-                          </div>
-                          <div>
-                            <h3 className="text-sm font-extrabold text-slate-900 leading-tight">
-                              {fac.name}
-                            </h3>
-                            <p className="text-[11px] text-purple-700 font-semibold mt-0.5">
-                              {fac.department}
-                            </p>
-                            <span className="text-[10px] text-slate-500 font-medium block">
-                              Assigned: {fac.course}
-                            </span>
-                          </div>
-                        </div>
-
-                        <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          Active Faculty
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-2 pt-2 border-t border-purple-50 text-center">
-                        <div className="p-2 rounded-xl bg-white border border-purple-50">
-                          <span className="text-[9px] uppercase font-bold text-slate-400 block">Class Rate</span>
-                          <span className="text-xs font-black text-slate-900">₹{fac.ratePerClass}</span>
-                        </div>
-                        <div className="p-2 rounded-xl bg-white border border-purple-50">
-                          <span className="text-[9px] uppercase font-bold text-slate-400 block">Live Sessions</span>
-                          <span className="text-xs font-black text-purple-700">{teacherClassCount || 4} Total</span>
-                        </div>
-                        <div className="p-2 rounded-xl bg-white border border-purple-50">
-                          <span className="text-[9px] uppercase font-bold text-slate-400 block">Accrued</span>
-                          <span className="text-xs font-black text-emerald-700">₹{((teacherClassCount || 4) * fac.ratePerClass).toLocaleString("en-IN")}</span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between pt-1">
-                        <a
-                          href={`https://wa.me/${fac.phone}?text=Assalamu%20Alaikum%20${encodeURIComponent(fac.name)},%20Hanoon%20Academy%20Super%20Admin%20academic%20oversight.`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[11px] font-bold text-purple-700 hover:text-purple-900 inline-flex items-center gap-1 cursor-pointer"
-                        >
-                          <Phone className="w-3 h-3" />
-                          <span>WhatsApp (+{fac.phone})</span>
-                        </a>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setNewClassScheduleForm((prev) => ({
-                              ...prev,
-                              title: `${fac.course}: Weekly Core Session`,
-                              courseName: fac.course,
-                            }));
-                            setIsSchedulingClass(true);
-                          }}
-                          className="py-1 px-2.5 rounded-lg bg-white border border-purple-200 hover:bg-purple-50 text-purple-800 text-[11px] font-bold transition-all cursor-pointer"
-                        >
-                          Schedule Class
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            {/* 1. Dynamic Faculty & Subjects Management (Add, Edit, Delete, Status Toggle, Real-time DB Sync) */}
+            <TeacherManagementSection
+              onScheduleClass={(teacherName, subject) => {
+                setNewClassScheduleForm((prev) => ({
+                  ...prev,
+                  title: `${subject}: Weekly Core Session (${teacherName})`,
+                  courseName: subject,
+                }));
+                setIsSchedulingClass(true);
+              }}
+            />
 
             {/* 3. Master Live Class Schedule & Direct Super Admin Controls */}
             <div className="bg-white rounded-2xl border border-purple-100 shadow-md p-5 space-y-4">
