@@ -1,15 +1,14 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, User, Phone, MapPin, Calendar, GraduationCap } from "lucide-react";
+import { X, User, Phone, MapPin, Calendar } from "lucide-react";
 import { UserProfile } from "@/types/app";
 
 interface StudentRegisterModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (profile: UserProfile, courseChoice?: string) => void;
+  onSubmit: (profile: UserProfile) => void;
   initialProfile?: UserProfile;
-  initialCourseId?: string;
 }
 
 export default function StudentRegisterModal({
@@ -17,9 +16,7 @@ export default function StudentRegisterModal({
   onClose,
   onSubmit,
   initialProfile = { name: "", phone: "", place: "" },
-  initialCourseId = "adaviyya",
 }: StudentRegisterModalProps) {
-  const [courseChoice, setCourseChoice] = useState(initialCourseId);
   const [name, setName] = useState(initialProfile.name || "");
   const [phone, setPhone] = useState(initialProfile.phone || "");
   const [place, setPlace] = useState(initialProfile.place || "");
@@ -52,15 +49,12 @@ export default function StudentRegisterModal({
     }
 
     setError(null);
-    onSubmit(
-      {
-        name: name.trim(),
-        phone: phone.trim(),
-        place: place.trim(),
-        age: age.trim() || undefined,
-      },
-      courseChoice
-    );
+    onSubmit({
+      name: name.trim(),
+      phone: phone.trim(),
+      place: place.trim(),
+      age: age.trim() || undefined,
+    });
   };
 
   return (
@@ -93,26 +87,7 @@ export default function StudentRegisterModal({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-3.5">
-          {/* Field 1: Course Choice * */}
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-700 block">
-              Course Choice <span className="text-rose-500">*</span>
-            </label>
-            <div className="relative">
-              <GraduationCap className="w-4 h-4 text-purple-600 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <select
-                value={courseChoice}
-                onChange={(e) => setCourseChoice(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all font-semibold appearance-none cursor-pointer"
-              >
-                <option value="adaviyya">Athaviy (അഥവിയ)</option>
-                <option value="home-tuition">Home Tuition (ഹോം ട്യൂഷൻ)</option>
-                <option value="fashion-designing">Fashion Designing (ഫാഷൻ ഡിസൈനിങ്)</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Field 2: Student Full Name * */}
+          {/* Field 1: Student Full Name * */}
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-700 block">
               Student Full Name <span className="text-rose-500">*</span>
@@ -130,7 +105,7 @@ export default function StudentRegisterModal({
             </div>
           </div>
 
-          {/* Field 3: WhatsApp / Mobile Number * */}
+          {/* Field 2: WhatsApp / Mobile Number * */}
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-700 block">
               WhatsApp / Mobile Number <span className="text-rose-500">*</span>
@@ -148,7 +123,7 @@ export default function StudentRegisterModal({
             </div>
           </div>
 
-          {/* Field 4: Place & District * */}
+          {/* Field 3: Place & District * */}
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-700 block">
               Place & District <span className="text-rose-500">*</span>
@@ -166,7 +141,7 @@ export default function StudentRegisterModal({
             </div>
           </div>
 
-          {/* Field 5: Age (Optional) */}
+          {/* Field 4: Age (Optional) */}
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-700 block">
               Age <span className="text-slate-400 font-normal">(Optional)</span>
