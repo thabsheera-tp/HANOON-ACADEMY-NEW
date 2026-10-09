@@ -297,9 +297,9 @@ export default function ScreenPayment({
 
         {/* Permanent QR Code Display */}
         <div className="flex flex-col items-center justify-center p-3.5 bg-purple-50/50 rounded-2xl border border-purple-100 space-y-2">
-          <div className="w-44 h-44 bg-white border-2 border-purple-200 p-2.5 rounded-2xl shadow-xs flex items-center justify-center overflow-hidden">
+          <div className="w-52 h-52 max-w-[220px] bg-white border-2 border-purple-200 p-2 rounded-2xl shadow-xs flex items-center justify-center overflow-hidden">
             <img
-              src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi%3A%2F%2Fpay%3Fpa%3Dmubeennk203%40okhdfcbank%26pn%3DHanoon%2520Academy%26cu%3DINR"
+              src="/qr-code.png"
               alt="Hanoon Academy UPI QR Code"
               className="w-full h-full object-contain rounded-xl"
             />

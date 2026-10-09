@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, User, Phone, MapPin, Calendar } from "lucide-react";
+import { X, User, Phone, MapPin, Calendar, Copy, Check } from "lucide-react";
 import { UserProfile } from "@/types/app";
 
 interface StudentRegisterModalProps {
@@ -22,6 +22,13 @@ export default function StudentRegisterModal({
   const [place, setPlace] = useState(initialProfile.place || "");
   const [age, setAge] = useState(initialProfile.age ? String(initialProfile.age) : "");
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyUPI = () => {
+    navigator.clipboard.writeText("mubeennk203@okhdfcbank");
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   if (!isOpen) return null;
 
@@ -160,13 +167,59 @@ export default function StudentRegisterModal({
             </div>
           </div>
 
+          {/* Permanent Hardcoded Official UPI Payment Details & QR Code */}
+          <div className="pt-3 border-t border-purple-100 flex flex-col items-center text-center space-y-2.5">
+            <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 bg-purple-50 px-3 py-1 rounded-full border border-purple-100">
+              Official UPI Payment QR Code
+            </span>
+
+            {/* Centered QR Code Image */}
+            <div className="w-52 max-w-[210px] bg-white border-2 border-purple-200 p-2 rounded-2xl shadow-xs overflow-hidden flex items-center justify-center mx-auto">
+              <img
+                src="/qr-code.png"
+                alt="Hanoon Academy UPI QR Code"
+                className="w-full h-auto object-contain rounded-xl"
+              />
+            </div>
+
+            <div className="w-full bg-purple-50/50 border border-purple-100 rounded-2xl p-3 text-left text-xs space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Account / Receiver:</span>
+                <strong className="text-slate-900 font-extrabold text-xs">Hanoon Academy</strong>
+              </div>
+              <div className="flex justify-between items-center gap-2 pt-2 border-t border-purple-100">
+                <div className="min-w-0">
+                  <span className="text-[9px] text-purple-700 font-extrabold uppercase tracking-wider block">UPI ID:</span>
+                  <span className="font-mono text-xs font-black text-slate-900 truncate block select-all">mubeennk203@okhdfcbank</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCopyUPI}
+                  className="py-1.5 px-2.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer shrink-0"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-3 h-3 text-white" />
+                      <span>Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3" />
+                      <span>Copy</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Submit Button */}
           <div className="pt-2">
             <button
               type="submit"
               className="w-full py-3.5 px-6 rounded-2xl font-bold text-sm text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-md shadow-purple-600/25 transition-all flex items-center justify-center cursor-pointer"
             >
-              <span>Submit</span>
+              <span>Submit Registration</span>
             </button>
           </div>
         </form>

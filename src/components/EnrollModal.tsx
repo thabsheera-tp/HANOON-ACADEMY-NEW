@@ -92,8 +92,7 @@ export default function EnrollModal({
 
   const currentPricing = getCoursePricing(upiData.course);
 
-  const qrImageSrc =
-    "https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi%3A%2F%2Fpay%3Fpa%3Dmubeennk203%40okhdfcbank%26pn%3DHanoon%2520Academy%26cu%3DINR";
+  const qrImageSrc = "/qr-code.png";
 
   const handleCopyUPI = () => {
     navigator.clipboard.writeText("mubeennk203@okhdfcbank");
@@ -308,10 +307,10 @@ export default function EnrollModal({
 
                 {/* Dynamic QR Code & UPI ID Card */}
                 <div className="p-3.5 rounded-2xl bg-purple-50/50 border border-purple-100 flex flex-col items-center space-y-3">
-                  <div className="w-36 h-36 rounded-2xl bg-white border-2 border-purple-200 p-2 flex items-center justify-center shadow-xs overflow-hidden">
+                  <div className="w-52 h-52 max-w-[220px] rounded-2xl bg-white border-2 border-purple-200 p-2 flex items-center justify-center shadow-xs overflow-hidden">
                     <img
                       src={qrImageSrc}
-                      alt="Institute UPI QR Code"
+                      alt="Hanoon Academy UPI QR Code"
                       className="w-full h-full object-contain rounded-lg"
                     />
                   </div>
