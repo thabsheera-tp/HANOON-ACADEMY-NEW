@@ -660,27 +660,6 @@ export default function AdminDashboardPage() {
               </span>
             </button>
 
-            {/* View Switcher: Faculty View (Super Admin only) */}
-            {isSuperAdmin && (
-              <Link
-                href="/teacher"
-                title="Faculty Portal"
-                className="p-1.5 sm:py-2 sm:px-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-xs font-bold text-purple-700 flex items-center gap-1 transition-colors cursor-pointer shrink-0"
-              >
-                <GraduationCap className="w-3.5 h-3.5 shrink-0" />
-                <span className="hidden md:inline">Faculty</span>
-              </Link>
-            )}
-
-            {/* View Switcher: Student View */}
-            <Link
-              href="/"
-              title="Student View"
-              className="p-1.5 sm:py-2 sm:px-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-xs font-bold text-purple-700 flex items-center gap-1 transition-colors cursor-pointer shrink-0"
-            >
-              <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
-              <span className="hidden sm:inline text-xs font-bold">Student</span>
-            </Link>
 
             {/* Sign Out Button */}
             <button
