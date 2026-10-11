@@ -12,6 +12,7 @@ import ScreenPayment from "@/components/mobile/ScreenPayment";
 import ScreenDashboard from "@/components/mobile/ScreenDashboard";
 import ReceiptModal from "@/components/mobile/ReceiptModal";
 import StudentRegisterModal from "@/components/mobile/StudentRegisterModal";
+import { saveStudentLead } from "@/services/studentService";
 import { Lock, X } from "lucide-react";
 import { UserProfile, SelectedCourse, PaymentDetails, ScreenTab } from "@/types/app";
 import {
@@ -456,8 +457,13 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
 
   const handleSaveProfile = (profile: UserProfile) => {
     setUserProfile(profile);
-    // Treat name & phone number inputs strictly as lead/checkout info prior to payment approval.
-    // Do NOT create an active student account session before payment is approved.
+    if (profile.name && profile.phone) {
+      saveStudentLead({
+        fullName: profile.name,
+        whatsappNum: profile.phone,
+        district: profile.place || "Kerala",
+      }).catch((e) => console.warn("saveStudentLead async warning:", e));
+    }
   };
 
   // Step 4 -> Step 5

@@ -55,6 +55,7 @@ import {
 import HanoonLogo from "@/components/brand/HanoonLogo";
 import MonthlyRevenueBarChart from "@/components/charts/MonthlyRevenueBarChart";
 import TeacherManagementSection from "@/components/admin/TeacherManagementSection";
+import StudentRegistrationsSection from "@/components/admin/StudentRegistrationsSection";
 import { fetchPayments, updatePaymentStatus, getWhatsAppWelcomeUrl } from "@/services/paymentService";
 import { fetchStudents } from "@/services/studentService";
 import { fetchPayroll, markPayrollAsPaid, createPayrollRecord } from "@/services/payrollService";
@@ -655,6 +656,7 @@ export default function AdminDashboardPage() {
         <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar pt-1 border-t border-purple-50 sm:border-0">
           {isSuperAdmin ? (
             <>
+              {/* Tab 1: 🎓 Student Registrations & Payments */}
               <button
                 type="button"
                 onClick={() => setActiveTab("overview")}
@@ -664,13 +666,27 @@ export default function AdminDashboardPage() {
                     : "border-transparent text-slate-500 hover:text-slate-800"
                 }`}
               >
-                <CreditCard className="w-4 h-4 shrink-0" />
-                <span>Overview & Verification</span>
+                <Users className="w-4 h-4 shrink-0 text-purple-600" />
+                <span>🎓 Student Registrations & Payments</span>
                 {pendingPaymentsCount > 0 && (
-                  <span className="w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center">
+                  <span className="w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center animate-pulse">
                     {pendingPaymentsCount}
                   </span>
                 )}
+              </button>
+
+              {/* Tab 2: 👩‍🏫 Teachers & Subjects Management */}
+              <button
+                type="button"
+                onClick={() => setActiveTab("teachers")}
+                className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-xs border-b-2 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all shrink-0 ${
+                  activeTab === "teachers"
+                    ? "border-purple-600 text-purple-700 font-extrabold"
+                    : "border-transparent text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                <GraduationCap className="w-4 h-4 shrink-0 text-indigo-600" />
+                <span>👩‍🏫 Teachers & Subjects Management</span>
               </button>
 
               <button
@@ -683,20 +699,7 @@ export default function AdminDashboardPage() {
                 }`}
               >
                 <QrCode className="w-4 h-4 shrink-0" />
-                <span>UPI Payment Settings</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab("teachers")}
-                className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-xs border-b-2 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all shrink-0 ${
-                  activeTab === "teachers"
-                    ? "border-purple-600 text-purple-700 font-extrabold"
-                    : "border-transparent text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                <GraduationCap className="w-4 h-4 shrink-0" />
-                <span>Manage Teachers & Subjects</span>
+                <span>UPI Settings</span>
               </button>
 
               <button
@@ -709,7 +712,7 @@ export default function AdminDashboardPage() {
                 }`}
               >
                 <DollarSign className="w-4 h-4 shrink-0" />
-                <span>Teacher Payroll</span>
+                <span>Payroll</span>
               </button>
 
               <button
@@ -778,549 +781,10 @@ export default function AdminDashboardPage() {
         )}
 
         {/* ========================================================
-            TAB 1: OVERVIEW & UPI VERIFICATION MODULE
+            TAB 1: 🎓 STUDENT REGISTRATIONS & PAYMENTS VIEW
             ======================================================== */}
         {activeTab === "overview" && (
-          <div className="space-y-5 sm:space-y-6 w-full">
-            {/* 1. Stat Cards: Multi-Tier Isolation */}
-            {isSuperAdmin ? (
-              /* Super Admin Full Metrics: Total Students, Pending Payments, Active Courses, Verified Revenue */
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 w-full">
-                {/* Card 1: Total Students */}
-                <div className="bg-white p-4 sm:p-5 rounded-2xl border border-purple-100 shadow-md space-y-2 w-full min-w-0 overflow-hidden">
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-                    <span className="uppercase tracking-wider text-[10px]">Total Students</span>
-                    <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-                      <Users className="w-4 h-4" />
-                    </div>
-                  </div>
-                  <div className="space-y-0.5">
-                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">
-                      {students.length}
-                    </h3>
-                    <p className="text-[11px] text-slate-500 font-medium">
-                      {students.length === 0 ? "No students registered yet" : `${students.length} registered students`}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Card 2: Pending UPI Payments */}
-                <div className="bg-white p-4 sm:p-5 rounded-2xl border border-purple-100 shadow-md space-y-2 w-full min-w-0 overflow-hidden">
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-                    <span className="uppercase tracking-wider text-[10px]">Pending UPI Payments</span>
-                    <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-                      <Clock className="w-4 h-4" />
-                    </div>
-                  </div>
-                  <div className="space-y-0.5">
-                    <div className="flex items-baseline gap-2">
-                      <h3 className="text-2xl font-black text-slate-900 tracking-tight">
-                        {pendingPaymentsCount}
-                      </h3>
-                      <span className="text-xs font-extrabold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                        Action Required
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 font-medium">
-                      Manual UTRs awaiting review
-                    </p>
-                  </div>
-                </div>
-
-                {/* Card 3: Active Courses */}
-                <div className="bg-white p-4 sm:p-5 rounded-2xl border border-purple-100 shadow-md space-y-2 w-full min-w-0 overflow-hidden">
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-                    <span className="uppercase tracking-wider text-[10px]">Active Courses</span>
-                    <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-                      <BookOpen className="w-4 h-4" />
-                    </div>
-                  </div>
-                  <div className="space-y-0.5">
-                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">
-                      4 Programs
-                    </h3>
-                    <p className="text-[11px] text-purple-600 font-medium truncate">
-                      Adaviyya, Tuition, Fashion, Shamail
-                    </p>
-                  </div>
-                </div>
-
-                {/* Card 4: Gross Tuition Intake (Strictly Hidden from Verification Admin) */}
-                <div className="bg-white p-4 sm:p-5 rounded-2xl border border-purple-100 shadow-md space-y-2 w-full min-w-0 overflow-hidden">
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-                    <span className="uppercase tracking-wider text-[10px]">Verified Revenue</span>
-                    <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                      <DollarSign className="w-4 h-4" />
-                    </div>
-                  </div>
-                  <div className="space-y-0.5">
-                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">
-                      ₹{approvedPaymentsTotal.toLocaleString("en-IN")}
-                    </h3>
-                    <p className="text-[11px] text-slate-500 font-medium">
-                      Direct UPI settlements verified
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              /* Verification Staff Queue Metrics: Only Operational Queue Counts, No Financial Metrics */
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 w-full">
-                {/* Queue Card 1: Pending Verification */}
-                <div className="bg-white p-4 sm:p-5 rounded-2xl border border-amber-200/80 bg-amber-50/15 shadow-md space-y-2 w-full min-w-0 overflow-hidden">
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-                    <span className="uppercase tracking-wider text-[10px]">Pending In Queue</span>
-                    <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-                      <Clock className="w-4 h-4" />
-                    </div>
-                  </div>
-                  <div className="space-y-0.5">
-                    <div className="flex items-baseline gap-2">
-                      <h3 className="text-2xl font-black text-slate-900 tracking-tight">
-                        {pendingPaymentsCount}
-                      </h3>
-                      <span className="text-[10px] font-black uppercase text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-full border border-amber-300">
-                        Pending Action
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 font-medium">
-                      Student UTR submissions to verify
-                    </p>
-                  </div>
-                </div>
-
-                {/* Queue Card 2: Approved Transactions */}
-                <div className="bg-white p-4 sm:p-5 rounded-2xl border border-emerald-100 shadow-md space-y-2 w-full min-w-0 overflow-hidden">
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-                    <span className="uppercase tracking-wider text-[10px]">Approved Submissions</span>
-                    <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                      <CheckCircle2 className="w-4 h-4" />
-                    </div>
-                  </div>
-                  <div className="space-y-0.5">
-                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">
-                      {payments.filter((p) => p.status === "APPROVED").length}
-                    </h3>
-                    <p className="text-[11px] text-emerald-600 font-medium">
-                      Verified & student seats unlocked
-                    </p>
-                  </div>
-                </div>
-
-                {/* Queue Card 3: Flagged / Rejected */}
-                <div className="bg-white p-4 sm:p-5 rounded-2xl border border-rose-100 shadow-md space-y-2 w-full min-w-0 overflow-hidden">
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-                    <span className="uppercase tracking-wider text-[10px]">Flagged / Rejected</span>
-                    <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-                      <XCircle className="w-4 h-4" />
-                    </div>
-                  </div>
-                  <div className="space-y-0.5">
-                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">
-                      {payments.filter((p) => p.status === "REJECTED").length}
-                    </h3>
-                    <p className="text-[11px] text-rose-600 font-medium">
-                      Flagged for invalid UTR numbers
-                    </p>
-                  </div>
-                </div>
-
-                {/* Queue Card 4: Total Submissions */}
-                <div className="bg-white p-4 sm:p-5 rounded-2xl border border-purple-100 shadow-md space-y-2 w-full min-w-0 overflow-hidden">
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-                    <span className="uppercase tracking-wider text-[10px]">Total Submissions</span>
-                    <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-                      <CreditCard className="w-4 h-4" />
-                    </div>
-                  </div>
-                  <div className="space-y-0.5">
-                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">
-                      {payments.length}
-                    </h3>
-                    <p className="text-[11px] text-purple-600 font-medium">
-                      Total transaction records in register
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 2. Monthly Revenue Bar Chart (Strictly Super Admin Only) */}
-            {isSuperAdmin && (
-              <div className="bg-white p-4 sm:p-6 rounded-2xl border border-purple-100 shadow-md w-full overflow-hidden">
-                <MonthlyRevenueBarChart />
-              </div>
-            )}
-
-            {/* 3. Verification Module: Pending Manual UPI Payments Data Table */}
-            <div className="bg-white rounded-2xl border border-purple-100 shadow-md overflow-hidden space-y-4 p-3.5 sm:p-5 w-full">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
-                <div className="min-w-0">
-                  <h2 className="text-sm sm:text-base font-extrabold text-slate-900">
-                    Manual UPI Payment Verification
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Review 12-digit transaction UTRs submitted by students via Google Pay, PhonePe, or BHIM.
-                  </p>
-                </div>
-
-                {/* Filter and Search controls */}
-                <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
-                  <div className="relative flex-1 sm:flex-initial min-w-[130px] sm:w-56">
-                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      placeholder="Search student or UTR..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-purple-50/50 border border-purple-100 text-xs text-slate-800 outline-none focus:border-purple-600 focus:bg-white font-medium"
-                    />
-                  </div>
-
-                  <select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value as any)}
-                    aria-label="Filter payment status"
-                    className="py-1.5 px-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-xs font-bold text-slate-700 outline-none cursor-pointer shrink-0"
-                  >
-                    <option value="ALL">All Status</option>
-                    <option value="PENDING">Pending Only</option>
-                    <option value="APPROVED">Approved</option>
-                    <option value="REJECTED">Rejected</option>
-                  </select>
-
-                  <button
-                    type="button"
-                    onClick={() => loadAllData(isVerificationAdmin)}
-                    className="p-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-100 cursor-pointer shrink-0"
-                    title="Refresh Table"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Post-Approval WhatsApp Notification Trigger Prompt */}
-              {approvedWhatsAppNotice && (
-                <div className="p-4 rounded-2xl bg-emerald-50 border-2 border-emerald-300 text-emerald-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in shadow-md">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                      <MessageCircle className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-200/80 px-2 py-0.5 rounded-full border border-emerald-300">
-                          Payment Approved
-                        </span>
-                        <h4 className="text-xs sm:text-sm font-extrabold text-emerald-950">
-                          {approvedWhatsAppNotice.studentName} is Enrolled!
-                        </h4>
-                      </div>
-                      <p className="text-[11px] text-emerald-800 mt-0.5 font-medium">
-                        Send the official Malayalam welcome message with dashboard access link via WhatsApp:
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    <a
-                      href={approvedWhatsAppNotice.whatsappUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-xs flex items-center gap-2 shadow-xs transition-all cursor-pointer whitespace-nowrap"
-                    >
-                      <MessageCircle className="w-4 h-4" />
-                      <span>💬 Send Welcome Message on WhatsApp</span>
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => setApprovedWhatsAppNotice(null)}
-                      className="p-2 text-emerald-700 hover:text-emerald-950 hover:bg-emerald-100 rounded-xl transition-colors cursor-pointer"
-                      title="Dismiss notice"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Mobile View: Clean Verification Card List (sm:hidden) */}
-              <div className="block sm:hidden space-y-3 w-full">
-                {filteredPayments.length === 0 ? (
-                  <div className="py-8 text-center text-slate-400 text-xs bg-purple-50/30 rounded-xl">
-                    No payments found matching your filter criteria.
-                  </div>
-                ) : (
-                  filteredPayments.map((payment) => {
-                    const isPending = payment.status === "PENDING";
-                    const isApproved = payment.status === "APPROVED";
-                    const isRejected = payment.status === "REJECTED";
-                    const isProcessing = processingPaymentId === payment.id;
-                    const isCopied = copiedUtr === payment.upi_txid;
-
-                    return (
-                      <div
-                        key={payment.id}
-                        className={`p-3.5 rounded-2xl border transition-all space-y-2.5 ${
-                          isPending
-                            ? "bg-amber-50/30 border-amber-200/90 shadow-2xs"
-                            : isApproved
-                            ? "bg-white border-purple-100"
-                            : "bg-rose-50/20 border-rose-200/60"
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <h4 className="text-xs font-extrabold text-slate-900 leading-tight">
-                              {payment.student?.full_name || "Student"}
-                            </h4>
-                            <p className="text-[10px] text-slate-500 font-medium">
-                              {payment.student?.whatsapp_num || "WhatsApp"} • {payment.student?.district || "Kerala"}
-                            </p>
-                          </div>
-                          <span className="text-[10px] font-black text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100 shrink-0">
-                            {payment.course?.title_en || "Adaviyya Track"}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between py-1 px-2.5 rounded-xl bg-slate-50 border border-slate-100 text-[11px]">
-                          <div className="flex items-center gap-1.5 font-mono font-bold text-slate-800">
-                            <span className="text-[9px] uppercase font-sans text-slate-400">UTR:</span>
-                            <span className="select-all">{payment.upi_txid}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyUtr(payment.upi_txid)}
-                              className="p-1 hover:bg-slate-200 rounded text-slate-500 cursor-pointer"
-                              title="Copy UTR"
-                            >
-                              {isCopied ? (
-                                <Check className="w-3 h-3 text-emerald-600" />
-                              ) : (
-                                <Copy className="w-3 h-3" />
-                              )}
-                            </button>
-                          </div>
-                          <span className="font-black text-slate-900">
-                            ₹{payment.amount?.toLocaleString("en-IN") || "1,500"}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between pt-1">
-                          <div>
-                            {isApproved && (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                                <CheckCircle2 className="w-3 h-3" /> Approved
-                              </span>
-                            )}
-                            {isPending && (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full animate-pulse">
-                                <Clock className="w-3 h-3" /> Pending Review
-                              </span>
-                            )}
-                            {isRejected && (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full">
-                                <XCircle className="w-3 h-3" /> Rejected
-                              </span>
-                            )}
-                          </div>
-
-                          {isPending ? (
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleApprovePayment(payment)}
-                                disabled={isProcessing}
-                                className="py-1.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-[11px] flex items-center gap-1 shadow-xs cursor-pointer disabled:opacity-50"
-                              >
-                                <Check className="w-3.5 h-3.5" />
-                                <span>Approve</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setRejectingPayment(payment)}
-                                disabled={isProcessing}
-                                className="py-1.5 px-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-[11px] flex items-center gap-1 shadow-xs cursor-pointer disabled:opacity-50"
-                              >
-                                <XCircle className="w-3.5 h-3.5" />
-                                <span>Reject</span>
-                              </button>
-                            </div>
-                          ) : isApproved ? (
-                            <a
-                              href={getWhatsAppWelcomeUrl(
-                                payment.student?.full_name || "Student",
-                                payment.course?.title_en || (payment.course_id === "adaviyya" ? "Adaviyya" : payment.course_id) || "Adaviyya",
-                                payment.student?.whatsapp_num || ""
-                              )}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="py-1.5 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-extrabold text-[10.5px] flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
-                            >
-                              <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
-                              <span>💬 Send Welcome Message on WhatsApp</span>
-                            </a>
-                          ) : (
-                            <span className="text-[10px] font-semibold text-slate-400">
-                              Completed
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-              {/* Tablet & Desktop View: Full Data Table (hidden sm:block) */}
-              <div className="hidden sm:block w-full overflow-x-auto rounded-xl border border-purple-50">
-                <table className="w-full text-left text-xs min-w-[640px]">
-                  <thead className="bg-purple-50/60 text-slate-600 uppercase text-[10px] font-black tracking-wider border-b border-purple-100">
-                    <tr>
-                      <th className="py-3 px-4">Student Name</th>
-                      <th className="py-3 px-4">Course Track</th>
-                      <th className="py-3 px-4">Tuition Fee</th>
-                      <th className="py-3 px-4">12-Digit UTR (TxID)</th>
-                      <th className="py-3 px-4">Submitted At</th>
-                      <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-purple-50 font-medium text-slate-800">
-                    {filteredPayments.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="py-8 text-center text-slate-400 text-xs">
-                          No payments found matching your filter criteria.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredPayments.map((payment) => {
-                        const isPending = payment.status === "PENDING";
-                        const isApproved = payment.status === "APPROVED";
-                        const isRejected = payment.status === "REJECTED";
-                        const isProcessing = processingPaymentId === payment.id;
-                        const isCopied = copiedUtr === payment.upi_txid;
-
-                        return (
-                          <tr
-                            key={payment.id}
-                            className={`hover:bg-purple-50/30 transition-colors ${
-                              isPending ? "bg-amber-50/20 font-semibold" : ""
-                            }`}
-                          >
-                            <td className="py-3.5 px-4 font-bold text-slate-900">
-                              <div>{payment.student?.full_name || "Student"}</div>
-                              <div className="text-[10px] text-slate-400 font-normal">
-                                {payment.student?.whatsapp_num || "WhatsApp"} • {payment.student?.district || "Kerala"}
-                              </div>
-                            </td>
-
-                            <td className="py-3.5 px-4">
-                              <span className="font-extrabold text-purple-700">
-                                {payment.course?.title_en || "Adaviyya Track"}
-                              </span>
-                            </td>
-
-                            <td className="py-3.5 px-4 font-black text-slate-900">
-                              ₹{payment.amount?.toLocaleString("en-IN") || "1,500"}
-                            </td>
-
-                            <td className="py-3.5 px-4 font-mono font-bold text-slate-800">
-                              <div className="flex items-center gap-1.5">
-                                <span className="select-all">{payment.upi_txid}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleCopyUtr(payment.upi_txid)}
-                                  className="p-1 hover:bg-purple-100 rounded text-slate-400 hover:text-slate-700 cursor-pointer"
-                                  title="Copy UTR"
-                                >
-                                  {isCopied ? (
-                                    <Check className="w-3 h-3 text-emerald-600" />
-                                  ) : (
-                                    <Copy className="w-3 h-3" />
-                                  )}
-                                </button>
-                              </div>
-                            </td>
-
-                            <td className="py-3.5 px-4 text-[11px] text-slate-500">
-                              {payment.submitted_at || "Recent"}
-                            </td>
-
-                            <td className="py-3.5 px-4">
-                              {isApproved && (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
-                                  <CheckCircle2 className="w-3 h-3" /> Approved
-                                </span>
-                              )}
-                              {isPending && (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full animate-pulse">
-                                  <Clock className="w-3 h-3" /> Pending Review
-                                </span>
-                              )}
-                              {isRejected && (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-0.5 rounded-full">
-                                  <XCircle className="w-3 h-3" /> Flagged / Rejected
-                                </span>
-                              )}
-                            </td>
-
-                            <td className="py-3.5 px-4 text-right">
-                              {isPending ? (
-                                <div className="flex items-center justify-end gap-2">
-                                  {/* Clear Green Approve Button */}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleApprovePayment(payment)}
-                                    disabled={isProcessing}
-                                    className="py-1.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-xs flex items-center gap-1 shadow-sm transition-all cursor-pointer disabled:opacity-50"
-                                  >
-                                    <Check className="w-3.5 h-3.5" />
-                                    <span>Approve</span>
-                                  </button>
-
-                                  {/* Clear Red Reject Button */}
-                                  <button
-                                    type="button"
-                                    onClick={() => setRejectingPayment(payment)}
-                                    disabled={isProcessing}
-                                    className="py-1.5 px-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-xs flex items-center gap-1 shadow-sm transition-all cursor-pointer disabled:opacity-50"
-                                  >
-                                    <XCircle className="w-3.5 h-3.5" />
-                                    <span>Reject</span>
-                                  </button>
-                                </div>
-                              ) : isApproved ? (
-                                <div className="flex items-center justify-end">
-                                  <a
-                                    href={getWhatsAppWelcomeUrl(
-                                      payment.student?.full_name || "Student",
-                                      payment.course?.title_en || (payment.course_id === "adaviyya" ? "Adaviyya" : payment.course_id) || "Adaviyya",
-                                      payment.student?.whatsapp_num || ""
-                                    )}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="py-1 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-extrabold text-[11px] flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer whitespace-nowrap"
-                                    title="Send Welcome Message on WhatsApp"
-                                  >
-                                    <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
-                                    <span>💬 Send Welcome Message on WhatsApp</span>
-                                  </a>
-                                </div>
-                              ) : (
-                                <span className="text-[11px] font-semibold text-slate-400">
-                                  Action Completed
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+          <StudentRegistrationsSection isSuperAdmin={isSuperAdmin} />
         )}
 
         {/* ========================================================
