@@ -242,8 +242,7 @@ export function getWhatsAppWelcomeUrl(
   }
 
   const sName = studentName?.trim() || "വിദ്യാർത്ഥി";
-  const cName = courseName?.trim() || "കോഴ്സ്";
-  const message = `ഹലോ ${sName}, ഹനൂൻ അക്കാദമിയിലേക്ക് സ്വാഗതം! 🌸 നിങ്ങളുടെ ${cName} കോഴ്സിലേക്കുള്ള പേയ്മെന്റ് വിജയികരമായി സ്വികരിച്ചിരിക്കുന്നു. താഴെ കാണുന്ന ലിങ്കിലൂടെ നിങ്ങളുടെ ഡാഷ്ബോർഡിൽ പ്രവേശിച്ച് പഠനം ആരംഭിക്കാം: https://hanoonacademynew.vercel.app`;
+  const message = `ഹലോ ${sName}, ഹനൂൻ അക്കാദമിയിലേക്ക് സ്വാഗതം! നിങ്ങളുടെ പേയ്മെന്റ് സ്വീകരിച്ചിരിക്കുന്നു. നിങ്ങളുടെ കോഴ്സ് ഇപ്പോൾ ആക്ടീവ് ആണ്.`;
 
   if (phoneWithCountry) {
     return `https://wa.me/${phoneWithCountry}?text=${encodeURIComponent(message)}`;

@@ -28,6 +28,7 @@ import {
 } from "@/services/studentService";
 import { getWhatsAppWelcomeUrl } from "@/services/paymentService";
 import { addAuditLog } from "@/services/settingsService";
+import { sendWhatsAppAlert, getPaymentVerificationWhatsAppUrl } from "@/services/whatsappService";
 
 interface StudentRegistrationsSectionProps {
   isSuperAdmin?: boolean;
@@ -103,9 +104,14 @@ export default function StudentRegistrationsSection({
           details: `Verified payment and unlocked course for ${item.fullName} (${item.courseChoice}).`,
         });
 
-        const cleanPhone = item.whatsappNum.replace(/\D/g, "");
-        const formattedPhone = cleanPhone.startsWith("91") ? cleanPhone : `91${cleanPhone}`;
-        const welcomeUrl = getWhatsAppWelcomeUrl(item.fullName, item.courseChoice, formattedPhone);
+        sendWhatsAppAlert({
+          type: "PAYMENT_VERIFIED",
+          studentName: item.fullName,
+          phone: item.whatsappNum,
+          courseName: item.courseChoice,
+        });
+
+        const welcomeUrl = getPaymentVerificationWhatsAppUrl(item.whatsappNum, item.fullName);
 
         setApprovedNotification({
           name: item.fullName,
@@ -407,7 +413,7 @@ export default function StudentRegistrationsSection({
               className="py-2 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-xs flex items-center gap-2 shadow-xs transition-all cursor-pointer whitespace-nowrap"
             >
               <MessageCircle className="w-4 h-4" />
-              <span>Send WhatsApp Welcome</span>
+              <span>Send WhatsApp Alert</span>
             </a>
             <button
               type="button"
@@ -731,11 +737,11 @@ export default function StudentRegistrationsSection({
                             href={waUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="py-1.5 px-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-extrabold text-[11px] inline-flex items-center gap-1 transition-all cursor-pointer"
-                            title="Send Welcome Message via WhatsApp"
+                            className="py-1.5 px-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-extrabold text-[11px] inline-flex items-center gap-1 transition-all cursor-pointer"
+                            title="Send WhatsApp Alert to Student"
                           >
                             <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>WhatsApp</span>
+                            <span>Send WhatsApp Alert</span>
                           </a>
                         </div>
                       </td>
@@ -886,10 +892,11 @@ export default function StudentRegistrationsSection({
                         href={waUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="py-1 px-2 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 font-extrabold text-[11px] inline-flex items-center gap-1"
+                        className="py-1 px-2.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 font-extrabold text-[11px] inline-flex items-center gap-1"
+                        title="Send WhatsApp Alert to Student"
                       >
                         <MessageCircle className="w-3 h-3 text-emerald-600" />
-                        <span>WA</span>
+                        <span>Send WhatsApp Alert</span>
                       </a>
                     </div>
                   </div>

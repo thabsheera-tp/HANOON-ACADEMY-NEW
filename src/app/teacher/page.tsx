@@ -54,6 +54,7 @@ import {
   filterMaterialsByTeacher,
   filterStudentsByTeacher,
 } from "@/services/teacherAssignmentService";
+import LiveClassWhatsAppReminderModal from "@/components/admin/LiveClassWhatsAppReminderModal";
 
 export default function TeacherDashboardPage() {
   const router = useRouter();
@@ -76,6 +77,8 @@ export default function TeacherDashboardPage() {
   // Modal / Form States
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [scheduleSuccessMsg, setScheduleSuccessMsg] = useState<string | null>(null);
+  const [selectedWhatsAppClass, setSelectedWhatsAppClass] = useState<LiveClassSession | null>(null);
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
   const [newScheduleForm, setNewScheduleForm] = useState({
     title: "",
     courseId: "adaviyya",
@@ -998,7 +1001,21 @@ export default function TeacherDashboardPage() {
                         </div>
 
                         {/* Action buttons */}
-                        <div className="flex items-center gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-purple-50">
+                        <div className="flex items-center gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-purple-50 flex-wrap">
+                          {/* Send WhatsApp Alert (15-Min Reminder) */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedWhatsAppClass(cls);
+                              setIsWhatsAppModalOpen(true);
+                            }}
+                            className="py-2 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                            title="Send 15-Minute WhatsApp Reminder to Enrolled Students"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Send WhatsApp Alert</span>
+                          </button>
+
                           {isLive ? (
                             <div className="flex items-center gap-2">
                               <a
@@ -1730,6 +1747,16 @@ export default function TeacherDashboardPage() {
           </div>
         </div>
       )}
+
+      {/* 15-Minute Live Class WhatsApp Reminder Modal */}
+      <LiveClassWhatsAppReminderModal
+        isOpen={isWhatsAppModalOpen}
+        onClose={() => {
+          setIsWhatsAppModalOpen(false);
+          setSelectedWhatsAppClass(null);
+        }}
+        classSession={selectedWhatsAppClass}
+      />
     </div>
   );
 }

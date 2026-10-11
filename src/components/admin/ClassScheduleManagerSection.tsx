@@ -19,7 +19,9 @@ import {
   Link as LinkIcon,
   Search,
   Filter,
+  MessageCircle,
 } from "lucide-react";
+import LiveClassWhatsAppReminderModal from "@/components/admin/LiveClassWhatsAppReminderModal";
 import {
   getTeacherClasses,
   scheduleNewClass,
@@ -65,6 +67,8 @@ export default function ClassScheduleManagerSection({
   const [copiedLinkClassId, setCopiedLinkClassId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"ALL" | "LIVE_NOW" | "SCHEDULED" | "COMPLETED">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedWhatsAppClass, setSelectedWhatsAppClass] = useState<LiveClassSession | null>(null);
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
 
   // Data states
   const [classes, setClasses] = useState<LiveClassSession[]>([]);
@@ -675,6 +679,20 @@ export default function ClassScheduleManagerSection({
                             )}
                           </button>
 
+                          {/* Send WhatsApp Alert (15-Min Reminder) */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedWhatsAppClass(item);
+                              setIsWhatsAppModalOpen(true);
+                            }}
+                            className="py-1 px-2.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer"
+                            title="Send 15-Minute WhatsApp Reminder to Enrolled Students"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Send WhatsApp Alert</span>
+                          </button>
+
                           <a
                             href={item.meetingLink}
                             target="_blank"
@@ -697,11 +715,21 @@ export default function ClassScheduleManagerSection({
             <span>Showing {filteredClasses.length} of {classes.length} classes</span>
             <span className="font-medium text-emerald-600 flex items-center gap-1">
               <Check className="w-3.5 h-3.5" />
-              Automated Push & In-App Alert Dispatch Active
+              Automated Push & WhatsApp Alert Dispatch Active
             </span>
           </div>
         </div>
       </div>
+
+      {/* 15-Min Live Class WhatsApp Reminder Modal */}
+      <LiveClassWhatsAppReminderModal
+        isOpen={isWhatsAppModalOpen}
+        onClose={() => {
+          setIsWhatsAppModalOpen(false);
+          setSelectedWhatsAppClass(null);
+        }}
+        classSession={selectedWhatsAppClass}
+      />
     </div>
   );
 }
