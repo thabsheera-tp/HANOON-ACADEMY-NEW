@@ -111,6 +111,7 @@ export default function EnrollModal({
 
   const handleUpiSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     const cleanTx = upiData.txId.trim();
 
     if (!upiData.name.trim()) {

@@ -35,7 +35,7 @@ import {
   purgeDuplicateAndDummyRegistrations,
 } from "@/services/studentService";
 import { getWhatsAppWelcomeUrl } from "@/services/paymentService";
-import { addAuditLog } from "@/services/settingsService";
+import { addAuditLog, clearAuditLogs } from "@/services/settingsService";
 import { sendWhatsAppAlert, getPaymentVerificationWhatsAppUrl } from "@/services/whatsappService";
 
 interface StudentRegistrationsSectionProps {
@@ -53,10 +53,13 @@ export default function StudentRegistrationsSection({
   const [copiedUtr, setCopiedUtr] = useState<string | null>(null);
   const [screenshotModalItem, setScreenshotModalItem] = useState<UnifiedStudentRegistration | null>(null);
 
-  // Duplicate / Dummy Data Purge States
+  // Duplicate / Dummy Data Purge & Clear Log States
   const [isPurging, setIsPurging] = useState(false);
   const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
+  const [purgeIncludeRejected, setPurgeIncludeRejected] = useState(true);
   const [purgeSuccessMsg, setPurgeSuccessMsg] = useState<string | null>(null);
+  const [isClearingLogs, setIsClearingLogs] = useState(false);
+  const [showClearLogConfirm, setShowClearLogConfirm] = useState(false);
 
   // WhatsApp Post-Approval Prompt Banner
   const [approvedNotification, setApprovedNotification] = useState<{
@@ -185,14 +188,16 @@ export default function StudentRegistrationsSection({
     }
   };
 
-  // Purge Duplicate & Dummy Registrations
+  // Purge Duplicate, Dummy & Test Registrations
   const handlePurgeDuplicates = async () => {
     setIsPurging(true);
     try {
-      const res = await purgeDuplicateAndDummyRegistrations();
+      const res = await purgeDuplicateAndDummyRegistrations({
+        includeRejected: purgeIncludeRejected,
+      });
       setShowPurgeConfirm(false);
       setPurgeSuccessMsg(
-        `Cleanup complete: Purged ${res.purgedStudents} duplicate/dummy student record(s) and ${res.purgedPayments} duplicate payment(s). Active students: ${res.remainingCount}`
+        `Cleanup complete: Purged ${res.purgedStudents} duplicate/dummy student record(s) and ${res.purgedPayments} duplicate/test payment(s). Accurate remaining records: ${res.remainingCount}`
       );
       setTimeout(() => setPurgeSuccessMsg(null), 6000);
       await loadData();
@@ -201,6 +206,22 @@ export default function StudentRegistrationsSection({
       alert("Could not complete purge operation. Please check your network and try again.");
     } finally {
       setIsPurging(false);
+    }
+  };
+
+  // Clear Activity / System History Logs
+  const handleClearActivityLogs = async () => {
+    setIsClearingLogs(true);
+    try {
+      await clearAuditLogs();
+      setShowClearLogConfirm(false);
+      setPurgeSuccessMsg("System activity log & history successfully cleared.");
+      setTimeout(() => setPurgeSuccessMsg(null), 5000);
+    } catch (err) {
+      console.error("Failed to clear activity logs:", err);
+      alert("Could not clear activity logs. Please check your network connection.");
+    } finally {
+      setIsClearingLogs(false);
     }
   };
 
@@ -608,8 +629,20 @@ export default function StudentRegistrationsSection({
                 title="Purge duplicate registrations and dummy test records"
               >
                 <Sparkles className={`w-3.5 h-3.5 text-amber-600 ${isPurging ? "animate-spin" : ""}`} />
-                <span className="hidden sm:inline">Purge Duplicates</span>
+                <span className="hidden sm:inline">Purge Test Data</span>
                 <span className="sm:hidden">Purge</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowClearLogConfirm(true)}
+                disabled={loading || isClearingLogs}
+                className="py-2 px-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Clear activity log & reset history"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span className="hidden sm:inline">Clear Logs</span>
+                <span className="sm:hidden">Logs</span>
               </button>
 
               <button
@@ -1214,7 +1247,7 @@ export default function StudentRegistrationsSection({
               </div>
             </div>
 
-            <div className="bg-amber-50 rounded-2xl p-3.5 border border-amber-200 text-amber-900 text-xs space-y-1.5 font-medium">
+            <div className="bg-amber-50 rounded-2xl p-3.5 border border-amber-200 text-amber-900 text-xs space-y-2 font-medium">
               <div className="flex items-center gap-1.5 font-bold text-amber-950">
                 <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
                 <span>Safe Deduplication Algorithm</span>
@@ -1224,6 +1257,15 @@ export default function StudentRegistrationsSection({
                 • Multiple payments under duplicate phone numbers are linked to the primary student.<br />
                 • Duplicate identical pending payments are cleaned up.
               </p>
+              <label className="flex items-center gap-2 pt-1 border-t border-amber-200/60 font-bold text-amber-950 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={purgeIncludeRejected}
+                  onChange={(e) => setPurgeIncludeRejected(e.target.checked)}
+                  className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 border-amber-300 cursor-pointer"
+                />
+                <span>Also remove rejected test registrations</span>
+              </label>
             </div>
 
             <div className="flex items-center gap-2.5 pt-1">
@@ -1250,6 +1292,56 @@ export default function StudentRegistrationsSection({
                   <>
                     <Sparkles className="w-3.5 h-3.5" />
                     <span>Purge Now</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clear Activity Log Confirmation Modal */}
+      {showClearLogConfirm && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-rose-200 space-y-5 animate-scale-up">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+                  Clear Activity Log & Reset History?
+                </h3>
+                <p className="text-xs text-slate-500 leading-relaxed font-medium">
+                  This will safely wipe all system activity logs and audit trail history from the database and local cache. Real student and payment records will not be touched.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowClearLogConfirm(false)}
+                disabled={isClearingLogs}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleClearActivityLogs}
+                disabled={isClearingLogs}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-black text-xs inline-flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isClearingLogs ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Clearing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Yes, Clear Logs</span>
                   </>
                 )}
               </button>

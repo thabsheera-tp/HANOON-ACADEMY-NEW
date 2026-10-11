@@ -156,30 +156,57 @@ async function executeRegisterStudentAndPayment(
         throw new Error("Failed to resolve or create student record in Supabase.");
       }
 
-      // Step B: Insert payment record with PENDING status
+      // Step B: Deduplicate pending payment for same student & course
       let paymentData: any = null;
       let paymentError: any = null;
 
-      // Try inserting with screenshot_url
-      const insertPayload: any = {
-        student_id: studentData.id,
-        course_id: normalizedCourseId,
-        upi_txid: resolvedTxId,
-        amount: amount,
-        status: "PENDING" as PaymentStatus,
-      };
-      if (screenshotUrl) {
-        insertPayload.screenshot_url = screenshotUrl;
-      }
-
-      const res = await supabase
+      const { data: existingPendingPayment } = await supabase
         .from("payments")
-        .insert(insertPayload)
         .select(`
           *,
           student:students(*)
         `)
-        .single();
+        .eq("student_id", studentData.id)
+        .eq("course_id", normalizedCourseId)
+        .eq("status", "PENDING")
+        .order("submitted_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingPendingPayment) {
+        // Re-use or update pending record with latest screenshot/ref
+        if (screenshotUrl && existingPendingPayment.screenshot_url !== screenshotUrl) {
+          const { data: updatedPay } = await supabase
+            .from("payments")
+            .update({ screenshot_url: screenshotUrl, upi_txid: resolvedTxId, amount })
+            .eq("id", existingPendingPayment.id)
+            .select(`*, student:students(*)`)
+            .maybeSingle();
+          paymentData = updatedPay || existingPendingPayment;
+        } else {
+          paymentData = existingPendingPayment;
+        }
+      } else {
+        // Try inserting new payment with screenshot_url
+        const insertPayload: any = {
+          student_id: studentData.id,
+          course_id: normalizedCourseId,
+          upi_txid: resolvedTxId,
+          amount: amount,
+          status: "PENDING" as PaymentStatus,
+        };
+        if (screenshotUrl) {
+          insertPayload.screenshot_url = screenshotUrl;
+        }
+
+        const res = await supabase
+          .from("payments")
+          .insert(insertPayload)
+          .select(`
+            *,
+            student:students(*)
+          `)
+          .single();
 
       if (res.error && res.error.message?.includes("screenshot_url")) {
         // Retry without screenshot_url column if not present in schema
@@ -198,6 +225,7 @@ async function executeRegisterStudentAndPayment(
         paymentData = res.data;
         paymentError = res.error;
       }
+    }
 
       if (paymentData && screenshotUrl) {
         paymentData.screenshot_url = screenshotUrl;
@@ -850,11 +878,18 @@ export interface PurgeResult {
   remainingCount: number;
 }
 
+export interface PurgeOptions {
+  includeRejected?: boolean;
+}
+
 /**
  * Purges duplicate registrations by phone number and removes dummy test records
- * from both Supabase and localStorage.
+ * (and optionally rejected test entries) from both Supabase and localStorage.
  */
-export async function purgeDuplicateAndDummyRegistrations(): Promise<PurgeResult> {
+export async function purgeDuplicateAndDummyRegistrations(
+  options: PurgeOptions = { includeRejected: true }
+): Promise<PurgeResult> {
+  const includeRejected = options.includeRejected !== false;
   let purgedStudentsCount = 0;
   let purgedPaymentsCount = 0;
 
@@ -1026,6 +1061,38 @@ export async function purgeDuplicateAndDummyRegistrations(): Promise<PurgeResult
           purgedPaymentsCount += duplicatePaymentIdsToDelete.length;
         }
       }
+
+      // D. Purge REJECTED test payments & orphaned test students
+      if (includeRejected) {
+        const rejectedPayments = currentPayments.filter((p) => p.status === "REJECTED");
+        if (rejectedPayments.length > 0) {
+          const rejectedPayIds = rejectedPayments.map((p) => p.id);
+          const { error: delRejPayErr } = await supabase
+            .from("payments")
+            .delete()
+            .in("id", rejectedPayIds);
+          if (!delRejPayErr) {
+            purgedPaymentsCount += rejectedPayIds.length;
+          }
+
+          // Also remove student records that only had rejected test payments
+          const rejectedStudentIds = Array.from(new Set(rejectedPayments.map((p) => p.student_id)));
+          for (const sId of rejectedStudentIds) {
+            const hasOtherPayments = currentPayments.some(
+              (p) => p.student_id === sId && p.status !== "REJECTED"
+            );
+            if (!hasOtherPayments) {
+              const { error: delRejStuErr } = await supabase
+                .from("students")
+                .delete()
+                .eq("id", sId);
+              if (!delRejStuErr) {
+                purgedStudentsCount++;
+              }
+            }
+          }
+        }
+      }
     } catch (err) {
       console.warn("Supabase purge duplicate registrations error:", err);
     }
@@ -1062,8 +1129,12 @@ export async function purgeDuplicateAndDummyRegistrations(): Promise<PurgeResult
       const validStudentIds = new Set(dedupedStudents.map((s) => s.id));
 
       // Filter and deduplicate payments
-      const cleanPayments = localPaymentsRaw.filter((p) => {
+      let cleanPayments = localPaymentsRaw.filter((p) => {
         if (p.student && isDummy(p.student.full_name, p.student.whatsapp_num)) return false;
+        if (includeRejected && p.status === "REJECTED") {
+          purgedPaymentsCount++;
+          return false;
+        }
         return true;
       });
 

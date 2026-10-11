@@ -10,6 +10,7 @@ import {
   MapPin,
   ShieldCheck,
   CheckCircle,
+  RefreshCw,
 } from "lucide-react";
 import { UserProfile } from "@/types/app";
 
@@ -28,14 +29,17 @@ export default function ScreenWelcome({
   const [phone, setPhone] = useState(userProfile.phone || "");
   const [place, setPlace] = useState(userProfile.place || "");
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!name.trim() || !phone.trim() || !place.trim()) {
       setError("Please fill in Name, Phone, and Place to continue.");
       return;
     }
     setError(null);
+    setIsSubmitting(true);
     onSaveProfile({ name, phone, place });
     onContinue();
   };
@@ -179,10 +183,20 @@ export default function ScreenWelcome({
           <div className="pt-2">
             <button
               type="submit"
-              className="w-full py-4 rounded-2xl font-bold text-sm text-white bg-[#047857] hover:bg-[#035e44] shadow-md shadow-[#047857]/30 hover:shadow-lg transition-all flex items-center justify-center gap-2 active:scale-98 cursor-pointer"
+              disabled={isSubmitting}
+              className="w-full py-4 rounded-2xl font-bold text-sm text-white bg-[#047857] hover:bg-[#035e44] shadow-md shadow-[#047857]/30 hover:shadow-lg transition-all flex items-center justify-center gap-2 active:scale-98 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span>Continue to Courses</span>
-              <ArrowRight className="w-4 h-4" />
+              {isSubmitting ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Submitting...</span>
+                </>
+              ) : (
+                <>
+                  <span>Continue to Courses</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </div>
         </form>
