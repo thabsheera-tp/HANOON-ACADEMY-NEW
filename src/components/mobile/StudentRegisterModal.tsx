@@ -47,6 +47,16 @@ interface StudentRegisterModalProps {
   selectedCourseId?: string;
 }
 
+const isStaffOrOfficer = (val?: string) => {
+  const lower = (val || "").toLowerCase();
+  return (
+    lower.includes("officer") ||
+    lower.includes("staff") ||
+    lower.includes("admin") ||
+    lower.includes("verifier")
+  );
+};
+
 export default function StudentRegisterModal({
   isOpen,
   onClose,
@@ -54,17 +64,20 @@ export default function StudentRegisterModal({
   initialProfile = { name: "", phone: "", place: "" },
   selectedCourseId = "adaviyya",
 }: StudentRegisterModalProps) {
-  const [name, setName] = useState(initialProfile.name || "");
+  const initialName = isStaffOrOfficer(initialProfile.name) ? "" : initialProfile.name || "";
+  const initialPlace = isStaffOrOfficer(initialProfile.name) ? "" : initialProfile.place || "";
+
+  const [name, setName] = useState(initialName);
   const [phone, setPhone] = useState(initialProfile.phone || "");
-  const [place, setPlace] = useState(initialProfile.place || "");
+  const [place, setPlace] = useState(initialPlace);
   const [age, setAge] = useState(initialProfile.age ? String(initialProfile.age) : "");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (initialProfile.name) setName(initialProfile.name);
+    if (initialProfile.name && !isStaffOrOfficer(initialProfile.name)) setName(initialProfile.name);
     if (initialProfile.phone) setPhone(initialProfile.phone);
-    if (initialProfile.place) setPlace(initialProfile.place);
+    if (initialProfile.place && !isStaffOrOfficer(initialProfile.name)) setPlace(initialProfile.place);
   }, [initialProfile]);
 
   if (!isOpen) return null;

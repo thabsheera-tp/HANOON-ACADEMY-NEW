@@ -46,22 +46,41 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
   });
   const [accessNotice, setAccessNotice] = useState<string | null>(null);
 
-  // User Profile
+  // User Profile (Initialized cleanly without staff/admin credentials)
   const [userProfile, setUserProfile] = useState<UserProfile>(() => {
     let name = initialUser?.full_name || "";
     let phone = initialUser?.whatsapp_num || "";
     let place = initialUser?.district || "";
     let age = "";
 
+    const isStaffOrOfficer = (val?: string) => {
+      const lower = (val || "").toLowerCase();
+      return (
+        lower.includes("officer") ||
+        lower.includes("staff") ||
+        lower.includes("admin") ||
+        lower.includes("verifier")
+      );
+    };
+
+    if (
+      initialUser &&
+      (initialUser.role !== "student" || isStaffOrOfficer(initialUser.full_name))
+    ) {
+      name = "";
+      place = "";
+      phone = "";
+    }
+
     if (typeof window !== "undefined") {
       try {
         const savedProfileRaw = localStorage.getItem("hanoon_student_profile");
         if (savedProfileRaw) {
           const sp = JSON.parse(savedProfileRaw);
-          if (sp.name && !name) name = sp.name;
-          if (sp.phone && !phone) phone = sp.phone;
-          if (sp.place && !place) place = sp.place;
-          if (sp.age && !age) age = sp.age;
+          if (sp.name && !isStaffOrOfficer(sp.name)) name = sp.name;
+          if (sp.phone) phone = sp.phone;
+          if (sp.place && !isStaffOrOfficer(sp.place)) place = sp.place;
+          if (sp.age) age = sp.age;
         }
       } catch {}
 
@@ -70,12 +89,19 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
           const pendingRaw = localStorage.getItem("hanoon_pending_payment");
           if (pendingRaw) {
             const p = JSON.parse(pendingRaw);
-            if (p.studentName && !name) name = p.studentName;
+            if (p.studentName && !name && !isStaffOrOfficer(p.studentName))
+              name = p.studentName;
             if (p.studentPhone && !phone) phone = p.studentPhone;
           }
         } catch {}
       }
     }
+
+    if (isStaffOrOfficer(name)) {
+      name = "";
+      place = "";
+    }
+
     return { name, phone, place, age };
   });
 
@@ -173,12 +199,29 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     };
   }, [initialUser, router]);
 
-  // Dynamic State Fetching: Fetch the current authenticated user's actual full_name from Supabase students/profiles table
+  // Dynamic State Fetching: Fetch the current authenticated student's profile (ignoring staff/admins)
   useEffect(() => {
     const session = getCurrentSession();
     const activeUser = initialUser || session?.user;
 
-    if (activeUser) {
+    const isStaffOrOfficer = (u: any) => {
+      if (!u) return false;
+      if (u.role && u.role !== "student") return true;
+      const lower = (u.full_name || "").toLowerCase();
+      return (
+        lower.includes("officer") ||
+        lower.includes("staff") ||
+        lower.includes("admin") ||
+        lower.includes("verifier")
+      );
+    };
+
+    // If active user is staff/admin/verifier, do NOT treat them as a student profile on the student portal
+    if (activeUser && isStaffOrOfficer(activeUser)) {
+      return;
+    }
+
+    if (activeUser && activeUser.role === "student") {
       // Set active user state immediately
       setUserProfile({
         name: activeUser.full_name || "",
