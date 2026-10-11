@@ -625,23 +625,22 @@ export default function AdminDashboardPage() {
     <div className="min-h-screen bg-purple-50 text-slate-900 font-['Plus_Jakarta_Sans'] select-none w-full overflow-x-hidden">
       {/* Top Admin Navigation Header */}
       <header className="bg-white border-b border-purple-100 shadow-xs sticky top-0 z-40 w-full max-w-full overflow-x-hidden">
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3.5 flex items-center justify-between gap-1.5 sm:gap-2 min-w-0 max-w-full">
-          <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 shrink">
+        <div className="w-full max-w-md sm:max-w-6xl mx-auto px-4 sm:px-6 py-2.5 sm:py-3.5 flex items-center justify-between gap-1.5 sm:gap-2 min-w-0 max-w-full">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0 shrink">
             <HanoonLogo size="sm" compactMobile />
-            <div className="hidden md:block h-5 w-px bg-purple-200 shrink-0" />
+            <div className="hidden sm:block h-4 w-px bg-purple-200 shrink-0" />
             <span
-              className={`text-[9.5px] sm:text-[11px] font-black uppercase tracking-wider px-2 sm:px-2.5 py-0.5 rounded-full shrink-0 truncate ${
+              className={`text-[9px] sm:text-[11px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 truncate ${
                 isSuperAdmin
                   ? "bg-purple-100 text-purple-800 border border-purple-200/60"
                   : "bg-emerald-100 text-emerald-800 border border-emerald-200/60"
               }`}
             >
-              <span className="sm:hidden">{isSuperAdmin ? "Admin" : "Verifier"}</span>
-              <span className="hidden sm:inline">{isSuperAdmin ? "Super Admin" : "Verification Staff"}</span>
+              <span>{isSuperAdmin ? "Admin" : "Verifier"}</span>
             </span>
           </div>
 
-          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <span className="text-xs font-bold text-slate-600 hidden lg:inline max-w-[130px] truncate">
               {currentUser.full_name}
             </span>
@@ -651,31 +650,29 @@ export default function AdminDashboardPage() {
               type="button"
               onClick={handleToggleRolePreview}
               title={`Switch live role preview to ${isSuperAdmin ? "Verification Staff" : "Super Admin"}`}
-              className="py-1.5 sm:py-2 px-2 sm:px-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-[10px] sm:text-xs font-bold text-slate-700 flex items-center gap-1 cursor-pointer transition-colors shadow-2xs shrink-0"
+              className="py-1.5 px-2 sm:px-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-[10px] sm:text-xs font-bold text-slate-700 flex items-center gap-1 cursor-pointer transition-colors shadow-2xs shrink-0"
             >
               <ShieldCheck className={`w-3.5 h-3.5 shrink-0 ${isSuperAdmin ? "text-purple-600" : "text-emerald-600"}`} />
-              <span className="hidden sm:inline">Role:</span>
               <span className="font-extrabold text-purple-700">
                 {isSuperAdmin ? "Admin" : "Verifier"}
               </span>
             </button>
 
-
-            {/* Sign Out Button */}
+            {/* Sign Out / Logout Button */}
             <button
               type="button"
               onClick={handleSignOut}
               title="Sign Out"
-              className="p-1.5 sm:py-2 sm:px-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs font-bold text-rose-700 flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+              className="py-1.5 px-2.5 sm:px-3 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs font-bold text-rose-700 flex items-center gap-1 transition-colors cursor-pointer shrink-0"
             >
               <LogOut className="w-3.5 h-3.5 shrink-0" />
-              <span className="hidden sm:inline text-xs">Sign Out</span>
+              <span className="text-[11px] sm:text-xs font-bold">Logout</span>
             </button>
           </div>
         </div>
 
         {/* Navigation Tabs Bar */}
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar pt-1 border-t border-purple-50 sm:border-0">
+        <div className="w-full max-w-md sm:max-w-6xl mx-auto px-4 sm:px-6 flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar pt-1 border-t border-purple-50 sm:border-0">
           {/* Tab 1: 🎓 Student Registrations & Payments */}
           <button
             type="button"
@@ -827,7 +824,7 @@ export default function AdminDashboardPage() {
       </header>
 
       {/* Main Content Viewport */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-5 sm:space-y-6 w-full overflow-x-hidden">
+      <main className="w-full max-w-md sm:max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-6 pb-20 sm:pb-12 space-y-5 sm:space-y-6 overflow-x-hidden">
         {/* Success Alert Banner */}
         {saveSuccessMsg && (
           <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center justify-between shadow-xs animate-fade-in">

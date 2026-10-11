@@ -451,16 +451,16 @@ export default function StudentRegistrationsSection({
           </div>
 
           {/* Search Box & Status Filter Controls */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full lg:w-auto">
             {/* Search Input */}
-            <div className="relative min-w-[200px] sm:w-64 flex-1">
+            <div className="relative w-full sm:w-60 lg:w-64">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 placeholder="Search by name or phone..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-2 rounded-xl bg-purple-50/50 border border-purple-100 text-xs text-slate-800 placeholder-slate-400 outline-none focus:border-purple-600 focus:bg-white font-medium transition-all"
+                className="w-full pl-8 pr-8 py-2 rounded-xl bg-purple-50/50 border border-purple-100 text-xs text-slate-800 placeholder-slate-400 outline-none focus:border-purple-600 focus:bg-white font-medium transition-all"
               />
               {searchQuery && (
                 <button
@@ -474,11 +474,11 @@ export default function StudentRegistrationsSection({
             </div>
 
             {/* Filter Tabs / Select */}
-            <div className="flex items-center bg-purple-50/60 p-1 rounded-xl border border-purple-100 text-xs font-bold">
+            <div className="flex items-center bg-purple-50/60 p-1 rounded-xl border border-purple-100 text-xs font-bold overflow-x-auto no-scrollbar max-w-full">
               <button
                 type="button"
                 onClick={() => setStatusFilter("ALL")}
-                className={`py-1.5 px-3 rounded-lg transition-all cursor-pointer ${
+                className={`py-1.5 px-2.5 sm:px-3 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
                   statusFilter === "ALL"
                     ? "bg-white text-purple-700 font-extrabold shadow-2xs"
                     : "text-slate-500 hover:text-slate-800"
@@ -489,7 +489,7 @@ export default function StudentRegistrationsSection({
               <button
                 type="button"
                 onClick={() => setStatusFilter("PENDING")}
-                className={`py-1.5 px-3 rounded-lg transition-all cursor-pointer ${
+                className={`py-1.5 px-2.5 sm:px-3 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
                   statusFilter === "PENDING"
                     ? "bg-amber-100 text-amber-900 font-extrabold shadow-2xs"
                     : "text-slate-500 hover:text-slate-800"
@@ -500,7 +500,7 @@ export default function StudentRegistrationsSection({
               <button
                 type="button"
                 onClick={() => setStatusFilter("APPROVED")}
-                className={`py-1.5 px-3 rounded-lg transition-all cursor-pointer ${
+                className={`py-1.5 px-2.5 sm:px-3 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
                   statusFilter === "APPROVED"
                     ? "bg-emerald-100 text-emerald-900 font-extrabold shadow-2xs"
                     : "text-slate-500 hover:text-slate-800"
@@ -511,7 +511,7 @@ export default function StudentRegistrationsSection({
               <button
                 type="button"
                 onClick={() => setStatusFilter("REJECTED")}
-                className={`py-1.5 px-3 rounded-lg transition-all cursor-pointer ${
+                className={`py-1.5 px-2.5 sm:px-3 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
                   statusFilter === "REJECTED"
                     ? "bg-rose-100 text-rose-900 font-extrabold shadow-2xs"
                     : "text-slate-500 hover:text-slate-800"
@@ -521,47 +521,45 @@ export default function StudentRegistrationsSection({
               </button>
             </div>
 
-            {/* Export CSV Buttons */}
-            <div className="flex items-center gap-1.5">
+            {/* Export CSV & Refresh */}
+            <div className="flex items-center justify-between sm:justify-start gap-1.5 w-full sm:w-auto">
               <button
                 type="button"
                 onClick={() => handleExportCSV(true)}
                 disabled={loading || approvedCount === 0}
-                className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex-1 sm:flex-initial py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 title="Download spreadsheet of all verified / paid students"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Export Paid (CSV)</span>
-                <span className="sm:hidden">Paid CSV</span>
+                <span>Export Paid</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => handleExportCSV(false)}
                 disabled={loading || filtered.length === 0}
-                className="py-2 px-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                className="py-2 px-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 title="Download spreadsheet of currently filtered list"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Export Filtered</span>
               </button>
-            </div>
 
-            {/* Refresh Button */}
-            <button
-              type="button"
-              onClick={loadData}
-              disabled={loading}
-              className="p-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-100 transition-all cursor-pointer disabled:opacity-50"
-              title="Refresh Data from Supabase"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-            </button>
+              <button
+                type="button"
+                onClick={loadData}
+                disabled={loading}
+                className="p-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-100 transition-all cursor-pointer disabled:opacity-50"
+                title="Refresh Data from Supabase"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+              </button>
+            </div>
           </div>
         </div>
 
         {/* 4. Table (Desktop / Tablet) */}
-        <div className="hidden md:block overflow-x-auto rounded-2xl border border-purple-100">
+        <div className="hidden sm:block overflow-x-auto rounded-2xl border border-purple-100">
           <table className="w-full text-left text-xs min-w-[820px]">
             <thead className="bg-purple-50/70 text-slate-600 uppercase text-[10px] font-black tracking-wider border-b border-purple-100">
               <tr>
@@ -782,22 +780,22 @@ export default function StudentRegistrationsSection({
           </table>
         </div>
 
-        {/* 5. Mobile Cards (md:hidden) */}
-        <div className="block md:hidden space-y-3">
+        {/* 5. Mobile Cards (< 640px screen breakpoint: block sm:hidden) */}
+        <div className="block sm:hidden space-y-3.5">
           {loading && registrations.length === 0 ? (
             <div className="py-12 text-center text-slate-400 text-xs">
-              <RefreshCw className="w-4 h-4 animate-spin text-purple-600 mx-auto mb-2" />
+              <RefreshCw className="w-5 h-5 animate-spin text-purple-600 mx-auto mb-2" />
               <span>Loading student registrations...</span>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="py-12 text-center bg-purple-50/30 rounded-2xl p-6">
-              <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 mx-auto flex items-center justify-center font-bold text-lg mb-2">
+            <div className="py-12 text-center bg-purple-50/40 rounded-2xl p-6 border border-purple-100">
+              <div className="w-11 h-11 rounded-2xl bg-purple-100 text-purple-700 mx-auto flex items-center justify-center font-bold text-xl mb-2.5">
                 🎓
               </div>
-              <h4 className="text-xs font-black text-slate-800">
+              <h4 className="text-sm font-black text-slate-800">
                 {searchQuery ? "No Students Found" : "No Registrations Yet"}
               </h4>
-              <p className="text-[11px] text-slate-400 mt-0.5">
+              <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto leading-relaxed">
                 {searchQuery
                   ? "Check spelling or search by WhatsApp number."
                   : "New student registrations and screenshots will show here with 'Pending Verification' status automatically."}
@@ -806,6 +804,8 @@ export default function StudentRegistrationsSection({
           ) : (
             filtered.map((item) => {
               const isVerified = item.paymentStatus === "APPROVED";
+              const isRejected = item.paymentStatus === "REJECTED";
+              const isPending = !isVerified && !isRejected;
               const isProcessing = processingId === item.id;
 
               const cleanPhone = item.whatsappNum.replace(/\D/g, "");
@@ -816,147 +816,180 @@ export default function StudentRegistrationsSection({
                 <div
                   key={item.id}
                   className={`p-4 rounded-2xl border space-y-3 transition-all ${
-                    !isVerified
-                      ? "bg-amber-50/30 border-amber-200 shadow-2xs"
-                      : "bg-white border-purple-100 shadow-xs"
+                    isPending
+                      ? "bg-amber-50/40 border-amber-200/90 shadow-sm ring-1 ring-amber-100"
+                      : isVerified
+                      ? "bg-white border-purple-100 shadow-xs"
+                      : "bg-rose-50/30 border-rose-200/70 shadow-xs"
                   }`}
                 >
+                  {/* Card Header: Student Name + Date + Status Badge */}
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white font-extrabold text-xs flex items-center justify-center shrink-0">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white font-extrabold text-xs flex items-center justify-center shrink-0 shadow-2xs">
                         {item.fullName.charAt(0).toUpperCase()}
                       </div>
-                      <div>
-                        <h4 className="text-xs font-black text-slate-900 leading-tight">
+                      <div className="min-w-0">
+                        <h4 className="text-sm font-black text-slate-900 leading-tight truncate">
                           {item.fullName}
                         </h4>
                         <p className="text-[10px] text-slate-500 font-medium">
-                          {item.district || "Kerala"} •{" "}
                           {new Date(item.registrationDate).toLocaleDateString("en-IN", {
                             day: "numeric",
                             month: "short",
+                            year: "numeric",
                           })}
                         </p>
                       </div>
                     </div>
 
                     {/* Status Badge */}
-                    <div>
-                      {item.paymentStatus === "APPROVED" ? (
-                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 font-black text-[10px] border border-emerald-300">
-                          🟢 Verified
+                    <div className="shrink-0">
+                      {isVerified ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 font-black text-[10px] border border-emerald-300">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span>Verified</span>
                         </span>
-                      ) : item.paymentStatus === "REJECTED" ? (
-                        <span className="px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-800 font-black text-[10px] border border-rose-300">
-                          🔴 Rejected
+                      ) : isRejected ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-800 font-black text-[10px] border border-rose-300">
+                          <XCircle className="w-3 h-3 text-rose-600" />
+                          <span>Rejected</span>
                         </span>
                       ) : (
-                        <span className="px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 font-black text-[10px] border border-amber-300 animate-pulse">
-                          🟡 Pending
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 font-black text-[10px] border border-amber-300 animate-pulse">
+                          <Clock className="w-3 h-3 text-amber-600" />
+                          <span>Pending</span>
                         </span>
                       )}
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between py-1.5 px-3 rounded-xl bg-purple-50/50 border border-purple-100/60 text-xs">
-                    <span className="font-extrabold text-purple-900 truncate">
-                      {item.courseChoice}
+                  {/* Course & Amount Row */}
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-purple-50/60 border border-purple-100/70 text-xs">
+                    <div className="min-w-0 pr-2">
+                      <span className="text-[10px] uppercase font-bold text-purple-600 block leading-tight">
+                        Course
+                      </span>
+                      <span className="font-extrabold text-slate-900 truncate block">
+                        {item.courseChoice}
+                      </span>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block leading-tight">
+                        Fee Amount
+                      </span>
+                      <span className="font-black text-purple-700 text-sm">
+                        ₹{item.amount?.toLocaleString("en-IN") || "1,500"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* District & WhatsApp Contact */}
+                  <div className="flex items-center justify-between text-xs text-slate-600 px-0.5">
+                    <span className="text-[11px] font-medium text-slate-500">
+                      📍 {item.district || "Kerala"}
                     </span>
                     <a
                       href={`https://wa.me/${formattedPhone}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="font-mono font-bold text-slate-800 text-[11px] inline-flex items-center gap-1 hover:underline"
+                      className="font-mono font-bold text-purple-700 text-[11px] inline-flex items-center gap-1 hover:underline"
                     >
                       <Phone className="w-3 h-3 text-emerald-600" />
                       <span>{item.whatsappNum}</span>
                     </a>
                   </div>
 
-                  {/* Mobile Payment Screenshot Card (Replacing text UTR) */}
+                  {/* Uploaded Screenshot Thumbnail Section */}
                   {item.screenshotUrl ? (
-                    <div className="flex items-center justify-between p-2 rounded-xl bg-purple-50/70 border border-purple-100">
-                      <div
-                        onClick={() => setScreenshotModalItem(item)}
-                        className="flex items-center gap-2.5 cursor-pointer min-w-0"
-                      >
-                        <div className="relative w-11 h-11 rounded-lg overflow-hidden border border-purple-200 bg-white shrink-0 shadow-2xs">
+                    <div
+                      onClick={() => setScreenshotModalItem(item)}
+                      className="flex items-center justify-between p-2.5 rounded-xl bg-purple-50/80 hover:bg-purple-100/80 border border-purple-200 transition-all cursor-pointer active:scale-[0.99]"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-purple-200 bg-white shrink-0 shadow-2xs">
                           <img
                             src={item.screenshotUrl}
                             alt={`Receipt of ${item.fullName}`}
                             className="w-full h-full object-cover"
                           />
-                          <div className="absolute inset-0 bg-black/25 flex items-center justify-center text-white">
-                            <Eye className="w-3 h-3" />
+                          <div className="absolute inset-0 bg-black/20 flex items-center justify-center text-white">
+                            <Eye className="w-3.5 h-3.5" />
                           </div>
                         </div>
                         <div className="min-w-0">
-                          <span className="text-xs font-black text-slate-800 block leading-tight">
+                          <span className="text-xs font-black text-slate-900 block leading-tight">
                             Payment Screenshot
                           </span>
                           <span className="text-[10px] text-purple-700 font-bold block mt-0.5">
-                            Tap to enlarge receipt
+                            Tap to view full receipt
                           </span>
                         </div>
                       </div>
+
                       <button
                         type="button"
-                        onClick={() => setScreenshotModalItem(item)}
-                        className="py-1 px-2.5 rounded-lg bg-white border border-purple-200 text-purple-700 font-extrabold text-[11px] shadow-2xs hover:bg-purple-50 flex items-center gap-1 cursor-pointer shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setScreenshotModalItem(item);
+                        }}
+                        className="py-1 px-2.5 rounded-lg bg-white border border-purple-200 text-purple-700 font-extrabold text-[11px] shadow-2xs flex items-center gap-1 shrink-0"
                       >
                         <Eye className="w-3 h-3" />
                         <span>View</span>
                       </button>
                     </div>
                   ) : (
-                    <div className="text-[10px] text-slate-400 italic px-1 flex items-center gap-1.5">
+                    <div className="text-[10px] text-slate-400 italic p-2 rounded-xl bg-slate-50 border border-slate-100 flex items-center gap-1.5">
                       <ImageIcon className="w-3.5 h-3.5 text-slate-300 shrink-0" />
-                      <span>No screenshot attached</span>
+                      <span>No screenshot proof attached</span>
                     </div>
                   )}
 
-                  {/* Actions on Mobile */}
-                  <div className="flex items-center justify-between pt-1 border-t border-purple-50/80 gap-2 flex-wrap">
-                    <span className="text-xs font-black text-slate-900">
-                      ₹{item.amount?.toLocaleString("en-IN") || "1,500"}
-                    </span>
-
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {item.paymentStatus !== "APPROVED" && (
-                        <button
-                          type="button"
-                          onClick={() => handleVerifyStatus(item)}
-                          disabled={isProcessing}
-                          className="py-1 px-2 rounded-xl bg-emerald-600 text-white font-extrabold text-[11px] inline-flex items-center gap-1 shadow-xs cursor-pointer disabled:opacity-50"
-                        >
-                          <CheckCircle2 className="w-3 h-3" />
-                          <span>Verify</span>
-                        </button>
-                      )}
-
-                      {item.paymentStatus !== "REJECTED" && (
-                        <button
-                          type="button"
-                          onClick={() => handleRejectStatus(item)}
-                          disabled={isProcessing}
-                          className="py-1 px-2 rounded-xl bg-rose-600 text-white font-extrabold text-[11px] inline-flex items-center gap-1 shadow-xs cursor-pointer disabled:opacity-50"
-                        >
-                          <XCircle className="w-3 h-3" />
-                          <span>Reject</span>
-                        </button>
-                      )}
-
-                      <a
-                        href={waUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="py-1 px-2.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 font-extrabold text-[11px] inline-flex items-center gap-1"
-                        title="Send WhatsApp Alert to Student"
+                  {/* Action Buttons: Neatly aligned side-by-side & full-width */}
+                  <div className="space-y-2 pt-1 border-t border-purple-100/80">
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleVerifyStatus(item)}
+                        disabled={isProcessing || isVerified}
+                        className={`w-full py-2.5 px-3 rounded-xl font-black text-xs inline-flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer min-h-[44px] ${
+                          isVerified
+                            ? "bg-emerald-100 text-emerald-800 border border-emerald-200 cursor-default"
+                            : "bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white disabled:opacity-50"
+                        }`}
+                        title="Approve / Mark Verified"
                       >
-                        <MessageCircle className="w-3 h-3 text-emerald-600" />
-                        <span>Send WhatsApp Alert</span>
-                      </a>
+                        <CheckCircle2 className="w-4 h-4 shrink-0" />
+                        <span className="truncate">{isProcessing ? "Processing..." : isVerified ? "Approved ✅" : "Approve ✅"}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRejectStatus(item)}
+                        disabled={isProcessing || isRejected}
+                        className={`w-full py-2.5 px-3 rounded-xl font-black text-xs inline-flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer min-h-[44px] ${
+                          isRejected
+                            ? "bg-rose-100 text-rose-800 border border-rose-200 cursor-default"
+                            : "bg-rose-600 hover:bg-rose-700 active:scale-95 text-white disabled:opacity-50"
+                        }`}
+                        title="Reject Registration"
+                      >
+                        <XCircle className="w-4 h-4 shrink-0" />
+                        <span className="truncate">{isProcessing ? "Processing..." : isRejected ? "Rejected ❌" : "Reject ❌"}</span>
+                      </button>
                     </div>
+
+                    {/* WhatsApp Action Alert Button */}
+                    <a
+                      href={waUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-2 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all min-h-[38px]"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>Send WhatsApp Alert</span>
+                    </a>
                   </div>
                 </div>
               );
@@ -1020,8 +1053,8 @@ export default function StudentRegistrationsSection({
             </div>
 
             {/* Modal Footer with Verification Actions & Status */}
-            <div className="p-4 sm:p-5 border-t border-purple-100 bg-white flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="p-3.5 sm:p-5 border-t border-purple-100 bg-white flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div className="flex items-center justify-between sm:justify-start gap-2 w-full sm:w-auto">
                 <span className="text-xs text-slate-500 font-semibold">Status:</span>
                 {screenshotModalItem.paymentStatus === "APPROVED" ? (
                   <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 font-black text-xs border border-emerald-300">
@@ -1039,7 +1072,7 @@ export default function StudentRegistrationsSection({
               </div>
 
               {/* Verification Action Buttons inside Modal */}
-              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap sm:flex-nowrap">
                 {screenshotModalItem.paymentStatus !== "APPROVED" && (
                   <button
                     type="button"
@@ -1048,10 +1081,10 @@ export default function StudentRegistrationsSection({
                       setScreenshotModalItem(null);
                     }}
                     disabled={processingId === screenshotModalItem.id}
-                    className="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs inline-flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                    className="flex-1 sm:flex-initial py-2.5 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs inline-flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50 min-h-[42px]"
                   >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Verify & Approve</span>
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>Approve ✅</span>
                   </button>
                 )}
 
@@ -1063,10 +1096,10 @@ export default function StudentRegistrationsSection({
                       setScreenshotModalItem(null);
                     }}
                     disabled={processingId === screenshotModalItem.id}
-                    className="py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-black text-xs inline-flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                    className="flex-1 sm:flex-initial py-2.5 px-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-black text-xs inline-flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50 min-h-[42px]"
                   >
-                    <XCircle className="w-4 h-4" />
-                    <span>Reject</span>
+                    <XCircle className="w-4 h-4 shrink-0" />
+                    <span>Reject ❌</span>
                   </button>
                 )}
 
@@ -1075,7 +1108,7 @@ export default function StudentRegistrationsSection({
                     href={screenshotModalItem.screenshotUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="py-2.5 px-3 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs inline-flex items-center gap-1.5 border border-purple-200 transition-colors"
+                    className="py-2.5 px-3 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs inline-flex items-center justify-center gap-1.5 border border-purple-200 transition-colors min-h-[42px]"
                     title="Open full image in new tab"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
@@ -1086,7 +1119,7 @@ export default function StudentRegistrationsSection({
                 <button
                   type="button"
                   onClick={() => setScreenshotModalItem(null)}
-                  className="py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+                  className="py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer text-center min-h-[42px]"
                 >
                   Close
                 </button>
