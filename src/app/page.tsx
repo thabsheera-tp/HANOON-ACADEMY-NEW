@@ -499,8 +499,8 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
 
   const handleBack = () => {
     if (currentScreen === "dashboard") setCurrentScreen("courses");
-    else if (currentScreen === "payment") setCurrentScreen("onboarding");
-    else if (currentScreen === "onboarding") setCurrentScreen("splash");
+    else if (currentScreen === "payment") setCurrentScreen("course-details");
+    else if (currentScreen === "onboarding") setCurrentScreen("courses");
     else if (currentScreen === "course-details") setCurrentScreen("courses");
     else if (currentScreen === "courses") {
       setCurrentScreen("splash");
@@ -513,6 +513,13 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     (paymentDetails.status as string) === "APPROVED" ||
     (paymentDetails.status as string) === "ACTIVE";
   const hasPaymentSubmitted = paymentDetails.status === "pending_verification";
+
+  // Guard: Payment & details needed ONLY after exploring courses
+  useEffect(() => {
+    if (currentScreen === "payment" && !hasPaymentSubmitted && !userProfile.name) {
+      setCurrentScreen("courses");
+    }
+  }, [currentScreen, hasPaymentSubmitted, userProfile.name]);
 
   // Route Guard: Restrict Dashboard access strictly to APPROVED / ACTIVE students
   useEffect(() => {

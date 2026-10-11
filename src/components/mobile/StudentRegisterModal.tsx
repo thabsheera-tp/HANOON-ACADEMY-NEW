@@ -62,17 +62,10 @@ export default function StudentRegisterModal({
   const [name, setName] = useState(initialProfile.name || "");
   const [phone, setPhone] = useState(initialProfile.phone || "");
   const [place, setPlace] = useState(initialProfile.place || "");
-  const [courseId, setCourseId] = useState(selectedCourseId || "adaviyya");
   const [age, setAge] = useState(initialProfile.age ? String(initialProfile.age) : "");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccessStep, setIsSuccessStep] = useState(false);
-
-  useEffect(() => {
-    if (selectedCourseId) {
-      setCourseId(selectedCourseId);
-    }
-  }, [selectedCourseId]);
 
   useEffect(() => {
     if (initialProfile.name) setName(initialProfile.name);
@@ -86,7 +79,7 @@ export default function StudentRegisterModal({
   const rawWhatsApp = "919846012345";
 
   const selectedCourseObj =
-    REGISTRATION_COURSE_OPTIONS.find((c) => c.id === courseId) ||
+    REGISTRATION_COURSE_OPTIONS.find((c) => c.id === selectedCourseId) ||
     REGISTRATION_COURSE_OPTIONS[0];
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -104,10 +97,6 @@ export default function StudentRegisterModal({
     }
     if (!place.trim()) {
       setError("Please enter your Place & District.");
-      return;
-    }
-    if (!courseId) {
-      setError("Please select a course to register.");
       return;
     }
 
@@ -149,7 +138,7 @@ export default function StudentRegisterModal({
         place: place.trim(),
         age: age.trim() || undefined,
       },
-      courseId
+      selectedCourseObj.id
     );
     setIsSuccessStep(false);
   };
@@ -294,6 +283,26 @@ export default function StudentRegisterModal({
               </div>
             )}
 
+            {/* Explored Course Banner (Read-only - Course is already explored & selected) */}
+            <div className="mb-3.5 p-3 rounded-2xl bg-purple-50/70 border border-purple-100 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0">
+                  <BookOpen className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700 block leading-tight">
+                    Course Selected
+                  </span>
+                  <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 truncate">
+                    {selectedCourseObj.title}
+                  </h4>
+                </div>
+              </div>
+              <span className="text-xs font-black text-purple-700 bg-white px-2.5 py-1 rounded-xl border border-purple-200/80 shrink-0">
+                ₹{selectedCourseObj.feeAmount}
+              </span>
+            </div>
+
             <form onSubmit={handleSubmit} className="space-y-3.5">
               {/* Field 1: Student Full Name * */}
               <div className="space-y-1">
@@ -349,32 +358,7 @@ export default function StudentRegisterModal({
                 </div>
               </div>
 
-              {/* Field 4: Selected Course * */}
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700 block">
-                  Selected Course <span className="text-rose-500">*</span>
-                </label>
-                <div className="relative">
-                  <BookOpen className="w-4 h-4 text-purple-600 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  <select
-                    value={courseId}
-                    onChange={(e) => setCourseId(e.target.value)}
-                    required
-                    className="w-full pl-10 pr-8 py-2.5 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all font-semibold appearance-none cursor-pointer"
-                  >
-                    {REGISTRATION_COURSE_OPTIONS.map((opt) => (
-                      <option key={opt.id} value={opt.id}>
-                        {opt.title} ({opt.subtitle.split("(")[0].trim()})
-                      </option>
-                    ))}
-                  </select>
-                  <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-xs">
-                    ▼
-                  </div>
-                </div>
-              </div>
-
-              {/* Field 5: Age (Optional) */}
+              {/* Field 4: Age (Optional) */}
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-700 block">
                   Age <span className="text-slate-400 font-normal">(Optional)</span>
