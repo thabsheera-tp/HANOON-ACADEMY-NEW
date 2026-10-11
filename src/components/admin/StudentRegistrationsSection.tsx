@@ -6,21 +6,17 @@ import {
   Search,
   RefreshCw,
   CheckCircle2,
-  XCircle,
   Clock,
   Phone,
   MessageCircle,
   Copy,
   Check,
-  AlertCircle,
   Filter,
   DollarSign,
   Users,
   CreditCard,
   X,
-  ExternalLink,
-  ChevronRight,
-  ShieldCheck,
+  ArrowUpDown,
 } from "lucide-react";
 import {
   UnifiedStudentRegistration,
@@ -41,15 +37,11 @@ export default function StudentRegistrationsSection({
   const [registrations, setRegistrations] = useState<UnifiedStudentRegistration[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"ALL" | "PENDING" | "APPROVED" | "UNPAID" | "REJECTED">("ALL");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "PENDING" | "APPROVED">("ALL");
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [copiedUtr, setCopiedUtr] = useState<string | null>(null);
 
-  // Reject Modal
-  const [rejectingItem, setRejectingItem] = useState<UnifiedStudentRegistration | null>(null);
-  const [rejectReason, setRejectReason] = useState("");
-
-  // WhatsApp Post-Approval Banner
+  // WhatsApp Post-Approval Prompt Banner
   const [approvedNotification, setApprovedNotification] = useState<{
     name: string;
     phone: string;
@@ -87,14 +79,16 @@ export default function StudentRegistrationsSection({
     }
   };
 
-  // Quick Action: Mark as Paid / Verified
-  const handleMarkAsPaid = async (item: UnifiedStudentRegistration) => {
+  // Quick Action: Mark as Verified / Toggle Status
+  const handleToggleStatus = async (item: UnifiedStudentRegistration) => {
     setProcessingId(item.id);
+    const targetStatus = item.paymentStatus === "APPROVED" ? "PENDING" : "APPROVED";
+
     try {
       const success = await updateStudentPaymentStatusDirect({
         studentId: item.studentId,
         paymentId: item.paymentId,
-        newStatus: "APPROVED",
+        newStatus: targetStatus,
         studentName: item.fullName,
         whatsappNum: item.whatsappNum,
         courseId: item.courseId,
@@ -104,72 +98,39 @@ export default function StudentRegistrationsSection({
       if (success) {
         addAuditLog({
           actor: "Admin",
-          action: "Verified Student Registration",
+          action: targetStatus === "APPROVED" ? "Marked as Verified" : "Reverted to Pending",
           category: "PAYMENT",
-          details: `Marked payment for ${item.fullName} (${item.courseChoice}) as PAID / VERIFIED.`,
+          details: `Updated payment status for ${item.fullName} (${item.courseChoice}) to ${
+            targetStatus === "APPROVED" ? "VERIFIED / PAID" : "PENDING VERIFICATION"
+          }.`,
         });
 
-        // Trigger WhatsApp welcome notice
-        const cleanPhone = item.whatsappNum.replace(/\D/g, "");
-        const formattedPhone = cleanPhone.startsWith("91") ? cleanPhone : `91${cleanPhone}`;
-        const welcomeUrl = getWhatsAppWelcomeUrl(item.fullName, item.courseChoice, formattedPhone);
+        // If newly verified, trigger WhatsApp notification banner
+        if (targetStatus === "APPROVED") {
+          const cleanPhone = item.whatsappNum.replace(/\D/g, "");
+          const formattedPhone = cleanPhone.startsWith("91") ? cleanPhone : `91${cleanPhone}`;
+          const welcomeUrl = getWhatsAppWelcomeUrl(item.fullName, item.courseChoice, formattedPhone);
 
-        setApprovedNotification({
-          name: item.fullName,
-          phone: item.whatsappNum,
-          course: item.courseChoice,
-          whatsappUrl: welcomeUrl,
-        });
+          setApprovedNotification({
+            name: item.fullName,
+            phone: item.whatsappNum,
+            course: item.courseChoice,
+            whatsappUrl: welcomeUrl,
+          });
+        }
 
-        // Optimistically update
+        // Optimistically update UI immediately
         setRegistrations((prev) =>
           prev.map((r) =>
             r.id === item.id
-              ? { ...r, paymentStatus: "APPROVED", amount: r.amount || 1500 }
+              ? { ...r, paymentStatus: targetStatus, amount: r.amount || 1500 }
               : r
           )
         );
       }
     } catch (err) {
-      console.error("Failed to mark as paid:", err);
-      alert("Could not update status. Please check connection.");
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  // Quick Action: Reject submission
-  const handleConfirmReject = async () => {
-    if (!rejectingItem) return;
-    setProcessingId(rejectingItem.id);
-    try {
-      await updateStudentPaymentStatusDirect({
-        studentId: rejectingItem.studentId,
-        paymentId: rejectingItem.paymentId,
-        newStatus: "REJECTED",
-        studentName: rejectingItem.fullName,
-        whatsappNum: rejectingItem.whatsappNum,
-        courseId: rejectingItem.courseId,
-        rejectionReason: rejectReason.trim() || "Invalid UTR / Transaction reference",
-      });
-
-      addAuditLog({
-        actor: "Admin",
-        action: "Rejected Student Payment",
-        category: "PAYMENT",
-        details: `Rejected submission for ${rejectingItem.fullName}: ${rejectReason.trim() || "Invalid UTR"}`,
-      });
-
-      setRegistrations((prev) =>
-        prev.map((r) =>
-          r.id === rejectingItem.id ? { ...r, paymentStatus: "REJECTED" } : r
-        )
-      );
-
-      setRejectingItem(null);
-      setRejectReason("");
-    } catch (err) {
-      console.error("Failed to reject payment:", err);
+      console.error("Failed to update status:", err);
+      alert("Could not update status. Please check your network connection.");
     } finally {
       setProcessingId(null);
     }
@@ -179,12 +140,9 @@ export default function StudentRegistrationsSection({
   const filtered = useMemo(() => {
     return registrations.filter((item) => {
       // 1. Status Filter
-      if (statusFilter !== "ALL") {
-        if (statusFilter === "PENDING" && item.paymentStatus !== "PENDING") return false;
-        if (statusFilter === "APPROVED" && item.paymentStatus !== "APPROVED") return false;
-        if (statusFilter === "UNPAID" && item.paymentStatus !== "UNPAID") return false;
-        if (statusFilter === "REJECTED" && item.paymentStatus !== "REJECTED") return false;
-      }
+      const isItemApproved = item.paymentStatus === "APPROVED";
+      if (statusFilter === "PENDING" && isItemApproved) return false;
+      if (statusFilter === "APPROVED" && !isItemApproved) return false;
 
       // 2. Search Query (name or phone)
       if (searchQuery.trim()) {
@@ -203,9 +161,8 @@ export default function StudentRegistrationsSection({
 
   // Derived counts
   const totalCount = registrations.length;
-  const pendingCount = registrations.filter((r) => r.paymentStatus === "PENDING").length;
   const approvedCount = registrations.filter((r) => r.paymentStatus === "APPROVED").length;
-  const unpaidCount = registrations.filter((r) => r.paymentStatus === "UNPAID").length;
+  const pendingCount = registrations.filter((r) => r.paymentStatus !== "APPROVED").length;
   const verifiedRevenue = registrations
     .filter((r) => r.paymentStatus === "APPROVED")
     .reduce((acc, r) => acc + (r.amount || 0), 0);
@@ -214,7 +171,7 @@ export default function StudentRegistrationsSection({
     <div className="space-y-5 sm:space-y-6 w-full animate-fade-in font-['Plus_Jakarta_Sans']">
       {/* 1. Metrics Overview Banner */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {/* Total Students */}
+        {/* Total Registrations */}
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-purple-100 shadow-md space-y-1.5">
           <div className="flex items-center justify-between text-slate-500">
             <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider">
@@ -229,7 +186,7 @@ export default function StudentRegistrationsSection({
               {totalCount}
             </h3>
             <p className="text-[11px] text-slate-500 font-medium truncate">
-              {totalCount === 0 ? "No students yet" : `${totalCount} registered students`}
+              {totalCount === 0 ? "No students registered yet" : `${totalCount} registered students`}
             </p>
           </div>
         </div>
@@ -237,8 +194,8 @@ export default function StudentRegistrationsSection({
         {/* Pending Verification */}
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-amber-200/90 bg-amber-50/15 shadow-md space-y-1.5">
           <div className="flex items-center justify-between text-slate-500">
-            <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-amber-700">
-              Pending Review
+            <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-amber-800">
+              Pending Verification
             </span>
             <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
               <Clock className="w-4 h-4" />
@@ -250,22 +207,22 @@ export default function StudentRegistrationsSection({
                 {pendingCount}
               </h3>
               {pendingCount > 0 && (
-                <span className="text-[10px] font-black uppercase text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300 animate-pulse">
+                <span className="text-[10px] font-black uppercase text-amber-900 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300 animate-pulse">
                   Action Required
                 </span>
               )}
             </div>
             <p className="text-[11px] text-slate-500 font-medium">
-              {pendingCount === 0 ? "All reviewed" : `${pendingCount} awaiting approval`}
+              {pendingCount === 0 ? "All verified" : `${pendingCount} awaiting verification`}
             </p>
           </div>
         </div>
 
-        {/* Paid / Verified */}
+        {/* Verified / Paid */}
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-emerald-100 shadow-md space-y-1.5">
           <div className="flex items-center justify-between text-slate-500">
-            <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-emerald-700">
-              Paid / Verified
+            <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-emerald-800">
+              Verified / Paid
             </span>
             <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
               <CheckCircle2 className="w-4 h-4" />
@@ -276,27 +233,27 @@ export default function StudentRegistrationsSection({
               {approvedCount}
             </h3>
             <p className="text-[11px] text-emerald-600 font-medium">
-              Access confirmed & unlocked
+              Course portal access unlocked
             </p>
           </div>
         </div>
 
-        {/* Revenue / Unpaid */}
+        {/* Total Collected Revenue */}
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-purple-100 shadow-md space-y-1.5">
           <div className="flex items-center justify-between text-slate-500">
             <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider">
-              {isSuperAdmin ? "Verified Intake" : "Unpaid Leads"}
+              Verified Tuition
             </span>
             <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-              {isSuperAdmin ? <DollarSign className="w-4 h-4" /> : <CreditCard className="w-4 h-4" />}
+              <DollarSign className="w-4 h-4" />
             </div>
           </div>
           <div className="space-y-0.5">
             <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              {isSuperAdmin ? `₹${verifiedRevenue.toLocaleString("en-IN")}` : unpaidCount}
+              ₹{verifiedRevenue.toLocaleString("en-IN")}
             </h3>
             <p className="text-[11px] text-slate-500 font-medium">
-              {isSuperAdmin ? "Direct UPI fees confirmed" : "Registered without payment"}
+              Direct UPI fees verified
             </p>
           </div>
         </div>
@@ -319,7 +276,7 @@ export default function StudentRegistrationsSection({
                 </h4>
               </div>
               <p className="text-[11px] text-emerald-800 mt-0.5 font-medium">
-                Send official Malayalam welcome letter & dashboard link directly via WhatsApp:
+                Send official welcome confirmation & course access link via WhatsApp:
               </p>
             </div>
           </div>
@@ -356,11 +313,11 @@ export default function StudentRegistrationsSection({
                 🎓
               </div>
               <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
-                Student Registrations & Payments View
+                Student Registrations & Payments
               </h2>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Live registration records from Supabase with instant payment status verification and WhatsApp connectivity.
+              Live registration list from Supabase with instant Payment Status verification and WhatsApp links.
             </p>
           </div>
 
@@ -371,7 +328,7 @@ export default function StudentRegistrationsSection({
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Search by student name or phone..."
+                placeholder="Search by name or phone..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-8 pr-3 py-2 rounded-xl bg-purple-50/50 border border-purple-100 text-xs text-slate-800 placeholder-slate-400 outline-none focus:border-purple-600 focus:bg-white font-medium transition-all"
@@ -388,17 +345,41 @@ export default function StudentRegistrationsSection({
             </div>
 
             {/* Filter Tabs / Select */}
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as any)}
-              className="py-2 px-3 rounded-xl bg-purple-50/50 border border-purple-100 text-xs font-bold text-slate-700 outline-none cursor-pointer focus:border-purple-600"
-            >
-              <option value="ALL">All Status ({totalCount})</option>
-              <option value="PENDING">Pending Review ({pendingCount})</option>
-              <option value="APPROVED">Paid / Verified ({approvedCount})</option>
-              <option value="UNPAID">Unpaid Leads ({unpaidCount})</option>
-              <option value="REJECTED">Rejected</option>
-            </select>
+            <div className="flex items-center bg-purple-50/60 p-1 rounded-xl border border-purple-100 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setStatusFilter("ALL")}
+                className={`py-1.5 px-3 rounded-lg transition-all cursor-pointer ${
+                  statusFilter === "ALL"
+                    ? "bg-white text-purple-700 font-extrabold shadow-2xs"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                All ({totalCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter("PENDING")}
+                className={`py-1.5 px-3 rounded-lg transition-all cursor-pointer ${
+                  statusFilter === "PENDING"
+                    ? "bg-amber-100 text-amber-900 font-extrabold shadow-2xs"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                Pending ({pendingCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter("APPROVED")}
+                className={`py-1.5 px-3 rounded-lg transition-all cursor-pointer ${
+                  statusFilter === "APPROVED"
+                    ? "bg-emerald-100 text-emerald-900 font-extrabold shadow-2xs"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                Verified ({approvedCount})
+              </button>
+            </div>
 
             {/* Refresh Button */}
             <button
@@ -424,7 +405,7 @@ export default function StudentRegistrationsSection({
                 <th className="py-3.5 px-4">District / Place</th>
                 <th className="py-3.5 px-4">Registration Date</th>
                 <th className="py-3.5 px-4">Payment Status</th>
-                <th className="py-3.5 px-4 text-right">Action</th>
+                <th className="py-3.5 px-4 text-right">Quick Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-purple-50 font-medium text-slate-800">
@@ -450,17 +431,14 @@ export default function StudentRegistrationsSection({
                       <p className="text-xs text-slate-400">
                         {searchQuery
                           ? "Try searching for a different student name or mobile number."
-                          : "When students register on the website, their details and payment status will appear here in real-time."}
+                          : "When students register on the website, their details will appear here with 'Pending Verification' status automatically."}
                       </p>
                     </div>
                   </td>
                 </tr>
               ) : (
                 filtered.map((item) => {
-                  const isPending = item.paymentStatus === "PENDING";
-                  const isApproved = item.paymentStatus === "APPROVED";
-                  const isUnpaid = item.paymentStatus === "UNPAID";
-                  const isRejected = item.paymentStatus === "REJECTED";
+                  const isVerified = item.paymentStatus === "APPROVED";
                   const isProcessing = processingId === item.id;
 
                   const cleanPhone = item.whatsappNum.replace(/\D/g, "");
@@ -471,7 +449,7 @@ export default function StudentRegistrationsSection({
                     <tr
                       key={item.id}
                       className={`hover:bg-purple-50/40 transition-colors ${
-                        isPending ? "bg-amber-50/20" : ""
+                        !isVerified ? "bg-amber-50/20" : ""
                       }`}
                     >
                       {/* Column 1: Student Name */}
@@ -539,94 +517,63 @@ export default function StudentRegistrationsSection({
                         })}
                       </td>
 
-                      {/* Column 6: Payment Status */}
+                      {/* Column 6: Payment Status (Badge 1: Pending Verification, Badge 2: Verified / Paid) */}
                       <td className="py-3.5 px-4">
-                        {isApproved && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-black text-[10px] border border-emerald-200 uppercase">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                            <span>Paid / Verified</span>
+                        {isVerified ? (
+                          /* Badge 2: Verified / Paid (Green badge) */
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 font-black text-[11px] border border-emerald-300">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span>Verified / Paid</span>
                           </span>
-                        )}
-                        {isPending && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 font-black text-[10px] border border-amber-200 uppercase animate-pulse">
-                            <Clock className="w-3 h-3 text-amber-600" />
-                            <span>Pending</span>
-                          </span>
-                        )}
-                        {isUnpaid && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 font-black text-[10px] border border-slate-200 uppercase">
-                            <span>Unpaid Lead</span>
-                          </span>
-                        )}
-                        {isRejected && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 font-black text-[10px] border border-rose-200 uppercase">
-                            <XCircle className="w-3 h-3 text-rose-600" />
-                            <span>Rejected</span>
+                        ) : (
+                          /* Badge 1: Pending Verification (Yellow/Orange badge) */
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-800 font-black text-[11px] border border-amber-300 animate-pulse">
+                            <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                            <span>Pending Verification</span>
                           </span>
                         )}
                       </td>
 
-                      {/* Column 7: Quick Action Button */}
+                      {/* Column 7: Quick Action Button (Mark as Verified / Toggle Status) */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {isPending && (
+                          {!isVerified ? (
+                            /* Quick Action: Mark as Verified */
+                            <button
+                              type="button"
+                              onClick={() => handleToggleStatus(item)}
+                              disabled={isProcessing}
+                              className="py-1.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs inline-flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                              title="Mark as Verified in Database"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Mark as Verified</span>
+                            </button>
+                          ) : (
+                            /* Quick Action: Toggle Status back to Pending */
                             <>
                               <button
                                 type="button"
-                                onClick={() => handleMarkAsPaid(item)}
+                                onClick={() => handleToggleStatus(item)}
                                 disabled={isProcessing}
-                                className="py-1.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-[11px] inline-flex items-center gap-1 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
-                                title="Mark as Paid & Verified"
+                                className="py-1.5 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] inline-flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50"
+                                title="Toggle Status back to Pending"
                               >
-                                <Check className="w-3 h-3" />
-                                <span>Mark Paid</span>
+                                <ArrowUpDown className="w-3 h-3 text-slate-500" />
+                                <span>Toggle Status</span>
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => setRejectingItem(item)}
-                                disabled={isProcessing}
-                                className="py-1.5 px-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[11px] border border-rose-200 transition-all cursor-pointer disabled:opacity-50"
-                                title="Reject Payment"
+
+                              <a
+                                href={waUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="py-1.5 px-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-extrabold text-[11px] inline-flex items-center gap-1 transition-all cursor-pointer"
+                                title="Send Welcome Message via WhatsApp"
                               >
-                                <XCircle className="w-3 h-3" />
-                              </button>
+                                <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>WhatsApp</span>
+                              </a>
                             </>
-                          )}
-
-                          {isUnpaid && (
-                            <button
-                              type="button"
-                              onClick={() => handleMarkAsPaid(item)}
-                              disabled={isProcessing}
-                              className="py-1.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-95 text-white font-extrabold text-[11px] inline-flex items-center gap-1 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
-                            >
-                              <Check className="w-3 h-3" />
-                              <span>Mark as Paid</span>
-                            </button>
-                          )}
-
-                          {isApproved && (
-                            <a
-                              href={waUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="py-1.5 px-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-extrabold text-[11px] inline-flex items-center gap-1 transition-all cursor-pointer"
-                              title="Send Welcome Notification via WhatsApp"
-                            >
-                              <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
-                              <span>WhatsApp</span>
-                            </a>
-                          )}
-
-                          {isRejected && (
-                            <button
-                              type="button"
-                              onClick={() => handleMarkAsPaid(item)}
-                              disabled={isProcessing}
-                              className="py-1.5 px-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-extrabold text-[11px] inline-flex items-center gap-1 transition-all cursor-pointer"
-                            >
-                              <span>Re-verify</span>
-                            </button>
                           )}
                         </div>
                       </td>
@@ -638,7 +585,7 @@ export default function StudentRegistrationsSection({
           </table>
         </div>
 
-        {/* 5. Mobile Cards (sm & md:hidden) */}
+        {/* 5. Mobile Cards (md:hidden) */}
         <div className="block md:hidden space-y-3">
           {loading && registrations.length === 0 ? (
             <div className="py-12 text-center text-slate-400 text-xs">
@@ -656,15 +603,12 @@ export default function StudentRegistrationsSection({
               <p className="text-[11px] text-slate-400 mt-0.5">
                 {searchQuery
                   ? "Check spelling or search by WhatsApp number."
-                  : "New student admissions will show here automatically."}
+                  : "New student registrations will show here with 'Pending Verification' status automatically."}
               </p>
             </div>
           ) : (
             filtered.map((item) => {
-              const isPending = item.paymentStatus === "PENDING";
-              const isApproved = item.paymentStatus === "APPROVED";
-              const isUnpaid = item.paymentStatus === "UNPAID";
-              const isRejected = item.paymentStatus === "REJECTED";
+              const isVerified = item.paymentStatus === "APPROVED";
               const isProcessing = processingId === item.id;
 
               const cleanPhone = item.whatsappNum.replace(/\D/g, "");
@@ -675,11 +619,9 @@ export default function StudentRegistrationsSection({
                 <div
                   key={item.id}
                   className={`p-4 rounded-2xl border space-y-3 transition-all ${
-                    isPending
+                    !isVerified
                       ? "bg-amber-50/30 border-amber-200 shadow-2xs"
-                      : isApproved
-                      ? "bg-white border-purple-100 shadow-xs"
-                      : "bg-slate-50/50 border-slate-200"
+                      : "bg-white border-purple-100 shadow-xs"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -703,24 +645,13 @@ export default function StudentRegistrationsSection({
 
                     {/* Status Badge */}
                     <div>
-                      {isApproved && (
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-black text-[10px] border border-emerald-200 uppercase">
-                          Paid
+                      {isVerified ? (
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 font-black text-[10px] border border-emerald-300">
+                          Verified / Paid
                         </span>
-                      )}
-                      {isPending && (
-                        <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-black text-[10px] border border-amber-200 uppercase animate-pulse">
-                          Pending
-                        </span>
-                      )}
-                      {isUnpaid && (
-                        <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-black text-[10px] border border-slate-200 uppercase">
-                          Unpaid
-                        </span>
-                      )}
-                      {isRejected && (
-                        <span className="px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 font-black text-[10px] border border-rose-200 uppercase">
-                          Rejected
+                      ) : (
+                        <span className="px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 font-black text-[10px] border border-amber-300 animate-pulse">
+                          Pending Verification
                         </span>
                       )}
                     </div>
@@ -757,54 +688,41 @@ export default function StudentRegistrationsSection({
                   {/* Actions on Mobile */}
                   <div className="flex items-center justify-between pt-1 border-t border-purple-50/80">
                     <span className="text-xs font-black text-slate-900">
-                      {item.amount > 0 ? `₹${item.amount.toLocaleString("en-IN")}` : "Fee: Standard"}
+                      ₹{item.amount?.toLocaleString("en-IN") || "1,500"}
                     </span>
 
                     <div className="flex items-center gap-2">
-                      {isPending && (
+                      {!isVerified ? (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleStatus(item)}
+                          disabled={isProcessing}
+                          className="py-1.5 px-3 rounded-xl bg-emerald-600 text-white font-extrabold text-xs inline-flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Mark as Verified</span>
+                        </button>
+                      ) : (
                         <>
                           <button
                             type="button"
-                            onClick={() => handleMarkAsPaid(item)}
+                            onClick={() => handleToggleStatus(item)}
                             disabled={isProcessing}
-                            className="py-1.5 px-3 rounded-xl bg-emerald-600 text-white font-extrabold text-xs inline-flex items-center gap-1 shadow-xs"
+                            className="py-1.5 px-2.5 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs inline-flex items-center gap-1 cursor-pointer"
                           >
-                            <Check className="w-3.5 h-3.5" />
-                            <span>Mark Paid</span>
+                            <ArrowUpDown className="w-3 h-3" />
+                            <span>Toggle</span>
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => setRejectingItem(item)}
-                            disabled={isProcessing}
-                            className="p-1.5 rounded-xl bg-rose-50 text-rose-700 border border-rose-200 text-xs"
+                          <a
+                            href={waUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="py-1.5 px-3 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 font-extrabold text-xs inline-flex items-center gap-1.5"
                           >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
+                            <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>WhatsApp</span>
+                          </a>
                         </>
-                      )}
-
-                      {isUnpaid && (
-                        <button
-                          type="button"
-                          onClick={() => handleMarkAsPaid(item)}
-                          disabled={isProcessing}
-                          className="py-1.5 px-3 rounded-xl bg-purple-600 text-white font-extrabold text-xs inline-flex items-center gap-1"
-                        >
-                          <Check className="w-3.5 h-3.5" />
-                          <span>Mark Paid</span>
-                        </button>
-                      )}
-
-                      {isApproved && (
-                        <a
-                          href={waUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="py-1.5 px-3 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 font-extrabold text-xs inline-flex items-center gap-1.5"
-                        >
-                          <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>WhatsApp</span>
-                        </a>
                       )}
                     </div>
                   </div>
@@ -814,61 +732,6 @@ export default function StudentRegistrationsSection({
           )}
         </div>
       </div>
-
-      {/* Reject Reason Modal */}
-      {rejectingItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-rose-100 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-rose-600">
-                <AlertCircle className="w-5 h-5" />
-                <h3 className="text-sm font-black text-slate-900">
-                  Reject Payment Submission
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setRejectingItem(null)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-500">
-              Please enter a reason for rejecting payment for{" "}
-              <strong className="text-slate-800">{rejectingItem.fullName}</strong> (UTR:{" "}
-              {rejectingItem.upiTxId}):
-            </p>
-
-            <textarea
-              rows={3}
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="e.g. UTR not matched on bank account, incorrect amount..."
-              className="w-full p-3 rounded-xl border border-slate-200 text-xs text-slate-800 outline-none focus:border-rose-500 font-medium"
-            />
-
-            <div className="flex items-center justify-end gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setRejectingItem(null)}
-                className="py-2 px-3 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmReject}
-                disabled={processingId === rejectingItem.id}
-                className="py-2 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black shadow-xs cursor-pointer disabled:opacity-50"
-              >
-                Confirm Rejection
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -320,6 +320,26 @@ export async function saveStudentLead(profile: {
           savedStudent = inserted;
         }
       }
+
+      if (savedStudent) {
+        // Ensure pending payment record exists in Supabase so status is Pending Verification by default
+        const { data: existingPay } = await supabase
+          .from("payments")
+          .select("id")
+          .eq("student_id", savedStudent.id)
+          .limit(1)
+          .maybeSingle();
+
+        if (!existingPay) {
+          await supabase.from("payments").insert({
+            student_id: savedStudent.id,
+            course_id: "adaviyya",
+            upi_txid: `PENDING_${Date.now().toString().slice(-6)}`,
+            status: "PENDING",
+            amount: 500,
+          });
+        }
+      }
     } catch (e) {
       console.warn("Supabase saveStudentLead error:", e);
     }
@@ -346,7 +366,29 @@ export async function saveStudentLead(profile: {
         ...localStudents.filter((s) => s.whatsapp_num !== cleanPhone && s.id !== savedStudent?.id),
       ];
       localStorage.setItem(LOCAL_STUDENTS_KEY, JSON.stringify(nextStudents));
+
+      // Also ensure local pending payment exists
+      const localPayments: DbPayment[] = JSON.parse(
+        localStorage.getItem(LOCAL_PAYMENTS_KEY) || "[]"
+      );
+      const hasPay = localPayments.some((p) => p.student_id === savedStudent?.id);
+      if (!hasPay) {
+        const fallbackPendingPay: DbPayment = {
+          id: `pay-${Date.now()}`,
+          student_id: savedStudent.id,
+          course_id: "adaviyya",
+          upi_txid: `PENDING_${Date.now().toString().slice(-6)}`,
+          status: "PENDING",
+          amount: 500,
+          submitted_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          student: savedStudent,
+        };
+        localStorage.setItem(LOCAL_PAYMENTS_KEY, JSON.stringify([fallbackPendingPay, ...localPayments]));
+      }
+
       window.dispatchEvent(new CustomEvent("hanoon_students_updated"));
+      window.dispatchEvent(new CustomEvent("hanoon_payment_event", { detail: { status: "PENDING" } }));
     } catch (e) {
       console.warn("Local storage save error in saveStudentLead:", e);
     }
@@ -468,9 +510,9 @@ export async function fetchUnifiedRegistrations(): Promise<UnifiedStudentRegistr
         courseChoice: "Adaviyya (General Admission)",
         courseId: "adaviyya",
         registrationDate: s.created_at || new Date().toISOString(),
-        paymentStatus: "UNPAID",
-        amount: 0,
-        upiTxId: "-",
+        paymentStatus: "PENDING",
+        amount: 500,
+        upiTxId: "Pending Verification",
         paymentId: undefined,
       });
       existingPhones.add(cleanP);

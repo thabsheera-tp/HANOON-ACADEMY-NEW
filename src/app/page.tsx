@@ -581,7 +581,6 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
             <ScreenSplash
               onGetStarted={() => setIsRegisterModalOpen(true)}
               onExploreCourses={() => setCurrentScreen("courses")}
-              onStaffLogin={() => router.push("/login?portal=staff")}
             />
           )}
 

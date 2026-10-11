@@ -89,14 +89,24 @@ export default function Footer() {
                 </a>
               </li>
               <li>
-                <Link href="/login" className="hover:text-emerald-400 transition-colors">
-                  Student Portal Login
-                </Link>
+                <a
+                  href="https://wa.me/919846012345?text=Assalamu%20Alaikum%20Admin,%20I%20need%20help%20with%20admission."
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-emerald-400 transition-colors inline-flex items-center gap-1.5"
+                >
+                  <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Need Help? Contact Admin</span>
+                </a>
               </li>
               <li>
-                <Link href="/login" className="hover:text-emerald-400 transition-colors">
-                  Teacher / Faculty Access
-                </Link>
+                <a
+                  href="tel:+919846012345"
+                  className="hover:text-emerald-400 transition-colors inline-flex items-center gap-1.5"
+                >
+                  <Phone className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Call Admin: +91 98460 12345</span>
+                </a>
               </li>
             </ul>
           </div>

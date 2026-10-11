@@ -151,17 +151,18 @@ export default function MobileHeader({
             )}
           </div>
         ) : (
-          /* Clean Public / Guest Header (No active student profile badge) */
+          /* Clean Public / Guest Header (Direct WhatsApp Support) */
           <div className="flex items-center">
-            {currentScreen === "courses" || currentScreen === "course-details" ? (
-              <button
-                type="button"
-                onClick={() => router.push("/login")}
-                className="py-1 px-3 rounded-full text-[11px] font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200/80 transition-all cursor-pointer shadow-2xs"
-              >
-                Sign In
-              </button>
-            ) : null}
+            <a
+              href="https://wa.me/919846012345?text=Assalamu%20Alaikum%20Admin,%20I%20need%20help%20with%20Hanoon%20Academy."
+              target="_blank"
+              rel="noopener noreferrer"
+              className="py-1 px-2.5 rounded-full text-[10.5px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 transition-all cursor-pointer shadow-2xs inline-flex items-center gap-1"
+              title="Need Help? Contact Admin on WhatsApp"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Need Help?</span>
+            </a>
           </div>
         )}
       </div>

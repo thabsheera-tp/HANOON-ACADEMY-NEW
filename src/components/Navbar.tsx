@@ -71,12 +71,14 @@ export default function Navbar({ onOpenEnrollModal }: NavbarProps) {
 
           {/* Desktop Right Actions */}
           <div className="hidden md:flex items-center gap-4">
-            <Link
-              href="/login"
-              className="px-5 py-2.5 text-sm font-semibold text-[#047857] bg-white border border-[#047857]/20 rounded-xl hover:bg-[#047857]/5 hover:border-[#047857] transition-all shadow-xs"
+            <a
+              href="https://wa.me/919846012345?text=Assalamu%20Alaikum%20Admin,%20I%20need%20help%20with%20admission."
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2.5 text-xs font-bold text-[#047857] bg-white border border-[#047857]/20 rounded-xl hover:bg-[#047857]/5 hover:border-[#047857] transition-all shadow-xs inline-flex items-center gap-1.5"
             >
-              Login
-            </Link>
+              <span>Need Help? Contact Admin</span>
+            </a>
             <button
               onClick={() => onOpenEnrollModal && onOpenEnrollModal()}
               className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-[#047857] rounded-xl hover:bg-[#035a41] shadow-md shadow-[#047857]/25 hover:shadow-lg hover:shadow-[#047857]/35 transition-all transform active:scale-95"
@@ -88,12 +90,14 @@ export default function Navbar({ onOpenEnrollModal }: NavbarProps) {
 
           {/* Mobile Menu Button */}
           <div className="flex md:hidden items-center gap-2">
-            <Link
-              href="/login"
-              className="px-3.5 py-1.5 text-xs font-semibold text-[#047857] bg-white border border-[#047857]/25 rounded-lg hover:bg-[#047857]/5"
+            <a
+              href="https://wa.me/919846012345?text=Assalamu%20Alaikum%20Admin,%20I%20need%20help%20with%20admission."
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-1.5 text-xs font-bold text-[#047857] bg-white border border-[#047857]/25 rounded-lg hover:bg-[#047857]/5"
             >
-              Login
-            </Link>
+              Contact Admin
+            </a>
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="p-2 text-[#0F172A] hover:text-[#047857] focus:outline-none"
@@ -136,13 +140,15 @@ export default function Navbar({ onOpenEnrollModal }: NavbarProps) {
               Contact & WhatsApp
             </Link>
             <div className="pt-2 px-4 flex flex-col gap-2">
-              <Link
-                href="/login"
+              <a
+                href="https://wa.me/919846012345?text=Assalamu%20Alaikum%20Admin,%20I%20need%20help%20with%20admission."
+                target="_blank"
+                rel="noopener noreferrer"
                 onClick={() => setMobileMenuOpen(false)}
-                className="w-full text-center py-2.5 text-sm font-semibold text-[#047857] bg-white border border-[#047857]/30 rounded-xl"
+                className="w-full text-center py-2.5 text-xs font-bold text-[#047857] bg-white border border-[#047857]/30 rounded-xl block"
               >
-                Student / Staff Login
-              </Link>
+                💬 Need Help? Contact Admin (+91 98460 12345)
+              </a>
               <button
                 onClick={() => {
                   setMobileMenuOpen(false);
