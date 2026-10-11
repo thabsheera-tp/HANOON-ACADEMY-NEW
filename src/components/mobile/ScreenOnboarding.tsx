@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { User, Phone, MapPin, Calendar, Lock, ArrowRight, Sparkles } from "lucide-react";
+import { User, Phone, MapPin, Calendar, Lock, ArrowRight } from "lucide-react";
 import { UserProfile, SelectedCourse } from "@/types/app";
 
 interface ScreenOnboardingProps {
@@ -114,17 +114,10 @@ export default function ScreenOnboarding({
     <div className="w-full max-w-md mx-auto px-4 sm:px-6 py-5 flex-1 flex flex-col justify-between select-none font-['Plus_Jakarta_Sans'] bg-white">
       <div className="space-y-4">
         {/* Mobile Header Banner */}
-        <div className="space-y-1.5 pt-1">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-100/80 text-purple-700 text-[11px] font-extrabold uppercase tracking-wider">
-            <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-            <span>Admissions 2026</span>
-          </div>
+        <div className="pt-1 pb-1">
           <h1 className="text-2xl font-black text-slate-900 tracking-tight leading-tight">
             Student Registration
           </h1>
-          <p className="text-xs text-slate-500 font-medium leading-relaxed">
-            Please fill in your details to explore courses and begin your learning journey.
-          </p>
         </div>
 
         {/* Validation Error Notice */}
