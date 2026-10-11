@@ -27,8 +27,7 @@ export const DEFAULT_ADAVIYYA_SUBJECTS: AdaviyyaSubject[] = [
     id: "seerah",
     name: "Seerah",
     subtitle: "Prophetic Biography & History",
-    instructor: "Usthad Dr. Faisal Al-Hanoon",
-    teacher_id: "tch-01",
+    instructor: "Faculty Instructor",
     badgeGradient: "bg-gradient-to-tr from-rose-500 to-amber-400 text-white shadow-lg shadow-rose-500/25",
     iconType: "book",
     liveClassUrl: "https://zoom.us/j/hanoon-seerah",
@@ -62,8 +61,7 @@ export const DEFAULT_ADAVIYYA_SUBJECTS: AdaviyyaSubject[] = [
     id: "haddad",
     name: "Haddad",
     subtitle: "Daily Litany, Dhikr & Spiritual Guidance",
-    instructor: "Usthad Abdul Rahman Al-Hafiz",
-    teacher_id: "tch-02",
+    instructor: "Faculty Instructor",
     badgeGradient: "bg-gradient-to-tr from-emerald-500 to-teal-400 text-white shadow-lg shadow-emerald-500/25",
     iconType: "sparkles",
     liveClassUrl: "https://zoom.us/j/hanoon-haddad",
@@ -97,8 +95,7 @@ export const DEFAULT_ADAVIYYA_SUBJECTS: AdaviyyaSubject[] = [
     id: "fiqh",
     name: "Fiqh",
     subtitle: "Islamic Jurisprudence & Practical Rulings",
-    instructor: "Usthad Anas Nadwi",
-    teacher_id: "tch-03",
+    instructor: "Faculty Instructor",
     badgeGradient: "bg-gradient-to-tr from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/25",
     iconType: "scale",
     liveClassUrl: "https://zoom.us/j/hanoon-fiqh",
@@ -132,8 +129,7 @@ export const DEFAULT_ADAVIYYA_SUBJECTS: AdaviyyaSubject[] = [
     id: "hadith",
     name: "Hadith",
     subtitle: "Prophetic Traditions & Teachings",
-    instructor: "Usthad Bilal Farooqi",
-    teacher_id: "tch-04",
+    instructor: "Faculty Instructor",
     badgeGradient: "bg-gradient-to-tr from-violet-500 to-purple-600 text-white shadow-lg shadow-violet-500/25",
     iconType: "scroll",
     liveClassUrl: "https://zoom.us/j/hanoon-hadith",
@@ -174,7 +170,18 @@ export function getAdaviyyaSubjects(): AdaviyyaSubject[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length === 4) {
-        return parsed;
+        // Sanitize out any legacy dummy names
+        return parsed.map((s: any) => {
+          if (
+            s.instructor?.includes("Faisal") ||
+            s.instructor?.includes("Nadwi") ||
+            s.instructor?.includes("Farooqi") ||
+            s.instructor?.includes("Hafiz")
+          ) {
+            return { ...s, instructor: "Faculty Instructor", teacher_id: undefined };
+          }
+          return s;
+        });
       }
     }
   } catch (e) {

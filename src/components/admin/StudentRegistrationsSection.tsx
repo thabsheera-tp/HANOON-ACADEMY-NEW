@@ -16,7 +16,9 @@ import {
   Users,
   CreditCard,
   X,
+  XCircle,
   ArrowUpDown,
+  Download,
 } from "lucide-react";
 import {
   UnifiedStudentRegistration,
@@ -37,7 +39,7 @@ export default function StudentRegistrationsSection({
   const [registrations, setRegistrations] = useState<UnifiedStudentRegistration[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"ALL" | "PENDING" | "APPROVED">("ALL");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "PENDING" | "APPROVED" | "REJECTED">("ALL");
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [copiedUtr, setCopiedUtr] = useState<string | null>(null);
 
@@ -79,16 +81,14 @@ export default function StudentRegistrationsSection({
     }
   };
 
-  // Quick Action: Mark as Verified / Toggle Status
-  const handleToggleStatus = async (item: UnifiedStudentRegistration) => {
+  // Quick Action: Green Button "Verify / Mark as Paid" (Updates status to "Verified" in Supabase)
+  const handleVerifyStatus = async (item: UnifiedStudentRegistration) => {
     setProcessingId(item.id);
-    const targetStatus = item.paymentStatus === "APPROVED" ? "PENDING" : "APPROVED";
-
     try {
       const success = await updateStudentPaymentStatusDirect({
         studentId: item.studentId,
         paymentId: item.paymentId,
-        newStatus: targetStatus,
+        newStatus: "APPROVED",
         studentName: item.fullName,
         whatsappNum: item.whatsappNum,
         courseId: item.courseId,
@@ -98,38 +98,67 @@ export default function StudentRegistrationsSection({
       if (success) {
         addAuditLog({
           actor: "Admin",
-          action: targetStatus === "APPROVED" ? "Marked as Verified" : "Reverted to Pending",
+          action: "Marked as Verified",
           category: "PAYMENT",
-          details: `Updated payment status for ${item.fullName} (${item.courseChoice}) to ${
-            targetStatus === "APPROVED" ? "VERIFIED / PAID" : "PENDING VERIFICATION"
-          }.`,
+          details: `Verified payment and unlocked course for ${item.fullName} (${item.courseChoice}).`,
         });
 
-        // If newly verified, trigger WhatsApp notification banner
-        if (targetStatus === "APPROVED") {
-          const cleanPhone = item.whatsappNum.replace(/\D/g, "");
-          const formattedPhone = cleanPhone.startsWith("91") ? cleanPhone : `91${cleanPhone}`;
-          const welcomeUrl = getWhatsAppWelcomeUrl(item.fullName, item.courseChoice, formattedPhone);
+        const cleanPhone = item.whatsappNum.replace(/\D/g, "");
+        const formattedPhone = cleanPhone.startsWith("91") ? cleanPhone : `91${cleanPhone}`;
+        const welcomeUrl = getWhatsAppWelcomeUrl(item.fullName, item.courseChoice, formattedPhone);
 
-          setApprovedNotification({
-            name: item.fullName,
-            phone: item.whatsappNum,
-            course: item.courseChoice,
-            whatsappUrl: welcomeUrl,
-          });
-        }
+        setApprovedNotification({
+          name: item.fullName,
+          phone: item.whatsappNum,
+          course: item.courseChoice,
+          whatsappUrl: welcomeUrl,
+        });
 
-        // Optimistically update UI immediately
         setRegistrations((prev) =>
           prev.map((r) =>
-            r.id === item.id
-              ? { ...r, paymentStatus: targetStatus, amount: r.amount || 1500 }
-              : r
+            r.id === item.id ? { ...r, paymentStatus: "APPROVED" } : r
           )
         );
       }
     } catch (err) {
-      console.error("Failed to update status:", err);
+      console.error("Failed to verify status:", err);
+      alert("Could not update status. Please check your network connection.");
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  // Quick Action: Red Button "Reject" (Updates status to "Rejected" in Supabase)
+  const handleRejectStatus = async (item: UnifiedStudentRegistration) => {
+    setProcessingId(item.id);
+    try {
+      const success = await updateStudentPaymentStatusDirect({
+        studentId: item.studentId,
+        paymentId: item.paymentId,
+        newStatus: "REJECTED",
+        studentName: item.fullName,
+        whatsappNum: item.whatsappNum,
+        courseId: item.courseId,
+        amount: item.amount || 1500,
+        rejectionReason: "Payment rejected by admin",
+      });
+
+      if (success) {
+        addAuditLog({
+          actor: "Admin",
+          action: "Rejected Payment",
+          category: "PAYMENT",
+          details: `Rejected registration/payment for ${item.fullName} (${item.courseChoice}).`,
+        });
+
+        setRegistrations((prev) =>
+          prev.map((r) =>
+            r.id === item.id ? { ...r, paymentStatus: "REJECTED" } : r
+          )
+        );
+      }
+    } catch (err) {
+      console.error("Failed to reject status:", err);
       alert("Could not update status. Please check your network connection.");
     } finally {
       setProcessingId(null);
@@ -140,9 +169,9 @@ export default function StudentRegistrationsSection({
   const filtered = useMemo(() => {
     return registrations.filter((item) => {
       // 1. Status Filter
-      const isItemApproved = item.paymentStatus === "APPROVED";
-      if (statusFilter === "PENDING" && isItemApproved) return false;
-      if (statusFilter === "APPROVED" && !isItemApproved) return false;
+      if (statusFilter === "PENDING" && item.paymentStatus !== "PENDING") return false;
+      if (statusFilter === "APPROVED" && item.paymentStatus !== "APPROVED") return false;
+      if (statusFilter === "REJECTED" && item.paymentStatus !== "REJECTED") return false;
 
       // 2. Search Query (name or phone)
       if (searchQuery.trim()) {
@@ -162,17 +191,85 @@ export default function StudentRegistrationsSection({
   // Derived counts
   const totalCount = registrations.length;
   const approvedCount = registrations.filter((r) => r.paymentStatus === "APPROVED").length;
-  const pendingCount = registrations.filter((r) => r.paymentStatus !== "APPROVED").length;
+  const pendingCount = registrations.filter((r) => r.paymentStatus === "PENDING").length;
+  const rejectedCount = registrations.filter((r) => r.paymentStatus === "REJECTED").length;
   const verifiedRevenue = registrations
     .filter((r) => r.paymentStatus === "APPROVED")
     .reduce((acc, r) => acc + (r.amount || 0), 0);
+
+  // CSV Export for paid / verified or filtered students
+  const handleExportCSV = (onlyPaid: boolean = false) => {
+    const listToExport = onlyPaid
+      ? registrations.filter((r) => r.paymentStatus === "APPROVED")
+      : filtered;
+
+    if (listToExport.length === 0) {
+      alert(onlyPaid ? "No verified / paid students found to export." : "No records match the current filter to export.");
+      return;
+    }
+
+    const headers = [
+      "Student Name",
+      "Mobile / WhatsApp",
+      "Place / District",
+      "Course Choice",
+      "Payment Status",
+      "Amount (INR)",
+      "UTR / Transaction ID",
+      "Registration Date",
+    ];
+
+    const escapeCsv = (val: string | number | undefined | null) => {
+      const str = String(val ?? "");
+      return `"${str.replace(/"/g, '""')}"`;
+    };
+
+    const rows = listToExport.map((item: UnifiedStudentRegistration) => [
+      escapeCsv(item.fullName),
+      escapeCsv(item.whatsappNum),
+      escapeCsv(item.district),
+      escapeCsv(item.courseChoice),
+      escapeCsv(
+        item.paymentStatus === "APPROVED"
+          ? "Verified"
+          : item.paymentStatus === "REJECTED"
+          ? "Rejected"
+          : "Pending Verification"
+      ),
+      escapeCsv(item.amount || 0),
+      escapeCsv(item.upiTxId || "N/A"),
+      escapeCsv(item.registrationDate || "N/A"),
+    ]);
+
+    // Prepend UTF-8 BOM so Excel opens Malayalam & special chars cleanly
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r: string[]) => r.join(","))].join("\r\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    const dateStr = new Date().toISOString().slice(0, 10);
+    link.download = onlyPaid
+      ? `hanoon_verified_paid_students_${dateStr}.csv`
+      : `hanoon_students_${statusFilter.toLowerCase()}_${dateStr}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="space-y-5 sm:space-y-6 w-full animate-fade-in font-['Plus_Jakarta_Sans']">
       {/* 1. Metrics Overview Banner */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Total Registrations */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-purple-100 shadow-md space-y-1.5">
+        <div
+          onClick={() => setStatusFilter("ALL")}
+          className={`p-4 sm:p-5 rounded-2xl border shadow-md space-y-1.5 cursor-pointer transition-all hover:-translate-y-0.5 ${
+            statusFilter === "ALL"
+              ? "bg-purple-50/60 border-purple-300 ring-2 ring-purple-400/30"
+              : "bg-white border-purple-100 hover:border-purple-200"
+          }`}
+        >
           <div className="flex items-center justify-between text-slate-500">
             <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider">
               Total Registrations
@@ -192,7 +289,14 @@ export default function StudentRegistrationsSection({
         </div>
 
         {/* Pending Verification */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-amber-200/90 bg-amber-50/15 shadow-md space-y-1.5">
+        <div
+          onClick={() => setStatusFilter("PENDING")}
+          className={`p-4 sm:p-5 rounded-2xl border shadow-md space-y-1.5 cursor-pointer transition-all hover:-translate-y-0.5 ${
+            statusFilter === "PENDING"
+              ? "bg-amber-50 border-amber-400 ring-2 ring-amber-400/30"
+              : "bg-white border-amber-200/90 bg-amber-50/15 hover:border-amber-300"
+          }`}
+        >
           <div className="flex items-center justify-between text-slate-500">
             <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-amber-800">
               Pending Verification
@@ -219,7 +323,14 @@ export default function StudentRegistrationsSection({
         </div>
 
         {/* Verified / Paid */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-emerald-100 shadow-md space-y-1.5">
+        <div
+          onClick={() => setStatusFilter("APPROVED")}
+          className={`p-4 sm:p-5 rounded-2xl border shadow-md space-y-1.5 cursor-pointer transition-all hover:-translate-y-0.5 ${
+            statusFilter === "APPROVED"
+              ? "bg-emerald-50 border-emerald-400 ring-2 ring-emerald-400/30"
+              : "bg-white border-emerald-100 hover:border-emerald-300"
+          }`}
+        >
           <div className="flex items-center justify-between text-slate-500">
             <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-emerald-800">
               Verified / Paid
@@ -238,22 +349,29 @@ export default function StudentRegistrationsSection({
           </div>
         </div>
 
-        {/* Total Collected Revenue */}
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-purple-100 shadow-md space-y-1.5">
+        {/* Rejected */}
+        <div
+          onClick={() => setStatusFilter("REJECTED")}
+          className={`p-4 sm:p-5 rounded-2xl border shadow-md space-y-1.5 cursor-pointer transition-all hover:-translate-y-0.5 ${
+            statusFilter === "REJECTED"
+              ? "bg-rose-50 border-rose-400 ring-2 ring-rose-400/30"
+              : "bg-white border-rose-100 hover:border-rose-300"
+          }`}
+        >
           <div className="flex items-center justify-between text-slate-500">
-            <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider">
-              Verified Tuition
+            <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-rose-800">
+              Rejected
             </span>
-            <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-              <DollarSign className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+              <XCircle className="w-4 h-4" />
             </div>
           </div>
           <div className="space-y-0.5">
-            <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              ₹{verifiedRevenue.toLocaleString("en-IN")}
+            <h3 className="text-xl sm:text-2xl font-black text-rose-700 tracking-tight">
+              {rejectedCount}
             </h3>
-            <p className="text-[11px] text-slate-500 font-medium">
-              Direct UPI fees verified
+            <p className="text-[11px] text-slate-500 font-medium truncate">
+              {rejectedCount === 0 ? "No rejected records" : `${rejectedCount} flagged / rejected`}
             </p>
           </div>
         </div>
@@ -379,6 +497,43 @@ export default function StudentRegistrationsSection({
               >
                 Verified ({approvedCount})
               </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter("REJECTED")}
+                className={`py-1.5 px-3 rounded-lg transition-all cursor-pointer ${
+                  statusFilter === "REJECTED"
+                    ? "bg-rose-100 text-rose-900 font-extrabold shadow-2xs"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                Rejected ({rejectedCount})
+              </button>
+            </div>
+
+            {/* Export CSV Buttons */}
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => handleExportCSV(true)}
+                disabled={loading || approvedCount === 0}
+                className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Download spreadsheet of all verified / paid students"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Export Paid (CSV)</span>
+                <span className="sm:hidden">Paid CSV</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleExportCSV(false)}
+                disabled={loading || filtered.length === 0}
+                className="py-2 px-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Download spreadsheet of currently filtered list"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Export Filtered</span>
+              </button>
             </div>
 
             {/* Refresh Button */}
@@ -426,12 +581,12 @@ export default function StudentRegistrationsSection({
                         🎓
                       </div>
                       <h4 className="text-sm font-black text-slate-800">
-                        {searchQuery ? "No Matching Registrations" : "No Student Registrations Yet"}
+                        {searchQuery ? "No Matching Registrations" : "No student registrations found"}
                       </h4>
                       <p className="text-xs text-slate-400">
                         {searchQuery
                           ? "Try searching for a different student name or mobile number."
-                          : "When students register on the website, their details will appear here with 'Pending Verification' status automatically."}
+                          : "When students register on the website, their details will appear here with 'Pending Verification' status."}
                       </p>
                     </div>
                   </td>
@@ -517,16 +672,22 @@ export default function StudentRegistrationsSection({
                         })}
                       </td>
 
-                      {/* Column 6: Payment Status (Badge 1: Pending Verification, Badge 2: Verified / Paid) */}
+                      {/* Column 6: Payment Status Badges (Yellow Pending, Green Verified, Red Rejected) */}
                       <td className="py-3.5 px-4">
-                        {isVerified ? (
-                          /* Badge 2: Verified / Paid (Green badge) */
+                        {item.paymentStatus === "APPROVED" ? (
+                          /* 🟢 "Verified" (Green Badge) */
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 font-black text-[11px] border border-emerald-300">
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                            <span>Verified / Paid</span>
+                            <span>Verified</span>
+                          </span>
+                        ) : item.paymentStatus === "REJECTED" ? (
+                          /* 🔴 "Rejected" (Red Badge) */
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-800 font-black text-[11px] border border-rose-300">
+                            <XCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                            <span>Rejected</span>
                           </span>
                         ) : (
-                          /* Badge 1: Pending Verification (Yellow/Orange badge) */
+                          /* 🟡 "Pending Verification" (Yellow/Orange Badge) */
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-800 font-black text-[11px] border border-amber-300 animate-pulse">
                             <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                             <span>Pending Verification</span>
@@ -534,47 +695,48 @@ export default function StudentRegistrationsSection({
                         )}
                       </td>
 
-                      {/* Column 7: Quick Action Button (Mark as Verified / Toggle Status) */}
+                      {/* Column 7: Quick Action Buttons (Verify / Mark as Paid & Reject) */}
                       <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {!isVerified ? (
-                            /* Quick Action: Mark as Verified */
+                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                          {/* Green Button: "Verify / Mark as Paid" */}
+                          {item.paymentStatus !== "APPROVED" && (
                             <button
                               type="button"
-                              onClick={() => handleToggleStatus(item)}
+                              onClick={() => handleVerifyStatus(item)}
                               disabled={isProcessing}
-                              className="py-1.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs inline-flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
-                              title="Mark as Verified in Database"
+                              className="py-1.5 px-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs inline-flex items-center gap-1 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                              title="Verify / Mark as Paid in Supabase"
                             >
-                              <Check className="w-3.5 h-3.5" />
-                              <span>Mark as Verified</span>
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Verify / Mark as Paid</span>
                             </button>
-                          ) : (
-                            /* Quick Action: Toggle Status back to Pending */
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => handleToggleStatus(item)}
-                                disabled={isProcessing}
-                                className="py-1.5 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] inline-flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50"
-                                title="Toggle Status back to Pending"
-                              >
-                                <ArrowUpDown className="w-3 h-3 text-slate-500" />
-                                <span>Toggle Status</span>
-                              </button>
-
-                              <a
-                                href={waUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="py-1.5 px-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-extrabold text-[11px] inline-flex items-center gap-1 transition-all cursor-pointer"
-                                title="Send Welcome Message via WhatsApp"
-                              >
-                                <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
-                                <span>WhatsApp</span>
-                              </a>
-                            </>
                           )}
+
+                          {/* Red Button: "Reject" */}
+                          {item.paymentStatus !== "REJECTED" && (
+                            <button
+                              type="button"
+                              onClick={() => handleRejectStatus(item)}
+                              disabled={isProcessing}
+                              className="py-1.5 px-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-black text-xs inline-flex items-center gap-1 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                              title="Reject Registration in Supabase"
+                            >
+                              <XCircle className="w-3.5 h-3.5" />
+                              <span>Reject</span>
+                            </button>
+                          )}
+
+                          {/* WhatsApp Direct Contact Button */}
+                          <a
+                            href={waUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="py-1.5 px-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-extrabold text-[11px] inline-flex items-center gap-1 transition-all cursor-pointer"
+                            title="Send Welcome Message via WhatsApp"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>WhatsApp</span>
+                          </a>
                         </div>
                       </td>
                     </tr>
@@ -645,13 +807,17 @@ export default function StudentRegistrationsSection({
 
                     {/* Status Badge */}
                     <div>
-                      {isVerified ? (
+                      {item.paymentStatus === "APPROVED" ? (
                         <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 font-black text-[10px] border border-emerald-300">
-                          Verified / Paid
+                          🟢 Verified
+                        </span>
+                      ) : item.paymentStatus === "REJECTED" ? (
+                        <span className="px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-800 font-black text-[10px] border border-rose-300">
+                          🔴 Rejected
                         </span>
                       ) : (
                         <span className="px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 font-black text-[10px] border border-amber-300 animate-pulse">
-                          Pending Verification
+                          🟡 Pending
                         </span>
                       )}
                     </div>
@@ -686,44 +852,45 @@ export default function StudentRegistrationsSection({
                   )}
 
                   {/* Actions on Mobile */}
-                  <div className="flex items-center justify-between pt-1 border-t border-purple-50/80">
+                  <div className="flex items-center justify-between pt-1 border-t border-purple-50/80 gap-2 flex-wrap">
                     <span className="text-xs font-black text-slate-900">
                       ₹{item.amount?.toLocaleString("en-IN") || "1,500"}
                     </span>
 
-                    <div className="flex items-center gap-2">
-                      {!isVerified ? (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {item.paymentStatus !== "APPROVED" && (
                         <button
                           type="button"
-                          onClick={() => handleToggleStatus(item)}
+                          onClick={() => handleVerifyStatus(item)}
                           disabled={isProcessing}
-                          className="py-1.5 px-3 rounded-xl bg-emerald-600 text-white font-extrabold text-xs inline-flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50"
+                          className="py-1 px-2 rounded-xl bg-emerald-600 text-white font-extrabold text-[11px] inline-flex items-center gap-1 shadow-xs cursor-pointer disabled:opacity-50"
                         >
-                          <Check className="w-3.5 h-3.5" />
-                          <span>Mark as Verified</span>
+                          <CheckCircle2 className="w-3 h-3" />
+                          <span>Verify</span>
                         </button>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleToggleStatus(item)}
-                            disabled={isProcessing}
-                            className="py-1.5 px-2.5 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs inline-flex items-center gap-1 cursor-pointer"
-                          >
-                            <ArrowUpDown className="w-3 h-3" />
-                            <span>Toggle</span>
-                          </button>
-                          <a
-                            href={waUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="py-1.5 px-3 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 font-extrabold text-xs inline-flex items-center gap-1.5"
-                          >
-                            <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>WhatsApp</span>
-                          </a>
-                        </>
                       )}
+
+                      {item.paymentStatus !== "REJECTED" && (
+                        <button
+                          type="button"
+                          onClick={() => handleRejectStatus(item)}
+                          disabled={isProcessing}
+                          className="py-1 px-2 rounded-xl bg-rose-600 text-white font-extrabold text-[11px] inline-flex items-center gap-1 shadow-xs cursor-pointer disabled:opacity-50"
+                        >
+                          <XCircle className="w-3 h-3" />
+                          <span>Reject</span>
+                        </button>
+                      )}
+
+                      <a
+                        href={waUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="py-1 px-2 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 font-extrabold text-[11px] inline-flex items-center gap-1"
+                      >
+                        <MessageCircle className="w-3 h-3 text-emerald-600" />
+                        <span>WA</span>
+                      </a>
                     </div>
                   </div>
                 </div>

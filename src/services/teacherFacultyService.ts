@@ -12,50 +12,16 @@ export interface FacultyTeacher {
   createdAt?: string;
 }
 
-export const INITIAL_FACULTY: FacultyTeacher[] = [
-  {
-    id: "tch-01",
-    fullName: "Usthad Dr. Faisal Al-Hanoon",
-    email: "faisal@hanoon.academy",
-    specialization: "Adaviyya (Seerah & Ethics)",
-    phone: "919846012345",
-    ratePerClass: 800,
-    isActive: true,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "tch-02",
-    fullName: "Usthad Abdul Rahman Al-Hafiz",
-    email: "teacher@hanoon.academy",
-    specialization: "Quran / Tajweed & Haddad",
-    phone: "919846056789",
-    ratePerClass: 750,
-    isActive: true,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "tch-03",
-    fullName: "Usthad Anas Nadwi",
-    email: "anas@hanoon.academy",
-    specialization: "Fiqh & Applied Jurisprudence",
-    phone: "919846098765",
-    ratePerClass: 700,
-    isActive: true,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "tch-04",
-    fullName: "Usthad Bilal Farooqi",
-    email: "bilal@hanoon.academy",
-    specialization: "Shama'il & Fashion Designing",
-    phone: "919846011223",
-    ratePerClass: 750,
-    isActive: true,
-    createdAt: new Date().toISOString(),
-  },
-];
+export const INITIAL_FACULTY: FacultyTeacher[] = [];
 
 const STORAGE_KEY_TEACHERS = "hanoon_admin_faculty_teachers_v1";
+const DUMMY_TEACHER_IDS = new Set(["tch-01", "tch-02", "tch-03", "tch-04"]);
+const DUMMY_TEACHER_EMAILS = new Set([
+  "faisal@hanoon.academy",
+  "teacher@hanoon.academy",
+  "anas@hanoon.academy",
+  "bilal@hanoon.academy",
+]);
 
 /**
  * Normalizes phone numbers for WhatsApp linking
@@ -68,20 +34,24 @@ export function formatTeacherPhone(phone: string): string {
 }
 
 /**
- * Retrieves cached faculty list from local storage
+ * Retrieves cached faculty list from local storage, purging any legacy mock items
  */
 export function getLocalFacultyTeachers(): FacultyTeacher[] {
-  if (typeof window === "undefined") return INITIAL_FACULTY;
+  if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY_TEACHERS);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) {
+        return parsed.filter(
+          (t: any) => !DUMMY_TEACHER_IDS.has(t.id) && !DUMMY_TEACHER_EMAILS.has(t.email)
+        );
+      }
     }
   } catch (e) {
     console.warn("Could not read local faculty teachers:", e);
   }
-  return INITIAL_FACULTY;
+  return [];
 }
 
 /**
@@ -90,9 +60,12 @@ export function getLocalFacultyTeachers(): FacultyTeacher[] {
 export function saveLocalFacultyTeachers(teachers: FacultyTeacher[]): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(STORAGE_KEY_TEACHERS, JSON.stringify(teachers));
+    const sanitized = teachers.filter(
+      (t) => !DUMMY_TEACHER_IDS.has(t.id) && !DUMMY_TEACHER_EMAILS.has(t.email)
+    );
+    localStorage.setItem(STORAGE_KEY_TEACHERS, JSON.stringify(sanitized));
     window.dispatchEvent(
-      new CustomEvent("hanoon_faculty_teachers_updated", { detail: teachers })
+      new CustomEvent("hanoon_faculty_teachers_updated", { detail: sanitized })
     );
   } catch (e) {
     console.error("Could not save faculty teachers to localStorage:", e);
@@ -100,7 +73,8 @@ export function saveLocalFacultyTeachers(teachers: FacultyTeacher[]): void {
 }
 
 /**
- * Fetches all teachers from Supabase with resilient fallback to local storage
+ * Fetches all teachers directly from Supabase database.
+ * Strictly excludes any dummy test accounts and never auto-seeds mock data.
  */
 export async function fetchFacultyTeachers(): Promise<FacultyTeacher[]> {
   if (!isSupabaseConfigured || !supabase) {
@@ -118,8 +92,25 @@ export async function fetchFacultyTeachers(): Promise<FacultyTeacher[]> {
       return getLocalFacultyTeachers();
     }
 
-    if (data && data.length > 0) {
-      const mapped: FacultyTeacher[] = data.map((row: any) => ({
+    if (data !== null) {
+      // Purge any legacy dummy teachers from Supabase if found
+      const dummyMatches = data.filter(
+        (row: any) => DUMMY_TEACHER_IDS.has(row.id) || DUMMY_TEACHER_EMAILS.has(row.email)
+      );
+      if (dummyMatches.length > 0) {
+        Promise.resolve(
+          supabase
+            .from("teachers")
+            .delete()
+            .in("id", dummyMatches.map((d: any) => d.id))
+        ).catch((e: unknown) => console.warn("Failed to purge dummy teachers from Supabase:", e));
+      }
+
+      const realRows = data.filter(
+        (row: any) => !DUMMY_TEACHER_IDS.has(row.id) && !DUMMY_TEACHER_EMAILS.has(row.email)
+      );
+
+      const mapped: FacultyTeacher[] = realRows.map((row: any) => ({
         id: row.id,
         fullName: row.full_name || "Faculty Instructor",
         email: row.email || "",
@@ -134,23 +125,7 @@ export async function fetchFacultyTeachers(): Promise<FacultyTeacher[]> {
       return mapped;
     }
 
-    // If database returned empty array, try seeding initial teachers to Supabase
-    const local = getLocalFacultyTeachers();
-    try {
-      const rowsToInsert = local.map((t) => ({
-        id: t.id,
-        full_name: t.fullName,
-        email: t.email,
-        specialization: t.specialization,
-        phone: t.phone,
-        rate_per_class: t.ratePerClass,
-        is_active: t.isActive,
-      }));
-      await supabase.from("teachers").upsert(rowsToInsert, { onConflict: "id" });
-    } catch (seedErr) {
-      console.warn("Could not seed initial teachers to Supabase:", seedErr);
-    }
-    return local;
+    return [];
   } catch (err) {
     console.error("fetchFacultyTeachers exception:", err);
     return getLocalFacultyTeachers();

@@ -70,9 +70,6 @@ export default function ScreenOnboarding({
             <h2 className="text-xl font-black text-slate-900 tracking-tight">
               Student Registration
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Please enter your details to get started.
-            </p>
           </div>
 
           {error && (

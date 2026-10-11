@@ -18,7 +18,6 @@ import {
   Calendar,
   MessageCircle,
 } from "lucide-react";
-import HanoonLogo from "@/components/brand/HanoonLogo";
 import {
   loginStudentWithPhone,
   loginStaffWithCredentials,
@@ -247,22 +246,11 @@ function LoginFormContent() {
   return (
     <div className="w-full max-w-md mx-auto space-y-5">
       {/* Brand Header */}
-      {portalCategory === "staff" ? (
-        <div className="text-center space-y-2">
-          <div className="flex justify-center mb-1">
-            <HanoonLogo size="lg" />
-          </div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-            Staff Login
-          </h1>
-        </div>
-      ) : (
-        <div className="text-center pb-1">
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-            Student Details
-          </h1>
-        </div>
-      )}
+      <div className="text-center pb-1">
+        <h1 className="text-2xl font-black text-slate-900 tracking-tight">
+          {portalCategory === "staff" ? "Staff Login" : "Student Details"}
+        </h1>
+      </div>
 
       {/* Main Authentication Card */}
       <div className="bg-white p-5 sm:p-6 rounded-3xl border border-purple-100 shadow-md space-y-4">

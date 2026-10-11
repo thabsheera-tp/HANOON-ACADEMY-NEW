@@ -398,7 +398,7 @@ export async function saveStudentLead(profile: {
 }
 
 /**
- * Fetches all student registrations combined with their payment records
+ * Fetches all real student registrations combined with their payment records from Supabase
  */
 export async function fetchUnifiedRegistrations(): Promise<UnifiedStudentRegistration[]> {
   const result: UnifiedStudentRegistration[] = [];
@@ -406,6 +406,8 @@ export async function fetchUnifiedRegistrations(): Promise<UnifiedStudentRegistr
 
   // 1. Fetch payments with student relation from Supabase
   let payments: DbPayment[] = [];
+  let fetchedPaymentsFromSupabase = false;
+
   if (isSupabaseConfigured && supabase) {
     try {
       const { data, error } = await supabase
@@ -416,16 +418,19 @@ export async function fetchUnifiedRegistrations(): Promise<UnifiedStudentRegistr
         `)
         .order("submitted_at", { ascending: false });
 
-      if (!error && data) {
+      if (!error && data !== null) {
         payments = data as DbPayment[];
+        fetchedPaymentsFromSupabase = true;
+      } else if (error) {
+        console.warn("Supabase payments query error:", error.message);
       }
     } catch (err) {
       console.warn("Supabase fetchUnifiedRegistrations payments query error:", err);
     }
   }
 
-  // Fallback to local payments if none
-  if (payments.length === 0 && typeof window !== "undefined") {
+  // Fallback to local storage ONLY if Supabase is unconfigured or completely unavailable
+  if (!fetchedPaymentsFromSupabase && typeof window !== "undefined") {
     try {
       const local = localStorage.getItem(LOCAL_PAYMENTS_KEY);
       if (local) {
@@ -436,7 +441,7 @@ export async function fetchUnifiedRegistrations(): Promise<UnifiedStudentRegistr
     }
   }
 
-  // Add all payments
+  // Add all payments with strict PENDING default
   for (const p of payments) {
     const student = p.student;
     const phone = student?.whatsapp_num || "";
@@ -448,6 +453,15 @@ export async function fetchUnifiedRegistrations(): Promise<UnifiedStudentRegistr
       COURSE_NAMES_MAP[p.course_id] ||
       (p.course_id ? p.course_id.charAt(0).toUpperCase() + p.course_id.slice(1) : "Adaviyya Track");
 
+    // Strictly APPROVED only if explicitly approved in admin; otherwise strictly PENDING
+    const isApproved = p.status === "APPROVED" || (p.status as string) === "verified";
+    const isRejected = p.status === "REJECTED";
+    const paymentStatus: "PENDING" | "APPROVED" | "REJECTED" = isApproved
+      ? "APPROVED"
+      : isRejected
+      ? "REJECTED"
+      : "PENDING";
+
     result.push({
       id: p.id,
       studentId: student?.id || p.student_id,
@@ -457,16 +471,18 @@ export async function fetchUnifiedRegistrations(): Promise<UnifiedStudentRegistr
       courseChoice: courseTitle,
       courseId: p.course_id,
       registrationDate: p.submitted_at || p.updated_at || new Date().toISOString(),
-      paymentStatus: (p.status as any) || "PENDING",
-      amount: p.amount || 1500,
+      paymentStatus,
+      amount: p.amount || 500,
       upiTxId: p.upi_txid || "-",
       paymentId: p.id,
       rejectionReason: p.rejection_reason || undefined,
     });
   }
 
-  // 2. Fetch all students from Supabase to catch students who registered but haven't paid yet
+  // 2. Fetch all registered students from Supabase to catch leads who registered
   let allStudents: DbStudent[] = [];
+  let fetchedStudentsFromSupabase = false;
+
   if (isSupabaseConfigured && supabase) {
     try {
       const { data, error } = await supabase
@@ -474,16 +490,19 @@ export async function fetchUnifiedRegistrations(): Promise<UnifiedStudentRegistr
         .select("*")
         .order("created_at", { ascending: false });
 
-      if (!error && data) {
+      if (!error && data !== null) {
         allStudents = data;
+        fetchedStudentsFromSupabase = true;
+      } else if (error) {
+        console.warn("Supabase students query error:", error.message);
       }
     } catch (err) {
       console.warn("Supabase students query error:", err);
     }
   }
 
-  // Fallback local students
-  if (allStudents.length === 0 && typeof window !== "undefined") {
+  // Fallback to local storage ONLY if Supabase is unconfigured or failed
+  if (!fetchedStudentsFromSupabase && typeof window !== "undefined") {
     try {
       const local = localStorage.getItem(LOCAL_STUDENTS_KEY);
       if (local) {
@@ -494,7 +513,7 @@ export async function fetchUnifiedRegistrations(): Promise<UnifiedStudentRegistr
     }
   }
 
-  // Identify students not yet in the list
+  // Identify registered students not yet listed in payments
   const existingPhones = new Set(result.map((r) => r.whatsappNum.replace(/\D/g, "")));
   const existingStudentIds = new Set(result.map((r) => r.studentId));
 

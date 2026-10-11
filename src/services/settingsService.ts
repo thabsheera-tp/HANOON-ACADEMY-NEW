@@ -44,16 +44,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
 };
 
-const DEFAULT_AUDIT_LOGS: AuditLogItem[] = [
-  {
-    id: "aud-001",
-    timestamp: "System Init",
-    actor: "System Administrator",
-    action: "System Audit Initialized",
-    category: "SETTINGS",
-    details: "Production database security and educational tables active.",
-  },
-];
+const DEFAULT_AUDIT_LOGS: AuditLogItem[] = [];
 
 const LOCAL_SETTINGS_KEY = "hanoon_app_settings";
 const LOCAL_AUDIT_KEY = "hanoon_audit_logs";
@@ -338,17 +329,19 @@ export function subscribeToAppSettings(callback: (settings: AppSettings) => void
  * Retrieves audit logs with Supabase support.
  */
 export function getAuditLogs(): AuditLogItem[] {
-  if (typeof window === "undefined") return DEFAULT_AUDIT_LOGS;
+  if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(LOCAL_AUDIT_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) {
+        return parsed.filter((log: any) => log.id !== "aud-001");
+      }
     }
   } catch (e) {
     console.warn("Failed to read audit logs:", e);
   }
-  return DEFAULT_AUDIT_LOGS;
+  return [];
 }
 
 /**
@@ -361,9 +354,9 @@ export async function fetchAuditLogs(): Promise<AuditLogItem[]> {
         .from("audit_logs")
         .select("*")
         .order("timestamp", { ascending: false })
-        .limit(50);
+        .limit(100);
 
-      if (!error && data && data.length > 0) {
+      if (!error && data !== null) {
         const mapped: AuditLogItem[] = data.map((d) => ({
           id: d.id,
           timestamp: new Date(d.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
@@ -383,6 +376,37 @@ export async function fetchAuditLogs(): Promise<AuditLogItem[]> {
   }
 
   return getAuditLogs();
+}
+
+/**
+ * Clears all audit logs from both Supabase and localStorage.
+ */
+export async function clearAuditLogs(): Promise<boolean> {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { error } = await supabase
+        .from("audit_logs")
+        .delete()
+        .neq("id", "00000000-0000-0000-0000-000000000000");
+
+      if (error) {
+        console.warn("Supabase clear audit logs error:", error);
+      }
+    } catch (err) {
+      console.warn("Failed to clear Supabase audit logs:", err);
+    }
+  }
+
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem(LOCAL_AUDIT_KEY);
+      window.dispatchEvent(new CustomEvent("hanoon_audit_logs_updated", { detail: [] }));
+    } catch (e) {
+      console.error("Failed to clear local audit logs:", e);
+    }
+  }
+
+  return true;
 }
 
 /**

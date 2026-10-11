@@ -468,15 +468,6 @@ export default function ScreenPayment({
               {showEditForm ? "Hide Re-entry Form" : "Need to correct your 12-digit UTR?"}
             </button>
 
-            <button
-              type="button"
-              onClick={() => router.push("/login?portal=staff")}
-              className="text-[11px] font-semibold text-purple-700 hover:text-purple-900 transition-colors py-1 cursor-pointer inline-flex items-center gap-1.5"
-            >
-              <Lock className="w-3.5 h-3.5 text-purple-600" />
-              <span>Institute Staff? Login Here</span>
-            </button>
-
             <div className="pt-1">
               <button
                 type="button"

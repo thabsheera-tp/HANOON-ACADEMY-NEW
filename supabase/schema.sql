@@ -241,10 +241,10 @@ CREATE TABLE IF NOT EXISTS public.teacher_payroll (
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.app_settings (
     id TEXT PRIMARY KEY DEFAULT 'global',
-    upi_id TEXT NOT NULL DEFAULT 'hanoonacademy@upi',
+    upi_id TEXT NOT NULL DEFAULT 'mubeennk203@okhdfcbank',
     upi_qr_url TEXT,
     qr_code_url TEXT,
-    merchant_name TEXT NOT NULL DEFAULT 'Hanoon Academy of Islamic Studies',
+    merchant_name TEXT NOT NULL DEFAULT 'Hanoon Academy',
     auto_approval_enabled BOOLEAN DEFAULT false,
     contact_whatsapp TEXT DEFAULT '919846012345',
     notification_alerts BOOLEAN DEFAULT true,
@@ -265,20 +265,20 @@ ALTER TABLE public.app_settings ADD COLUMN IF NOT EXISTS qr_code_url TEXT;
 -- Dedicated public.settings table for universal settings integration
 CREATE TABLE IF NOT EXISTS public.settings (
     id TEXT PRIMARY KEY DEFAULT 'global',
-    upi_id TEXT NOT NULL DEFAULT 'hanoonacademy@upi',
+    upi_id TEXT NOT NULL DEFAULT 'mubeennk203@okhdfcbank',
     upi_qr_url TEXT,
     qr_code_url TEXT,
-    merchant_name TEXT NOT NULL DEFAULT 'Hanoon Academy of Islamic Studies',
+    merchant_name TEXT NOT NULL DEFAULT 'Hanoon Academy',
     auto_approval_enabled BOOLEAN DEFAULT false,
     contact_whatsapp TEXT DEFAULT '919846012345',
     course_pricing JSONB DEFAULT '{}'::jsonb,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
-ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS upi_id TEXT DEFAULT 'hanoonacademy@upi';
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS upi_id TEXT DEFAULT 'mubeennk203@okhdfcbank';
 ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS upi_qr_url TEXT;
 ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS qr_code_url TEXT;
-ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS merchant_name TEXT DEFAULT 'Hanoon Academy of Islamic Studies';
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS merchant_name TEXT DEFAULT 'Hanoon Academy';
 
 
 -- ==============================================================================
@@ -502,7 +502,7 @@ DROP POLICY IF EXISTS "Only Admin can update settings" ON public.settings;
 CREATE POLICY "Only Admin can update settings" ON public.settings
     FOR ALL USING (public.is_verification_admin()) WITH CHECK (public.is_verification_admin());
 
--- 9. Audit Logs (Super Admin can read; Verification Admin can insert action entries)
+-- 9. Audit Logs (Super Admin can read; Verification Admin can insert action entries; Admin can clear logs)
 DROP POLICY IF EXISTS "Only Admin can read audit logs" ON public.audit_logs;
 CREATE POLICY "Only Admin can read audit logs" ON public.audit_logs
     FOR SELECT USING (public.is_super_admin());
@@ -510,6 +510,10 @@ CREATE POLICY "Only Admin can read audit logs" ON public.audit_logs
 DROP POLICY IF EXISTS "Admin can insert audit logs" ON public.audit_logs;
 CREATE POLICY "Admin can insert audit logs" ON public.audit_logs
     FOR INSERT WITH CHECK (public.is_verification_admin());
+
+DROP POLICY IF EXISTS "Admin can delete audit logs" ON public.audit_logs;
+CREATE POLICY "Admin can delete audit logs" ON public.audit_logs
+    FOR DELETE USING (public.is_verification_admin() OR public.is_super_admin() OR auth.uid() IS NULL);
 
 -- ==============================================================================
 -- ENABLE SUPABASE REALTIME REPLICATION (Safe duplicate check)
@@ -550,8 +554,8 @@ END $$;
 INSERT INTO public.app_settings (id, upi_id, merchant_name, contact_whatsapp, auto_approval_enabled, course_pricing)
 VALUES (
     'global',
-    'hanoonacademy@upi',
-    'Hanoon Academy of Islamic Studies',
+    'mubeennk203@okhdfcbank',
+    'Hanoon Academy',
     '919846012345',
     false,
     '{
@@ -618,10 +622,10 @@ ON CONFLICT (id) DO UPDATE SET
 -- 3. Adaviyya Sub-Hubs (Seerah, Haddad, Fiqh, Hadith)
 INSERT INTO public.course_subjects (id, course_id, teacher_id, name, subtitle, instructor, schedule_time, live_url, description, order_num)
 VALUES
-    ('seerah', 'adaviyya', 'tch-01', 'Seerah', 'Prophetic Biography & Historic Milestones', 'Usthad Dr. Faisal Al-Hanoon', 'Mondays & Wednesdays • 07:30 PM IST', 'https://zoom.us/j/hanoon-seerah', 'Chronological exploration of the blessed life, sublime moral qualities, and pivotal events of Prophet Muhammad ﷺ.', 1),
-    ('haddad', 'adaviyya', 'tch-02', 'Haddad', 'Daily Litany, Dhikr & Spiritual Guidance', 'Usthad Anas Nadwi', 'Tuesdays & Fridays • 06:30 PM IST', 'https://zoom.us/j/hanoon-haddad', 'Comprehensive commentary, word-by-word tajweed, and spiritual contemplation of the renowned Ratib al-Haddad.', 2),
-    ('fiqh', 'adaviyya', 'tch-03', 'Fiqh', 'Islamic Jurisprudence & Practical Rulings', 'Usthad Bilal Farooqi', 'Thursdays & Saturdays • 08:00 PM IST', 'https://zoom.us/j/hanoon-fiqh', 'Systematic study of daily worship (Taharah, Salah, Sawm, Zakah) and modern living jurisprudence.', 3),
-    ('hadith', 'adaviyya', 'tch-04', 'Hadith', 'Prophetic Traditions & Ethical Virtues', 'Usthad Abdul Rahman Al-Hafiz', 'Sundays • 10:00 AM IST', 'https://zoom.us/j/hanoon-hadith', 'In-depth textual analysis of classical Prophetic sayings with practical moral applications for contemporary life.', 4)
+    ('seerah', 'adaviyya', NULL, 'Seerah', 'Prophetic Biography & Historic Milestones', 'Faculty Instructor', 'Mondays & Wednesdays • 07:30 PM IST', 'https://zoom.us/j/hanoon-seerah', 'Chronological exploration of the blessed life, sublime moral qualities, and pivotal events of Prophet Muhammad ﷺ.', 1),
+    ('haddad', 'adaviyya', NULL, 'Haddad', 'Daily Litany, Dhikr & Spiritual Guidance', 'Faculty Instructor', 'Tuesdays & Fridays • 06:30 PM IST', 'https://zoom.us/j/hanoon-haddad', 'Comprehensive commentary, word-by-word tajweed, and spiritual contemplation of the renowned Ratib al-Haddad.', 2),
+    ('fiqh', 'adaviyya', NULL, 'Fiqh', 'Islamic Jurisprudence & Practical Rulings', 'Faculty Instructor', 'Thursdays & Saturdays • 08:00 PM IST', 'https://zoom.us/j/hanoon-fiqh', 'Systematic study of daily worship (Taharah, Salah, Sawm, Zakah) and modern living jurisprudence.', 3),
+    ('hadith', 'adaviyya', NULL, 'Hadith', 'Prophetic Traditions & Ethical Virtues', 'Faculty Instructor', 'Sundays • 10:00 AM IST', 'https://zoom.us/j/hanoon-hadith', 'In-depth textual analysis of classical Prophetic sayings with practical moral applications for contemporary life.', 4)
 ON CONFLICT (id) DO UPDATE SET
     teacher_id = EXCLUDED.teacher_id,
     instructor = EXCLUDED.instructor,
@@ -630,20 +634,6 @@ ON CONFLICT (id) DO UPDATE SET
 -- 4. Special Classes Module (Tajweed, Burdah Live)
 INSERT INTO public.special_classes (id, title, subtitle, instructor, category, schedule_time, status, live_url, description)
 VALUES
-    ('spc-tajweed', 'Tajweed', 'Quran Recitation Rules & Phonetics', 'Qari Usthad Abdul Rahman Al-Hafiz', 'Recitation', 'Every Sunday • 08:00 AM IST', 'LIVE_NOW', 'https://zoom.us/j/hanoon-tajweed-live', 'Master the authentic science of Quranic phonetics, Makharij al-Huroof, Sifat, and precision articulation under certified Qira''at masters.'),
+    ('spc-tajweed', 'Tajweed', 'Quran Recitation Rules & Phonetics', 'Faculty Instructor', 'Recitation', 'Every Sunday • 08:00 AM IST', 'LIVE_NOW', 'https://zoom.us/j/hanoon-tajweed-live', 'Master the authentic science of Quranic phonetics, Makharij al-Huroof, Sifat, and precision articulation under certified Qira''at masters.'),
     ('spc-burdah', 'Burdah Live', 'Live Qasida Burdah Recitation & Spiritual Gathering', 'Hanoon Academy Munshid Collective', 'Gathering', 'Thursday Evenings • 09:00 PM IST', 'UPCOMING', 'https://zoom.us/j/hanoon-burdah-live', 'Weekly blessed gathering of Qasida al-Burdah by Imam al-Busiri, devotional hymns, and Salawat on the Prophet Muhammad ﷺ.')
 ON CONFLICT (id) DO NOTHING;
-
--- 5. Initial Teachers
-INSERT INTO public.teachers (id, full_name, email, specialization, rate_per_class)
-VALUES
-    ('tch-01', 'Usthad Dr. Faisal Al-Hanoon', 'faisal@hanoon.academy', 'Seerah & Islamic History', 800),
-    ('tch-02', 'Usthad Abdul Rahman Al-Hafiz', 'teacher@hanoon.academy', 'Tajweed & Hadith Sciences', 750),
-    ('tch-03', 'Usthad Anas Nadwi', 'anas@hanoon.academy', 'Tazkiyah & Haddad Litany', 700),
-    ('tch-04', 'Usthad Bilal Farooqi', 'bilal@hanoon.academy', 'Comparative Fiqh Jurisprudence', 750)
-ON CONFLICT (id) DO NOTHING;
-
--- 6. Initial Audit Log
-INSERT INTO public.audit_logs (actor, action, category, details)
-VALUES 
-    ('System Administrator', 'Initialized Production Schema', 'SETTINGS', 'Hardened Row-Level Security, multi-device settings sync, and educational tables deployed.');

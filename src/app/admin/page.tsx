@@ -66,6 +66,7 @@ import {
   getAuditLogs,
   fetchAuditLogs,
   addAuditLog,
+  clearAuditLogs,
   AppSettings,
   AuditLogItem,
 } from "@/services/settingsService";
@@ -158,7 +159,7 @@ export default function AdminDashboardPage() {
   const [payoutRefInput, setPayoutRefInput] = useState("");
   const [isAddingClassLog, setIsAddingClassLog] = useState(false);
   const [newClassLogForm, setNewClassLogForm] = useState({
-    teacher_name: "Usthad Dr. Faisal Al-Hanoon",
+    teacher_name: "",
     classes_taken: 0,
     rate_per_class: 800,
     month_year: new Date().toLocaleString("default", { month: "long", year: "numeric" }),
@@ -170,6 +171,8 @@ export default function AdminDashboardPage() {
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
   const [qrUploadNotice, setQrUploadNotice] = useState<string | null>(null);
   const [testCopiedUpi, setTestCopiedUpi] = useState(false);
+  const [showClearLogConfirm, setShowClearLogConfirm] = useState(false);
+  const [isClearingLogs, setIsClearingLogs] = useState(false);
   const [approvedWhatsAppNotice, setApprovedWhatsAppNotice] = useState<{
     studentName: string;
     courseName: string;
@@ -274,8 +277,8 @@ export default function AdminDashboardPage() {
     const newRole = isSuperAdmin ? "verification_admin" : "admin";
     const newName =
       newRole === "verification_admin"
-        ? "Staff Verification Officer (Zayd)"
-        : "Executive Dean Faisal Al-Hanoon";
+        ? "Staff Verification Officer"
+        : "System Administrator";
     const newEmail =
       newRole === "verification_admin"
         ? "verify@hanoon.academy"
@@ -547,6 +550,21 @@ export default function AdminDashboardPage() {
     setAuditLogs(updatedLogs);
     setSaveSuccessMsg("Global application settings saved & synced to Supabase!");
     setTimeout(() => setSaveSuccessMsg(null), 3000);
+  };
+
+  const handleClearLogs = async () => {
+    setIsClearingLogs(true);
+    try {
+      await clearAuditLogs();
+      setAuditLogs([]);
+      setShowClearLogConfirm(false);
+      setSaveSuccessMsg("Activity log successfully cleared.");
+      setTimeout(() => setSaveSuccessMsg(null), 3000);
+    } catch (err) {
+      console.error("Failed to clear audit logs:", err);
+    } finally {
+      setIsClearingLogs(false);
+    }
   };
 
   if (!currentUser) return null;
@@ -1252,7 +1270,7 @@ export default function AdminDashboardPage() {
                   Total Live Classes Conducted
                 </span>
                 <h3 className="text-2xl font-black text-slate-900">
-                  {payroll.reduce((acc, p) => acc + (p.classes_taken || 0), 0) || 48} Classes
+                  {payroll.reduce((acc, p) => acc + (p.classes_taken || 0), 0)} Classes
                 </h3>
                 <p className="text-[11px] text-purple-600 font-semibold">Tracked across faculty</p>
               </div>
@@ -1265,7 +1283,7 @@ export default function AdminDashboardPage() {
                   ₹{payroll
                     .filter((p) => p.status === "PAID")
                     .reduce((acc, p) => acc + (p.total_amount || 0), 0)
-                    .toLocaleString("en-IN") || "25,600"}
+                    .toLocaleString("en-IN")}
                 </h3>
                 <p className="text-[11px] text-slate-500 font-semibold">Verified bank & UPI payouts</p>
               </div>
@@ -1278,7 +1296,7 @@ export default function AdminDashboardPage() {
                   ₹{payroll
                     .filter((p) => p.status === "PENDING")
                     .reduce((acc, p) => acc + (p.total_amount || 0), 0)
-                    .toLocaleString("en-IN") || "12,800"}
+                    .toLocaleString("en-IN")}
                 </h3>
                 <p className="text-[11px] text-amber-600 font-semibold">Scheduled for disbursement</p>
               </div>
@@ -1319,56 +1337,64 @@ export default function AdminDashboardPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-purple-50 font-medium text-slate-800">
-                    {payroll.map((pay) => {
-                      const isPaid = pay.status === "PAID";
+                    {payroll.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-8 text-center text-xs font-semibold text-slate-400">
+                          No payroll records found.
+                        </td>
+                      </tr>
+                    ) : (
+                      payroll.map((pay) => {
+                        const isPaid = pay.status === "PAID";
 
-                      return (
-                        <tr key={pay.id} className="hover:bg-purple-50/20">
-                          <td className="py-3.5 px-4 font-bold text-slate-900">
-                            {pay.teacher_name}
-                          </td>
-                          <td className="py-3.5 px-4 font-semibold text-slate-600">
-                            {pay.month_year}
-                          </td>
-                          <td className="py-3.5 px-4 font-extrabold text-purple-700">
-                            {pay.classes_taken} Live Classes
-                          </td>
-                          <td className="py-3.5 px-4 text-slate-600">
-                            ₹{pay.rate_per_class} / class
-                          </td>
-                          <td className="py-3.5 px-4 font-black text-slate-900 text-sm">
-                            ₹{pay.total_amount.toLocaleString("en-IN")}
-                          </td>
-                          <td className="py-3.5 px-4">
-                            {isPaid ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
-                                <CheckCircle2 className="w-3 h-3" /> Paid ({pay.payment_reference})
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full">
-                                <Clock className="w-3 h-3" /> Payment Due
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-3.5 px-4 text-right">
-                            {!isPaid ? (
-                              <button
-                                type="button"
-                                onClick={() => setPayingPayrollItem(pay)}
-                                className="py-1.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-sm transition-all cursor-pointer inline-flex items-center gap-1"
-                              >
-                                <DollarSign className="w-3.5 h-3.5" />
-                                <span>Pay Teacher</span>
-                              </button>
-                            ) : (
-                              <span className="text-[11px] font-bold text-emerald-600">
-                                Settled
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                        return (
+                          <tr key={pay.id} className="hover:bg-purple-50/20">
+                            <td className="py-3.5 px-4 font-bold text-slate-900">
+                              {pay.teacher_name}
+                            </td>
+                            <td className="py-3.5 px-4 font-semibold text-slate-600">
+                              {pay.month_year}
+                            </td>
+                            <td className="py-3.5 px-4 font-extrabold text-purple-700">
+                              {pay.classes_taken} Live Classes
+                            </td>
+                            <td className="py-3.5 px-4 text-slate-600">
+                              ₹{pay.rate_per_class} / class
+                            </td>
+                            <td className="py-3.5 px-4 font-black text-slate-900 text-sm">
+                              ₹{pay.total_amount.toLocaleString("en-IN")}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              {isPaid ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                                  <CheckCircle2 className="w-3 h-3" /> Paid ({pay.payment_reference})
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full">
+                                  <Clock className="w-3 h-3" /> Payment Due
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4 text-right">
+                              {!isPaid ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setPayingPayrollItem(pay)}
+                                  className="py-1.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-sm transition-all cursor-pointer inline-flex items-center gap-1"
+                                >
+                                  <DollarSign className="w-3.5 h-3.5" />
+                                  <span>Pay Teacher</span>
+                                </button>
+                              ) : (
+                                <span className="text-[11px] font-bold text-emerald-600">
+                                  Settled
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1436,19 +1462,6 @@ export default function AdminDashboardPage() {
                     />
                   </div>
 
-                  <div className="space-y-1.5 flex flex-col justify-end">
-                    <label className="flex items-center gap-2 cursor-pointer p-2.5 rounded-xl bg-purple-50 border border-purple-100">
-                      <input
-                        type="checkbox"
-                        checked={settingsForm.autoApprovalEnabled}
-                        onChange={(e) => setSettingsForm({ ...settingsForm, autoApprovalEnabled: e.target.checked })}
-                        className="rounded text-purple-600 focus:ring-purple-500 w-4 h-4 cursor-pointer"
-                      />
-                      <span className="text-xs font-bold text-slate-800">
-                        Enable Experimental Instant UPI Auto-Approval
-                      </span>
-                    </label>
-                  </div>
 
                   {/* QR Code Configuration Section */}
                   <div className="sm:col-span-2 pt-2 border-t border-purple-50 space-y-3">
@@ -1606,17 +1619,58 @@ export default function AdminDashboardPage() {
 
             {/* Card 3: Live System Audit Trail */}
             <div className="bg-white p-6 rounded-2xl border border-purple-100 shadow-md space-y-4">
-              <div className="flex items-center justify-between pb-2 border-b border-purple-50">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-purple-50">
                 <div className="flex items-center gap-2">
                   <History className="w-4 h-4 text-purple-600" />
                   <h2 className="text-sm font-extrabold text-slate-900">
                     System Audit Trail (Administrator Activity Log)
                   </h2>
                 </div>
-                <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-2.5 py-0.5 rounded-full">
-                  Immutable Record
-                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowClearLogConfirm(true)}
+                    disabled={auditLogs.length === 0}
+                    className="py-1.5 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Clear Activity Log</span>
+                  </button>
+                  <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-2.5 py-0.5 rounded-full">
+                    {auditLogs.length} Records
+                  </span>
+                </div>
               </div>
+
+              {/* Confirmation Popup */}
+              {showClearLogConfirm && (
+                <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 text-rose-800">
+                    <AlertCircle className="w-5 h-5 shrink-0 text-rose-600" />
+                    <div>
+                      <p className="text-xs font-bold">Are you sure you want to clear all activity logs?</p>
+                      <p className="text-[11px] text-rose-600">This will permanently delete the log history from the system and Supabase.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                    <button
+                      type="button"
+                      disabled={isClearingLogs}
+                      onClick={handleClearLogs}
+                      className="py-1.5 px-3.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {isClearingLogs ? "Clearing..." : "Yes, Clear Logs"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowClearLogConfirm(false)}
+                      className="py-1.5 px-3 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-bold text-xs transition-all cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="overflow-x-auto border border-purple-50 rounded-xl">
                 <table className="w-full min-w-[640px] text-left text-xs">
@@ -1630,27 +1684,35 @@ export default function AdminDashboardPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-purple-50 font-medium text-slate-800">
-                    {auditLogs.map((log) => (
-                      <tr key={log.id} className="hover:bg-purple-50/20">
-                        <td className="py-3 px-4 text-[11px] text-slate-500 whitespace-nowrap">
-                          {log.timestamp}
-                        </td>
-                        <td className="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">
-                          {log.actor}
-                        </td>
-                        <td className="py-3 px-4 font-extrabold text-purple-700">
-                          {log.action}
-                        </td>
-                        <td className="py-3 px-4">
-                          <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">
-                            {log.category}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-slate-600 text-[11px]">
-                          {log.details}
+                    {auditLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-8 text-center text-xs font-semibold text-slate-400">
+                          No activity logs found.
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      auditLogs.map((log) => (
+                        <tr key={log.id} className="hover:bg-purple-50/20">
+                          <td className="py-3 px-4 text-[11px] text-slate-500 whitespace-nowrap">
+                            {log.timestamp}
+                          </td>
+                          <td className="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">
+                            {log.actor}
+                          </td>
+                          <td className="py-3 px-4 font-extrabold text-purple-700">
+                            {log.action}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">
+                              {log.category}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-slate-600 text-[11px]">
+                            {log.details}
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>

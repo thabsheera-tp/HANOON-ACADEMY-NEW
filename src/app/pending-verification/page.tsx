@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Clock, ArrowRight, Lock, Home, ShieldCheck } from "lucide-react";
+import { Clock, ArrowRight, Home, ShieldCheck } from "lucide-react";
 import HanoonLogo from "@/components/brand/HanoonLogo";
 import { checkActiveSupabaseSession } from "@/services/authService";
 
@@ -126,15 +126,6 @@ export default function PendingVerificationPage() {
           >
             <Home className="w-4 h-4" />
             <span>Return to Homepage</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => router.push("/login?portal=staff")}
-            className="w-full py-2.5 px-4 rounded-xl font-bold text-xs text-purple-700 hover:bg-purple-50 border border-purple-200/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-          >
-            <Lock className="w-3.5 h-3.5 text-purple-600" />
-            <span>Institute Staff? Login Here</span>
           </button>
         </div>
       </div>

@@ -10,46 +10,10 @@ export interface TeacherCourseAssignment {
   assignedSubjectNames: string[];
 }
 
-export const DEFAULT_TEACHER_ASSIGNMENTS: TeacherCourseAssignment[] = [
-  {
-    teacherId: "tch-01",
-    teacherName: "Usthad Dr. Faisal Al-Hanoon",
-    email: "admin@hanoon.academy",
-    assignedCourseIds: ["adaviyya", "athaviy", "burdah"],
-    assignedCourseNames: ["Adaviyya", "Burdah Live Gathering", "Burdah Live"],
-    assignedSubjectIds: ["seerah", "hadith"],
-    assignedSubjectNames: ["Seerah", "Hadith"],
-  },
-  {
-    teacherId: "tch-02",
-    teacherName: "Usthad Abdul Rahman Al-Hafiz",
-    email: "teacher@hanoon.academy",
-    assignedCourseIds: ["tajweed", "home-tuition", "hometuition"],
-    assignedCourseNames: ["Tajweed Special Class", "Home Tuition", "Ratib al-Haddad"],
-    assignedSubjectIds: ["haddad"],
-    assignedSubjectNames: ["Haddad"],
-  },
-  {
-    teacherId: "tch-03",
-    teacherName: "Usthad Anas Nadwi",
-    email: "anas@hanoon.academy",
-    assignedCourseIds: ["home-tuition", "hometuition"],
-    assignedCourseNames: ["Home Tuition"],
-    assignedSubjectIds: ["fiqh"],
-    assignedSubjectNames: ["Fiqh"],
-  },
-  {
-    teacherId: "tch-04",
-    teacherName: "Usthad Bilal Farooqi",
-    email: "bilal@hanoon.academy",
-    assignedCourseIds: ["shamail-muhammadiyya", "shamail", "fashion-designing", "fashion"],
-    assignedCourseNames: ["الشمائل المحمدية", "Fashion Designing"],
-    assignedSubjectIds: ["hadith", "shamail"],
-    assignedSubjectNames: ["Hadith", "Ash-Shama'il"],
-  },
-];
+export const DEFAULT_TEACHER_ASSIGNMENTS: TeacherCourseAssignment[] = [];
 
 const STORAGE_KEY_ASSIGNMENTS = "hanoon_teacher_assignments_v2";
+const DUMMY_ASSIGNMENT_TEACHER_IDS = new Set(["tch-01", "tch-02", "tch-03", "tch-04"]);
 
 /**
  * Normalizes course ID strings for reliable comparisons
@@ -72,17 +36,19 @@ export function normalizeCourseKey(idOrName: string): string {
  * Loads all faculty course & subject assignments
  */
 export function getTeacherAssignments(): TeacherCourseAssignment[] {
-  if (typeof window === "undefined") return DEFAULT_TEACHER_ASSIGNMENTS;
+  if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY_ASSIGNMENTS);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) {
+        return parsed.filter((a: any) => !DUMMY_ASSIGNMENT_TEACHER_IDS.has(a.teacherId));
+      }
     }
   } catch (e) {
     console.warn("Could not read teacher assignments:", e);
   }
-  return DEFAULT_TEACHER_ASSIGNMENTS;
+  return [];
 }
 
 /**

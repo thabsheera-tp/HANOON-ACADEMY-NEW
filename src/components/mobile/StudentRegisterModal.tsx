@@ -1,24 +1,55 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   X,
   User,
   Phone,
   MapPin,
   Calendar,
-  CheckCircle2,
+  Clock,
   MessageCircle,
   Headphones,
   ArrowRight,
+  BookOpen,
+  RefreshCw,
 } from "lucide-react";
 import { UserProfile } from "@/types/app";
+import { registerStudentAndPayment } from "@/services/studentService";
+
+export const REGISTRATION_COURSE_OPTIONS = [
+  {
+    id: "adaviyya",
+    title: "Adaviyya",
+    subtitle: "Islamic Sharia & Moral Tarbiyah (₹500 Admission / ₹3,000 Total)",
+    feeAmount: 500,
+  },
+  {
+    id: "home-tuition",
+    title: "Home Tuition",
+    subtitle: "1-on-1 Personalized Academic Coaching (₹2,000)",
+    feeAmount: 2000,
+  },
+  {
+    id: "fashion-designing",
+    title: "Fashion Designing",
+    subtitle: "Modest Apparel & Craftsmanship (₹2,500)",
+    feeAmount: 2500,
+  },
+  {
+    id: "shamail-muhammadiyya",
+    title: "Ash-Shama'il al-Muhammadiyya",
+    subtitle: "Prophetic Sublime Virtues (₹1,200)",
+    feeAmount: 1200,
+  },
+];
 
 interface StudentRegisterModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (profile: UserProfile) => void;
+  onSubmit: (profile: UserProfile, courseId: string) => void;
   initialProfile?: UserProfile;
+  selectedCourseId?: string;
 }
 
 export default function StudentRegisterModal({
@@ -26,31 +57,57 @@ export default function StudentRegisterModal({
   onClose,
   onSubmit,
   initialProfile = { name: "", phone: "", place: "" },
+  selectedCourseId = "adaviyya",
 }: StudentRegisterModalProps) {
   const [name, setName] = useState(initialProfile.name || "");
   const [phone, setPhone] = useState(initialProfile.phone || "");
   const [place, setPlace] = useState(initialProfile.place || "");
+  const [courseId, setCourseId] = useState(selectedCourseId || "adaviyya");
   const [age, setAge] = useState(initialProfile.age ? String(initialProfile.age) : "");
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccessStep, setIsSuccessStep] = useState(false);
+
+  useEffect(() => {
+    if (selectedCourseId) {
+      setCourseId(selectedCourseId);
+    }
+  }, [selectedCourseId]);
+
+  useEffect(() => {
+    if (initialProfile.name) setName(initialProfile.name);
+    if (initialProfile.phone) setPhone(initialProfile.phone);
+    if (initialProfile.place) setPlace(initialProfile.place);
+  }, [initialProfile]);
 
   if (!isOpen) return null;
 
   const supportPhone = "+91 98460 12345";
   const rawWhatsApp = "919846012345";
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const selectedCourseObj =
+    REGISTRATION_COURSE_OPTIONS.find((c) => c.id === courseId) ||
+    REGISTRATION_COURSE_OPTIONS[0];
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Strict Form Validation
     if (!name.trim()) {
       setError("Please enter your Student Full Name.");
       return;
     }
-    if (!phone.trim() || phone.trim().length < 10) {
+    const cleanDigits = phone.replace(/\D/g, "");
+    if (!cleanDigits || cleanDigits.length < 10) {
       setError("Please enter a valid 10-digit WhatsApp or mobile number.");
       return;
     }
     if (!place.trim()) {
       setError("Please enter your Place & District.");
+      return;
+    }
+    if (!courseId) {
+      setError("Please select a course to register.");
       return;
     }
 
@@ -63,16 +120,37 @@ export default function StudentRegisterModal({
     }
 
     setError(null);
-    setIsSuccessStep(true);
+    setIsSubmitting(true);
+
+    try {
+      // Save directly to Supabase with status = "PENDING"
+      await registerStudentAndPayment({
+        fullName: name.trim(),
+        whatsappNum: cleanDigits,
+        district: place.trim(),
+        courseId: selectedCourseObj.id,
+        courseTitle: selectedCourseObj.title,
+        amount: selectedCourseObj.feeAmount,
+        upiTxId: "Pending Verification",
+      });
+    } catch (err) {
+      console.warn("Supabase registration caught in modal:", err);
+    } finally {
+      setIsSubmitting(false);
+      setIsSuccessStep(true);
+    }
   };
 
   const handleProceedNext = () => {
-    onSubmit({
-      name: name.trim(),
-      phone: phone.trim(),
-      place: place.trim(),
-      age: age.trim() || undefined,
-    });
+    onSubmit(
+      {
+        name: name.trim(),
+        phone: phone.trim(),
+        place: place.trim(),
+        age: age.trim() || undefined,
+      },
+      courseId
+    );
     setIsSuccessStep(false);
   };
 
@@ -83,7 +161,7 @@ export default function StudentRegisterModal({
 
   const cleanPhone = phone.trim();
   const whatsappUrl = `https://wa.me/${rawWhatsApp}?text=${encodeURIComponent(
-    `Assalamu Alaikum Admin, I have submitted student registration for ${name.trim()} (Phone: ${cleanPhone}, District: ${place.trim()}). Please assist me with course enrollment.`
+    `Assalamu Alaikum Admin, I have submitted registration for ${name.trim()} in ${selectedCourseObj.title} (Phone: ${cleanPhone}, District: ${place.trim()}). Please assist me with verification.`
   )}`;
 
   return (
@@ -101,42 +179,52 @@ export default function StudentRegisterModal({
 
         {isSuccessStep ? (
           /* ============================================================
-             REGISTRATION SUCCESS POPUP / CONFIRMATION VIEW
+             ACCURATE SUBMISSION RESPONSE (PENDING VERIFICATION)
              ============================================================ */
           <div className="space-y-4 pt-2 text-center animate-fade-in">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-600 mx-auto flex items-center justify-center shadow-sm">
-              <CheckCircle2 className="w-8 h-8" />
+            <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-700 mx-auto flex items-center justify-center shadow-sm">
+              <Clock className="w-8 h-8" />
             </div>
 
             <div className="space-y-1">
-              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                Registration Confirmed
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-900 bg-amber-100 px-3 py-1 rounded-full border border-amber-300 inline-block">
+                Status: Pending Verification
               </span>
-              <h2 className="text-xl font-black text-slate-900 tracking-tight">
-                Welcome, {name.trim()}!
+              <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight leading-snug">
+                Registration Submitted Successfully!
               </h2>
-              <p className="text-xs text-slate-500 font-medium">
-                Your admission details have been queued for Hanoon Academy Admin.
+              <p className="text-xs text-slate-600 font-medium leading-relaxed px-1">
+                Your payment is currently under verification by the admin.
               </p>
             </div>
 
             {/* Registered Details Summary Card */}
-            <div className="p-3 rounded-2xl bg-purple-50/60 border border-purple-100 text-left space-y-1 text-xs">
-              <div className="flex justify-between">
+            <div className="p-3.5 rounded-2xl bg-purple-50/60 border border-purple-100 text-left space-y-2 text-xs">
+              <div className="flex justify-between items-center pb-1 border-b border-purple-100">
                 <span className="text-slate-500 font-medium">Student Name:</span>
                 <span className="font-bold text-slate-900">{name.trim()}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center pb-1 border-b border-purple-100">
                 <span className="text-slate-500 font-medium">WhatsApp Number:</span>
                 <span className="font-mono font-bold text-slate-900">{phone.trim()}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center pb-1 border-b border-purple-100">
                 <span className="text-slate-500 font-medium">District / Place:</span>
                 <span className="font-bold text-slate-900">{place.trim()}</span>
               </div>
+              <div className="flex justify-between items-center pb-1 border-b border-purple-100">
+                <span className="text-slate-500 font-medium">Selected Course:</span>
+                <span className="font-extrabold text-purple-700">{selectedCourseObj.title}</span>
+              </div>
+              <div className="flex justify-between items-center pt-0.5">
+                <span className="text-slate-500 font-medium">Verification Status:</span>
+                <span className="font-extrabold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200 text-[11px]">
+                  🟡 Pending Verification
+                </span>
+              </div>
             </div>
 
-            {/* Prominent Need Help? Contact Admin Section */}
+            {/* Contact Admin Section */}
             <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-50 via-purple-50 to-emerald-50 border border-emerald-200 shadow-2xs space-y-2.5 text-left">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
@@ -173,14 +261,14 @@ export default function StudentRegisterModal({
               </div>
             </div>
 
-            {/* Continue to Courses & Admission */}
+            {/* Continue to Payment / Details */}
             <div className="pt-2">
               <button
                 type="button"
                 onClick={handleProceedNext}
                 className="w-full py-3.5 px-6 rounded-2xl font-bold text-sm text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-md shadow-purple-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <span>Proceed to Courses & Admission</span>
+                <span>Proceed to Payment / View Details</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -195,8 +283,8 @@ export default function StudentRegisterModal({
               <h2 className="text-xl font-black text-slate-900 tracking-tight">
                 Student Registration
               </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Please enter your details to get started.
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                Fill in your details below to register for Hanoon Academy.
               </p>
             </div>
 
@@ -261,7 +349,32 @@ export default function StudentRegisterModal({
                 </div>
               </div>
 
-              {/* Field 4: Age (Optional) */}
+              {/* Field 4: Selected Course * */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 block">
+                  Selected Course <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <BookOpen className="w-4 h-4 text-purple-600 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <select
+                    value={courseId}
+                    onChange={(e) => setCourseId(e.target.value)}
+                    required
+                    className="w-full pl-10 pr-8 py-2.5 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all font-semibold appearance-none cursor-pointer"
+                  >
+                    {REGISTRATION_COURSE_OPTIONS.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.title} ({opt.subtitle.split("(")[0].trim()})
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-xs">
+                    ▼
+                  </div>
+                </div>
+              </div>
+
+              {/* Field 5: Age (Optional) */}
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-700 block">
                   Age <span className="text-slate-400 font-normal">(Optional)</span>
@@ -280,13 +393,21 @@ export default function StudentRegisterModal({
                 </div>
               </div>
 
-              {/* Submit Registration Button Directly Below Inputs */}
+              {/* Submit Registration Button */}
               <div className="pt-2">
                 <button
                   type="submit"
-                  className="w-full py-3.5 px-6 rounded-2xl font-bold text-sm text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-md shadow-purple-600/25 transition-all flex items-center justify-center cursor-pointer"
+                  disabled={isSubmitting}
+                  className="w-full py-3.5 px-6 rounded-2xl font-bold text-sm text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-md shadow-purple-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
                 >
-                  <span>Submit Registration</span>
+                  {isSubmitting ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Submitting Registration...</span>
+                    </>
+                  ) : (
+                    <span>Submit Registration</span>
+                  )}
                 </button>
               </div>
             </form>

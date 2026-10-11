@@ -446,13 +446,9 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     setCurrentScreen("course-details");
   };
 
-  // Step 3 -> Step 4 (Progressive Enrollment)
+  // Step 3 -> Step 4 (Enforce Registration Form Workflow)
   const handleProceedToRegister = () => {
-    if (!userProfile.name || !userProfile.phone) {
-      setIsRegisterModalOpen(true);
-    } else {
-      setCurrentScreen("payment");
-    }
+    setIsRegisterModalOpen(true);
   };
 
   const handleSaveProfile = (profile: UserProfile) => {
@@ -645,18 +641,43 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
         />
       </div>
 
-      {/* Student Registration Modal / Popup (Opens ONLY when Get Started is clicked) */}
+      {/* Student Registration Modal / Popup */}
       <StudentRegisterModal
         isOpen={isRegisterModalOpen}
         onClose={() => setIsRegisterModalOpen(false)}
-        onSubmit={(profile) => {
+        selectedCourseId={selectedCourse.id}
+        onSubmit={(profile, courseId) => {
           handleSaveProfile(profile);
           setIsRegisterModalOpen(false);
-          if (currentScreen === "course-details") {
-            setCurrentScreen("payment");
-          } else {
-            setCurrentScreen("courses");
+
+          const matchedCourse = SHOWCASE_COURSES.find(
+            (c) => c.id === courseId || (courseId === "shamail" && c.id.includes("shamail"))
+          );
+          if (matchedCourse) {
+            setSelectedCourse(matchedCourse);
           }
+
+          setPaymentDetails((prev) => ({
+            ...prev,
+            status: "pending_verification",
+          }));
+
+          // Persist pending registration locally
+          if (typeof window !== "undefined") {
+            const pendingRecord = {
+              txId: "Pending Verification",
+              courseId: courseId || selectedCourse.id,
+              courseTitle: matchedCourse?.title || selectedCourse.title,
+              amount: matchedCourse?.admissionFee || matchedCourse?.fee || selectedCourse.admissionFee || selectedCourse.fee,
+              submittedAt: new Date().toLocaleTimeString(),
+              studentName: profile.name,
+              studentPhone: profile.phone,
+              status: "PENDING",
+            };
+            localStorage.setItem("hanoon_pending_payment", JSON.stringify(pendingRecord));
+          }
+
+          setCurrentScreen("payment");
         }}
         initialProfile={userProfile}
       />

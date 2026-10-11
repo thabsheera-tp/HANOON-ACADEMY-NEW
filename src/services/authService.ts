@@ -43,7 +43,7 @@ export const DEMO_EVALUATION_CREDENTIALS = {
     profile: {
       id: "usr-admin-01",
       email: "admin@hanoon.academy",
-      full_name: "Executive Dean Faisal Al-Hanoon",
+      full_name: "System Administrator",
       role: "admin" as UserRole,
       district: "Calicut",
     },
@@ -53,7 +53,7 @@ export const DEMO_EVALUATION_CREDENTIALS = {
     profile: {
       id: "usr-verify-01",
       email: "verify@hanoon.academy",
-      full_name: "Staff Verification Officer (Zayd)",
+      full_name: "Staff Verification Officer",
       role: "verification_admin" as UserRole,
       district: "Calicut",
     },
@@ -63,7 +63,7 @@ export const DEMO_EVALUATION_CREDENTIALS = {
     profile: {
       id: "usr-teacher-01",
       email: "teacher@hanoon.academy",
-      full_name: "Usthad Abdul Rahman Al-Hafiz",
+      full_name: "Faculty Teacher",
       role: "teacher" as UserRole,
       district: "Malappuram",
     },

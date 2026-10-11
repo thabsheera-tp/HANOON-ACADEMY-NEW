@@ -2,18 +2,20 @@
 
 import React from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, GraduationCap, MessageCircle, Phone, Headphones } from "lucide-react";
+import { ArrowRight, GraduationCap, Lock } from "lucide-react";
 
 interface ScreenSplashProps {
   onGetStarted?: () => void;
   onExploreCourses?: () => void;
   onEnterPortal?: () => void;
+  onStaffLogin?: () => void;
 }
 
 export default function ScreenSplash({
   onGetStarted,
   onExploreCourses,
   onEnterPortal,
+  onStaffLogin,
 }: ScreenSplashProps) {
   const router = useRouter();
 
@@ -29,11 +31,13 @@ export default function ScreenSplash({
     }
   };
 
-  const supportPhone = "+91 98460 12345";
-  const rawWhatsApp = "919846012345";
-  const whatsappUrl = `https://wa.me/${rawWhatsApp}?text=${encodeURIComponent(
-    "Assalamu Alaikum Admin, I need help with Hanoon Academy admission and courses."
-  )}`;
+  const handleStaffLogin = () => {
+    if (onStaffLogin) {
+      onStaffLogin();
+    } else {
+      router.push("/login?portal=staff");
+    }
+  };
 
   return (
     <div className="w-full max-w-md mx-auto h-full flex-1 flex flex-col justify-between px-6 py-6 sm:py-8 bg-white text-slate-900 select-none font-['Plus_Jakarta_Sans']">
@@ -49,18 +53,15 @@ export default function ScreenSplash({
         </div>
 
         {/* Heading: Hanoon Academy */}
-        <div className="space-y-1">
+        <div>
           <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900">
             Hanoon <span className="text-purple-600">Academy</span>
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 font-medium">
-            Islamic Sharia, Home Tuition & Creative Mentorship
-          </p>
         </div>
       </div>
 
       {/* Bottom Actions Section */}
-      <div className="shrink-0 w-full pb-3 sm:pb-5 space-y-4">
+      <div className="shrink-0 w-full pb-3 sm:pb-5 space-y-3">
         {/* Primary Action Button */}
         <button
           type="button"
@@ -71,48 +72,16 @@ export default function ScreenSplash({
           <ArrowRight className="w-4 h-4" />
         </button>
 
-        {/* Prominent "Need Help? Contact Admin" Support Section */}
-        <div className="p-3.5 rounded-2xl bg-gradient-to-r from-purple-50/80 via-emerald-50/60 to-purple-50/80 border border-purple-100/90 shadow-2xs space-y-2.5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0">
-                <Headphones className="w-3.5 h-3.5" />
-              </div>
-              <div className="text-left">
-                <h4 className="text-xs font-black text-slate-900 leading-tight">
-                  Need Help? Contact Admin
-                </h4>
-                <p className="text-[10px] text-slate-500 font-medium">
-                  Official Admission & Student Support
-                </p>
-              </div>
-            </div>
-            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-full border border-emerald-300 shrink-0">
-              Active Now
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 pt-0.5">
-            {/* WhatsApp Admin */}
-            <a
-              href={whatsappUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="py-2 px-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-[11px] flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer"
-            >
-              <MessageCircle className="w-3.5 h-3.5 shrink-0" />
-              <span>WhatsApp Admin</span>
-            </a>
-
-            {/* Direct Call */}
-            <a
-              href={`tel:${supportPhone.replace(/\s+/g, "")}`}
-              className="py-2 px-2.5 rounded-xl bg-white hover:bg-purple-50 active:scale-95 text-purple-900 border border-purple-200 font-extrabold text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-            >
-              <Phone className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-              <span>{supportPhone}</span>
-            </a>
-          </div>
+        {/* Staff Login Text Link */}
+        <div className="text-center pt-1">
+          <button
+            type="button"
+            onClick={handleStaffLogin}
+            className="text-xs font-semibold text-slate-500 hover:text-purple-600 transition-colors cursor-pointer inline-flex items-center gap-1.5 py-1"
+          >
+            <Lock className="w-3.5 h-3.5 text-slate-400" />
+            <span>Staff Login</span>
+          </button>
         </div>
       </div>
     </div>
