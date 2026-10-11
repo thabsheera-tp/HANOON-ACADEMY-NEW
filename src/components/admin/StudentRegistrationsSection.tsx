@@ -19,6 +19,10 @@ import {
   XCircle,
   ArrowUpDown,
   Download,
+  Eye,
+  Image as ImageIcon,
+  ExternalLink,
+  Camera,
 } from "lucide-react";
 import {
   UnifiedStudentRegistration,
@@ -43,6 +47,7 @@ export default function StudentRegistrationsSection({
   const [statusFilter, setStatusFilter] = useState<"ALL" | "PENDING" | "APPROVED" | "REJECTED">("ALL");
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [copiedUtr, setCopiedUtr] = useState<string | null>(null);
+  const [screenshotModalItem, setScreenshotModalItem] = useState<UnifiedStudentRegistration | null>(null);
 
   // WhatsApp Post-Approval Prompt Banner
   const [approvedNotification, setApprovedNotification] = useState<{
@@ -557,12 +562,13 @@ export default function StudentRegistrationsSection({
 
         {/* 4. Table (Desktop / Tablet) */}
         <div className="hidden md:block overflow-x-auto rounded-2xl border border-purple-100">
-          <table className="w-full text-left text-xs min-w-[760px]">
+          <table className="w-full text-left text-xs min-w-[820px]">
             <thead className="bg-purple-50/70 text-slate-600 uppercase text-[10px] font-black tracking-wider border-b border-purple-100">
               <tr>
                 <th className="py-3.5 px-4">Student Name</th>
                 <th className="py-3.5 px-4">Mobile / WhatsApp</th>
                 <th className="py-3.5 px-4">Course Choice</th>
+                <th className="py-3.5 px-4">Payment Proof</th>
                 <th className="py-3.5 px-4">District / Place</th>
                 <th className="py-3.5 px-4">Registration Date</th>
                 <th className="py-3.5 px-4">Payment Status</th>
@@ -572,7 +578,7 @@ export default function StudentRegistrationsSection({
             <tbody className="divide-y divide-purple-50 font-medium text-slate-800">
               {loading && registrations.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400 text-xs">
+                  <td colSpan={8} className="py-12 text-center text-slate-400 text-xs">
                     <div className="flex items-center justify-center gap-2">
                       <RefreshCw className="w-4 h-4 animate-spin text-purple-600" />
                       <span>Loading registration records from Supabase...</span>
@@ -581,7 +587,7 @@ export default function StudentRegistrationsSection({
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-16 text-center">
+                  <td colSpan={8} className="py-16 text-center">
                     <div className="max-w-xs mx-auto space-y-2">
                       <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 mx-auto flex items-center justify-center font-bold text-xl">
                         🎓
@@ -592,7 +598,7 @@ export default function StudentRegistrationsSection({
                       <p className="text-xs text-slate-400">
                         {searchQuery
                           ? "Try searching for a different student name or mobile number."
-                          : "When students register on the website, their details will appear here with 'Pending Verification' status."}
+                          : "When students register on the website, their details and payment screenshots will appear here with 'Pending Verification' status."}
                       </p>
                     </div>
                   </td>
@@ -623,23 +629,9 @@ export default function StudentRegistrationsSection({
                             <span className="font-extrabold text-slate-900 block leading-tight">
                               {item.fullName}
                             </span>
-                            {item.upiTxId && item.upiTxId !== "-" && (
-                              <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
-                                <span>UTR: {item.upiTxId}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleCopy(item.upiTxId)}
-                                  className="text-slate-400 hover:text-purple-700"
-                                  title="Copy UTR"
-                                >
-                                  {copiedUtr === item.upiTxId ? (
-                                    <Check className="w-2.5 h-2.5 text-emerald-600" />
-                                  ) : (
-                                    <Copy className="w-2.5 h-2.5" />
-                                  )}
-                                </button>
-                              </span>
-                            )}
+                            <span className="text-[10px] text-slate-400 font-medium">
+                              ₹{item.amount?.toLocaleString("en-IN") || "1,500"}
+                            </span>
                           </div>
                         </div>
                       </td>
@@ -664,12 +656,49 @@ export default function StudentRegistrationsSection({
                         </span>
                       </td>
 
-                      {/* Column 4: District / Place */}
+                      {/* Column 4: Payment Screenshot Thumbnail (Replaced text TxID) */}
+                      <td className="py-3.5 px-4">
+                        {item.screenshotUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => setScreenshotModalItem(item)}
+                            className="group flex items-center gap-2 p-1.5 rounded-xl bg-purple-50/70 hover:bg-purple-100 border border-purple-200 transition-all cursor-pointer text-left w-fit shadow-2xs hover:scale-[1.02] active:scale-95"
+                            title="Click to view full payment screenshot"
+                          >
+                            <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-purple-200 shrink-0 bg-white shadow-2xs">
+                              <img
+                                src={item.screenshotUrl}
+                                alt={`Receipt of ${item.fullName}`}
+                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-200"
+                              />
+                              <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                                <Eye className="w-3.5 h-3.5" />
+                              </div>
+                            </div>
+                            <div className="pr-1">
+                              <span className="text-[11px] font-extrabold text-purple-700 block group-hover:underline leading-tight flex items-center gap-1">
+                                <span>View Proof</span>
+                                <span className="text-[10px]">↗</span>
+                              </span>
+                              <span className="text-[9px] text-slate-400 font-medium block">
+                                Enlarge
+                              </span>
+                            </div>
+                          </button>
+                        ) : (
+                          <div className="text-[10px] text-slate-400 italic flex items-center gap-1.5 py-1">
+                            <ImageIcon className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                            <span>No screenshot</span>
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Column 5: District / Place */}
                       <td className="py-3.5 px-4 text-slate-600 font-medium">
                         {item.district || "Kerala"}
                       </td>
 
-                      {/* Column 5: Registration Date */}
+                      {/* Column 6: Registration Date */}
                       <td className="py-3.5 px-4 text-slate-500 text-[11px] whitespace-nowrap">
                         {new Date(item.registrationDate).toLocaleDateString("en-IN", {
                           day: "numeric",
@@ -678,7 +707,7 @@ export default function StudentRegistrationsSection({
                         })}
                       </td>
 
-                      {/* Column 6: Payment Status Badges (Yellow Pending, Green Verified, Red Rejected) */}
+                      {/* Column 7: Payment Status Badges (Yellow Pending, Green Verified, Red Rejected) */}
                       <td className="py-3.5 px-4">
                         {item.paymentStatus === "APPROVED" ? (
                           /* 🟢 "Verified" (Green Badge) */
@@ -701,7 +730,7 @@ export default function StudentRegistrationsSection({
                         )}
                       </td>
 
-                      {/* Column 7: Quick Action Buttons (Verify / Mark as Paid & Reject) */}
+                      {/* Column 8: Quick Action Buttons (Verify / Mark as Paid & Reject) */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5 flex-wrap">
                           {/* Green Button: "Verify / Mark as Paid" */}
@@ -771,7 +800,7 @@ export default function StudentRegistrationsSection({
               <p className="text-[11px] text-slate-400 mt-0.5">
                 {searchQuery
                   ? "Check spelling or search by WhatsApp number."
-                  : "New student registrations will show here with 'Pending Verification' status automatically."}
+                  : "New student registrations and screenshots will show here with 'Pending Verification' status automatically."}
               </p>
             </div>
           ) : (
@@ -844,16 +873,45 @@ export default function StudentRegistrationsSection({
                     </a>
                   </div>
 
-                  {item.upiTxId && item.upiTxId !== "-" && (
-                    <div className="flex items-center justify-between text-[11px] px-1 text-slate-500 font-mono">
-                      <span>UTR: {item.upiTxId}</span>
+                  {/* Mobile Payment Screenshot Card (Replacing text UTR) */}
+                  {item.screenshotUrl ? (
+                    <div className="flex items-center justify-between p-2 rounded-xl bg-purple-50/70 border border-purple-100">
+                      <div
+                        onClick={() => setScreenshotModalItem(item)}
+                        className="flex items-center gap-2.5 cursor-pointer min-w-0"
+                      >
+                        <div className="relative w-11 h-11 rounded-lg overflow-hidden border border-purple-200 bg-white shrink-0 shadow-2xs">
+                          <img
+                            src={item.screenshotUrl}
+                            alt={`Receipt of ${item.fullName}`}
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-black/25 flex items-center justify-center text-white">
+                            <Eye className="w-3 h-3" />
+                          </div>
+                        </div>
+                        <div className="min-w-0">
+                          <span className="text-xs font-black text-slate-800 block leading-tight">
+                            Payment Screenshot
+                          </span>
+                          <span className="text-[10px] text-purple-700 font-bold block mt-0.5">
+                            Tap to enlarge receipt
+                          </span>
+                        </div>
+                      </div>
                       <button
                         type="button"
-                        onClick={() => handleCopy(item.upiTxId)}
-                        className="text-purple-700 font-bold hover:underline"
+                        onClick={() => setScreenshotModalItem(item)}
+                        className="py-1 px-2.5 rounded-lg bg-white border border-purple-200 text-purple-700 font-extrabold text-[11px] shadow-2xs hover:bg-purple-50 flex items-center gap-1 cursor-pointer shrink-0"
                       >
-                        {copiedUtr === item.upiTxId ? "Copied!" : "Copy"}
+                        <Eye className="w-3 h-3" />
+                        <span>View</span>
                       </button>
+                    </div>
+                  ) : (
+                    <div className="text-[10px] text-slate-400 italic px-1 flex items-center gap-1.5">
+                      <ImageIcon className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                      <span>No screenshot attached</span>
                     </div>
                   )}
 
@@ -906,6 +964,137 @@ export default function StudentRegistrationsSection({
           )}
         </div>
       </div>
+
+      {/* 6. Admin / Verifier Full-Size Payment Screenshot Lightbox Modal */}
+      {screenshotModalItem && (
+        <div
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 animate-fade-in"
+          onClick={() => setScreenshotModalItem(null)}
+        >
+          <div
+            className="relative max-w-2xl w-full bg-white rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh] animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-purple-100 flex items-center justify-between gap-3 bg-purple-50/40">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center font-black text-sm shrink-0">
+                  {screenshotModalItem.fullName.charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm sm:text-base font-black text-slate-900 truncate">
+                    {screenshotModalItem.fullName} — Payment Proof
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium truncate">
+                    Course: <strong className="text-slate-800">{screenshotModalItem.courseChoice}</strong> • Amount: <strong className="text-purple-700">₹{screenshotModalItem.amount?.toLocaleString("en-IN") || "1,500"}</strong>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setScreenshotModalItem(null)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                  title="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Image Body */}
+            <div className="flex-1 overflow-auto p-4 sm:p-6 bg-slate-900/5 flex items-center justify-center min-h-[300px]">
+              {screenshotModalItem.screenshotUrl ? (
+                <img
+                  src={screenshotModalItem.screenshotUrl}
+                  alt={`Payment screenshot for ${screenshotModalItem.fullName}`}
+                  className="max-w-full max-h-[60vh] object-contain rounded-2xl shadow-lg border border-purple-100 bg-white"
+                />
+              ) : (
+                <div className="text-center p-8 text-slate-400 space-y-2">
+                  <ImageIcon className="w-12 h-12 mx-auto text-slate-300" />
+                  <p className="text-xs font-bold">No screenshot image available</p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer with Verification Actions & Status */}
+            <div className="p-4 sm:p-5 border-t border-purple-100 bg-white flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <span className="text-xs text-slate-500 font-semibold">Status:</span>
+                {screenshotModalItem.paymentStatus === "APPROVED" ? (
+                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 font-black text-xs border border-emerald-300">
+                    🟢 Verified
+                  </span>
+                ) : screenshotModalItem.paymentStatus === "REJECTED" ? (
+                  <span className="px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-800 font-black text-xs border border-rose-300">
+                    🔴 Rejected
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 font-black text-xs border border-amber-300 animate-pulse">
+                    🟡 Pending Verification
+                  </span>
+                )}
+              </div>
+
+              {/* Verification Action Buttons inside Modal */}
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                {screenshotModalItem.paymentStatus !== "APPROVED" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleVerifyStatus(screenshotModalItem);
+                      setScreenshotModalItem(null);
+                    }}
+                    disabled={processingId === screenshotModalItem.id}
+                    className="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs inline-flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Verify & Approve</span>
+                  </button>
+                )}
+
+                {screenshotModalItem.paymentStatus !== "REJECTED" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleRejectStatus(screenshotModalItem);
+                      setScreenshotModalItem(null);
+                    }}
+                    disabled={processingId === screenshotModalItem.id}
+                    className="py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-black text-xs inline-flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    <span>Reject</span>
+                  </button>
+                )}
+
+                {screenshotModalItem.screenshotUrl && (
+                  <a
+                    href={screenshotModalItem.screenshotUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="py-2.5 px-3 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs inline-flex items-center gap-1.5 border border-purple-200 transition-colors"
+                    title="Open full image in new tab"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">New Tab</span>
+                  </a>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setScreenshotModalItem(null)}
+                  className="py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

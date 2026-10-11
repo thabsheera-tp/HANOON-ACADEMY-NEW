@@ -66,6 +66,7 @@ export interface DbPayment {
   rejection_reason?: string | null;
   submitted_at: string;
   updated_at: string;
+  screenshot_url?: string;
   // Joined fields for admin viewing
   student?: DbStudent;
   course?: DbCourse;

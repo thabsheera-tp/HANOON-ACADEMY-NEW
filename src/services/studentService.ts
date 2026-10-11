@@ -12,7 +12,46 @@ export interface RegisterStudentAndPaymentParams {
   courseTitle: string;
   courseMalayalam?: string;
   amount: number;
-  upiTxId: string;
+  upiTxId?: string;
+  screenshotUrl?: string;
+}
+
+/**
+ * Uploads payment screenshot to Supabase Storage bucket 'payment-screenshots'
+ * Falls back to base64 Data URL if storage bucket is not configured.
+ */
+export async function uploadPaymentScreenshot(file: File): Promise<string> {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const fileExt = file.name.split(".").pop() || "jpg";
+      const fileName = `screenshot_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.${fileExt}`;
+      const { data, error } = await supabase.storage
+        .from("payment-screenshots")
+        .upload(fileName, file, {
+          cacheControl: "3600",
+          upsert: true,
+        });
+
+      if (!error && data?.path) {
+        const { data: urlData } = supabase.storage
+          .from("payment-screenshots")
+          .getPublicUrl(fileName);
+        if (urlData?.publicUrl) {
+          return urlData.publicUrl;
+        }
+      }
+    } catch (e) {
+      console.warn("Supabase storage upload error, falling back to base64 data URL:", e);
+    }
+  }
+
+  // Resilient fallback to base64 Data URL
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 export interface RegistrationResult {
@@ -32,8 +71,11 @@ export async function registerStudentAndPayment(
     courseTitle,
     courseMalayalam = "",
     amount,
-    upiTxId,
+    upiTxId = "",
+    screenshotUrl = "",
   } = params;
+
+  const resolvedTxId = upiTxId.trim() || `PROOF_${Date.now().toString().slice(-6)}`;
 
   // 1. If Supabase is configured, insert into live PostgreSQL tables
   if (isSupabaseConfigured && supabase) {
@@ -87,20 +129,51 @@ export async function registerStudentAndPayment(
       }
 
       // Step B: Insert payment record with PENDING status
-      const { data: paymentData, error: paymentError } = await supabase
+      let paymentData: any = null;
+      let paymentError: any = null;
+
+      // Try inserting with screenshot_url
+      const insertPayload: any = {
+        student_id: studentData.id,
+        course_id: normalizedCourseId,
+        upi_txid: resolvedTxId,
+        amount: amount,
+        status: "PENDING" as PaymentStatus,
+      };
+      if (screenshotUrl) {
+        insertPayload.screenshot_url = screenshotUrl;
+      }
+
+      const res = await supabase
         .from("payments")
-        .insert({
-          student_id: studentData.id,
-          course_id: normalizedCourseId,
-          upi_txid: upiTxId.trim(),
-          amount: amount,
-          status: "PENDING" as PaymentStatus,
-        })
+        .insert(insertPayload)
         .select(`
           *,
           student:students(*)
         `)
         .single();
+
+      if (res.error && res.error.message?.includes("screenshot_url")) {
+        // Retry without screenshot_url column if not present in schema
+        delete insertPayload.screenshot_url;
+        const retryRes = await supabase
+          .from("payments")
+          .insert(insertPayload)
+          .select(`
+            *,
+            student:students(*)
+          `)
+          .single();
+        paymentData = retryRes.data;
+        paymentError = retryRes.error;
+      } else {
+        paymentData = res.data;
+        paymentError = res.error;
+      }
+
+      if (paymentData && screenshotUrl) {
+        paymentData.screenshot_url = screenshotUrl;
+      }
 
       if (paymentError || !paymentData) {
         throw new Error(`Failed to submit payment to Supabase: ${paymentError?.message}`);
@@ -150,11 +223,12 @@ export async function registerStudentAndPayment(
     id: generatedPaymentId,
     student_id: generatedStudentId,
     course_id: courseId,
-    upi_txid: upiTxId.trim(),
+    upi_txid: resolvedTxId,
     status: "PENDING",
     amount: amount,
     submitted_at: now,
     updated_at: now,
+    screenshot_url: screenshotUrl || undefined,
     student: fallbackStudent,
     course: {
       id: courseId,
@@ -254,6 +328,7 @@ export interface UnifiedStudentRegistration {
   paymentStatus: "PENDING" | "APPROVED" | "REJECTED" | "UNPAID";
   amount: number;
   upiTxId: string;
+  screenshotUrl?: string;
   paymentId?: string;
   rejectionReason?: string;
 }
@@ -474,6 +549,7 @@ export async function fetchUnifiedRegistrations(): Promise<UnifiedStudentRegistr
       paymentStatus,
       amount: p.amount || 500,
       upiTxId: p.upi_txid || "-",
+      screenshotUrl: p.screenshot_url || (p as any).screenshotUrl || (student as any)?.screenshot_url || "",
       paymentId: p.id,
       rejectionReason: p.rejection_reason || undefined,
     });

@@ -27,6 +27,7 @@ export interface PaymentDetails {
   amount: string;
   submittedAt: string;
   status: "unpaid" | "pending_verification" | "verified";
+  screenshotUrl?: string;
 }
 
 export type ScreenTab =

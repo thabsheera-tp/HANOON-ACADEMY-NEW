@@ -114,6 +114,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
               amount: p.amount || SHOWCASE_COURSES[0].fee,
               submittedAt: p.submittedAt || "",
               status: "pending_verification",
+              screenshotUrl: p.screenshotUrl || undefined,
             };
           }
         }
@@ -501,12 +502,13 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
   };
 
   // Step 5 -> Verification Submitted ("Payment Under Review")
-  const handleSubmitPayment = (txId: string, paymentId?: string) => {
+  const handleSubmitPayment = (txId: string, paymentId?: string, screenshotUrl?: string) => {
     const updatedDetails: PaymentDetails = {
       upiTxId: txId,
       amount: selectedCourse.admissionFee || selectedCourse.fee,
       submittedAt: new Date().toLocaleTimeString(),
       status: "pending_verification",
+      screenshotUrl,
     };
     setPaymentDetails(updatedDetails);
 
@@ -515,6 +517,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
       const pendingRecord = {
         txId,
         paymentId,
+        screenshotUrl,
         courseId: selectedCourse.id,
         courseTitle: selectedCourse.title,
         amount: selectedCourse.admissionFee || selectedCourse.fee,
