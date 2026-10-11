@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { User, Phone, MapPin, Calendar, Lock } from "lucide-react";
+import { User, Phone, MapPin, Calendar, Lock, ArrowRight } from "lucide-react";
 import { UserProfile, SelectedCourse } from "@/types/app";
 
 interface ScreenOnboardingProps {
@@ -10,14 +10,18 @@ interface ScreenOnboardingProps {
   selectedCourse?: SelectedCourse;
   onSaveProfile: (profile: UserProfile) => void;
   onSelectCourse?: (course: SelectedCourse) => void;
-  onProceedToPayment: () => void;
+  onProceedToCourses?: () => void;
+  onProceedToPayment?: () => void;
+  onBackToHome?: () => void;
   onBackToCourse?: () => void;
 }
 
 export default function ScreenOnboarding({
   userProfile,
   onSaveProfile,
+  onProceedToCourses,
   onProceedToPayment,
+  onBackToHome,
   onBackToCourse,
 }: ScreenOnboardingProps) {
   const router = useRouter();
@@ -58,7 +62,11 @@ export default function ScreenOnboarding({
       age: age.trim() || undefined,
     });
 
-    onProceedToPayment();
+    if (onProceedToCourses) {
+      onProceedToCourses();
+    } else if (onProceedToPayment) {
+      onProceedToPayment();
+    }
   };
 
   return (
@@ -152,13 +160,14 @@ export default function ScreenOnboarding({
               </div>
             </div>
 
-            {/* Submit */}
+            {/* Submit Button */}
             <div className="pt-2">
               <button
                 type="submit"
-                className="w-full py-3.5 px-6 rounded-2xl font-bold text-sm text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-md shadow-purple-600/25 transition-all flex items-center justify-center cursor-pointer"
+                className="w-full py-3.5 px-6 rounded-2xl font-bold text-sm text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-md shadow-purple-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <span>Submit</span>
+                <span>Continue to Courses</span>
+                <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </form>
@@ -166,11 +175,11 @@ export default function ScreenOnboarding({
       </div>
 
       <div className="text-center pt-2 pb-4 space-y-2">
-        {onBackToCourse && (
+        {(onBackToHome || onBackToCourse) && (
           <div>
             <button
               type="button"
-              onClick={onBackToCourse}
+              onClick={onBackToHome || onBackToCourse}
               className="text-xs font-bold text-purple-600 hover:text-purple-700 cursor-pointer"
             >
               ← Back to Home

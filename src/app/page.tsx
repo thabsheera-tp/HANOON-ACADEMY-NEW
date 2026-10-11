@@ -29,22 +29,20 @@ interface MobileAppShellProps {
 
 export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}) {
   const router = useRouter();
-  // 6-Step Workflow:
-  // Step 1: "splash" -> Welcome Screen (Only for unauthenticated visitors)
-  // Step 2: "courses" -> Course Selection View
-  // Step 3: "course-details" -> Course Details & Pricing Sheet
-  // Step 4: "onboarding" -> Student Onboarding Form
-  // Step 5: "payment" -> Manual UPI Payment / Pending Verification Screen
-  // Step 6: "dashboard" -> Student Dashboard & Profile View
+  // 5-Screen Sequential Flow:
+  // Screen 1: "splash" -> Welcome Landing Page with Hanoon Academy Logo and Get Started button
+  // Screen 2: "onboarding" -> Student Onboarding / Auth Form (Name, Phone, Place, Age)
+  // Screen 3: "courses" & "course-details" -> Course Exploration & Selection
+  // Screen 4: "payment" (unpaid) -> Direct UPI Payment (QR code, UPI ID, TxID form)
+  // Screen 5: "payment" (pending) -> Verification Pending ("Payment Under Review")
   const [currentScreen, setCurrentScreen] = useState<ScreenTab>(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const targetScreen = params.get("screen");
-      if (targetScreen === "courses") return "courses";
       if (targetScreen === "dashboard") return "dashboard";
     }
-    // Users entering the app MUST land on the Course Catalog / Exploration page first
-    return "courses";
+    // Screen 1 (Welcome Landing Page): Visitors strictly land on Welcome Splash Screen
+    return "splash";
   });
   const [accessNotice, setAccessNotice] = useState<string | null>(null);
 
@@ -53,18 +51,32 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     let name = initialUser?.full_name || "";
     let phone = initialUser?.whatsapp_num || "";
     let place = initialUser?.district || "";
+    let age = "";
 
-    if (typeof window !== "undefined" && (!name || !phone)) {
+    if (typeof window !== "undefined") {
       try {
-        const pendingRaw = localStorage.getItem("hanoon_pending_payment");
-        if (pendingRaw) {
-          const p = JSON.parse(pendingRaw);
-          if (p.studentName && !name) name = p.studentName;
-          if (p.studentPhone && !phone) phone = p.studentPhone;
+        const savedProfileRaw = localStorage.getItem("hanoon_student_profile");
+        if (savedProfileRaw) {
+          const sp = JSON.parse(savedProfileRaw);
+          if (sp.name && !name) name = sp.name;
+          if (sp.phone && !phone) phone = sp.phone;
+          if (sp.place && !place) place = sp.place;
+          if (sp.age && !age) age = sp.age;
         }
       } catch {}
+
+      if (!name || !phone) {
+        try {
+          const pendingRaw = localStorage.getItem("hanoon_pending_payment");
+          if (pendingRaw) {
+            const p = JSON.parse(pendingRaw);
+            if (p.studentName && !name) name = p.studentName;
+            if (p.studentPhone && !phone) phone = p.studentPhone;
+          }
+        } catch {}
+      }
     }
-    return { name, phone, place };
+    return { name, phone, place, age };
   });
 
   // Selected Course (Defaults to Adaviyya or pending course)
@@ -447,13 +459,33 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     setCurrentScreen("course-details");
   };
 
-  // Step 3 -> Step 4 (Enforce Registration Form Workflow)
+  // Step 3 -> Step 4: UPI Payment (Directly proceed since details were provided in Step 2)
   const handleProceedToRegister = () => {
-    setIsRegisterModalOpen(true);
+    // If student details have not been provided yet, route to Screen 2 (Onboarding)
+    if (!userProfile.name || !userProfile.phone) {
+      setCurrentScreen("onboarding");
+      return;
+    }
+
+    // Step 4 (UPI Payment): Student already provided details in Step 2.
+    // Take them directly to the UPI Payment screen!
+    setPaymentDetails((prev) => ({
+      ...prev,
+      upiTxId: "",
+      amount: selectedCourse.admissionFee || selectedCourse.fee,
+      submittedAt: "",
+      status: "unpaid",
+    }));
+    setCurrentScreen("payment");
   };
 
   const handleSaveProfile = (profile: UserProfile) => {
     setUserProfile(profile);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("hanoon_student_profile", JSON.stringify(profile));
+      } catch {}
+    }
     if (profile.name && profile.phone) {
       saveStudentLead({
         fullName: profile.name,
@@ -468,7 +500,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     setCurrentScreen("payment");
   };
 
-  // Step 5 -> Step 6 (Submit Verification)
+  // Step 5 -> Verification Submitted ("Payment Under Review")
   const handleSubmitPayment = (txId: string, paymentId?: string) => {
     const updatedDetails: PaymentDetails = {
       upiTxId: txId,
@@ -501,26 +533,31 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
   const handleBack = () => {
     if (currentScreen === "dashboard") setCurrentScreen("courses");
     else if (currentScreen === "payment") setCurrentScreen("course-details");
-    else if (currentScreen === "onboarding") setCurrentScreen("courses");
     else if (currentScreen === "course-details") setCurrentScreen("courses");
-    else if (currentScreen === "courses") {
-      setCurrentScreen("courses");
-    }
+    else if (currentScreen === "courses") setCurrentScreen("onboarding");
+    else if (currentScreen === "onboarding") setCurrentScreen("splash");
   };
 
-  const canGoBack = currentScreen !== "courses" && currentScreen !== "splash";
+  const canGoBack = currentScreen !== "splash";
   const isEnrolled =
     paymentDetails.status === "verified" ||
     (paymentDetails.status as string) === "APPROVED" ||
     (paymentDetails.status as string) === "ACTIVE";
   const hasPaymentSubmitted = paymentDetails.status === "pending_verification";
 
-  // Guard: Payment & details needed ONLY after exploring courses
+  // Route Guard: Screen 3 (Courses) requires student details / onboarding
   useEffect(() => {
-    if (currentScreen === "payment" && !hasPaymentSubmitted && !userProfile.name) {
-      setCurrentScreen("courses");
+    if ((currentScreen === "courses" || currentScreen === "course-details") && (!userProfile.name || !userProfile.phone)) {
+      setCurrentScreen("splash");
     }
-  }, [currentScreen, hasPaymentSubmitted, userProfile.name]);
+  }, [currentScreen, userProfile.name, userProfile.phone]);
+
+  // Route Guard: Screen 4 (Payment) requires student details
+  useEffect(() => {
+    if (currentScreen === "payment" && !hasPaymentSubmitted && (!userProfile.name || !userProfile.phone)) {
+      setCurrentScreen("onboarding");
+    }
+  }, [currentScreen, hasPaymentSubmitted, userProfile.name, userProfile.phone]);
 
   // Route Guard: Restrict Dashboard access strictly to APPROVED / ACTIVE students
   useEffect(() => {
@@ -538,6 +575,10 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     if (screen === "dashboard" && !isEnrolled) {
       setAccessNotice("Please complete enrollment to access your dashboard.");
       setCurrentScreen("course-details");
+      return;
+    }
+    if ((screen === "courses" || screen === "course-details") && (!userProfile.name || !userProfile.phone)) {
+      setCurrentScreen("onboarding");
       return;
     }
     setCurrentScreen(screen);
@@ -580,20 +621,36 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
 
         {/* Scrollable Viewport */}
         <div className="flex-1 overflow-y-auto flex flex-col relative z-10 bg-white">
-          {/* Step 1: Welcome Screen (Ultra-minimalist branding & direct route to /courses) */}
+          {/* Step 1: Welcome Screen (Ultra-minimalist branding & "Get Started" button) */}
           {currentScreen === "splash" && (
             <ScreenSplash
-              onGetStarted={() => setIsRegisterModalOpen(true)}
-              onExploreCourses={() => setCurrentScreen("courses")}
+              onGetStarted={() => setCurrentScreen("onboarding")}
+              onExploreCourses={() => {
+                if (!userProfile.name || !userProfile.phone) {
+                  setCurrentScreen("onboarding");
+                } else {
+                  setCurrentScreen("courses");
+                }
+              }}
             />
           )}
 
-          {/* Step 2: Course Selection View */}
+          {/* Step 2: Student Onboarding / Auth Form */}
+          {currentScreen === "onboarding" && (
+            <ScreenOnboarding
+              userProfile={userProfile}
+              onSaveProfile={handleSaveProfile}
+              onProceedToCourses={() => setCurrentScreen("courses")}
+              onBackToHome={() => setCurrentScreen("splash")}
+            />
+          )}
+
+          {/* Step 3: Course Selection View */}
           {currentScreen === "courses" && (
             <ScreenCoursesList onSelectCourse={handleSelectCourse} />
           )}
 
-          {/* Step 3: Course Details & Pricing Sheet */}
+          {/* Step 3 (Detail): Course Details & Pricing Sheet */}
           {currentScreen === "course-details" && (
             <ScreenCourseDetails
               selectedCourse={selectedCourse}
@@ -605,15 +662,6 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
             />
           )}
 
-          {/* Step 4: Student Onboarding Form */}
-          {currentScreen === "onboarding" && (
-            <ScreenOnboarding
-              userProfile={userProfile}
-              onSaveProfile={handleSaveProfile}
-              onProceedToPayment={handleProceedToPayment}
-              onBackToCourse={() => setCurrentScreen("splash")}
-            />
-          )}
 
           {/* Step 5: Manual UPI Payment Screen */}
           {currentScreen === "payment" && (

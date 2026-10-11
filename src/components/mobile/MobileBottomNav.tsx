@@ -17,12 +17,11 @@ export default function MobileBottomNav({
   isEnrolled,
   hasPaymentSubmitted,
 }: MobileBottomNavProps) {
-  if (currentScreen === "splash") return null;
+  if (currentScreen === "splash" || currentScreen === "onboarding") return null;
 
   const isCoursesTab = currentScreen === "courses" || currentScreen === "course-details";
   const isProfileTab =
     currentScreen === "dashboard" ||
-    currentScreen === "onboarding" ||
     currentScreen === "payment";
   const isPendingVerification = !isEnrolled && hasPaymentSubmitted;
 
