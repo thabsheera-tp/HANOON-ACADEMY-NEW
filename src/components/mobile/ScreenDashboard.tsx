@@ -35,6 +35,7 @@ import { getAdaviyyaSubjects, AdaviyyaSubject } from "@/services/subjectService"
 import AttendanceDonutChart from "@/components/charts/AttendanceDonutChart";
 import ProgressScoreBarChart from "@/components/charts/ProgressScoreBarChart";
 import { getAppSettings, formatWhatsAppLink } from "@/services/settingsService";
+import { getNotifications, AppNotification } from "@/services/notificationService";
 
 interface ScreenDashboardProps {
   userProfile: UserProfile;
@@ -255,24 +256,50 @@ export default function ScreenDashboard({
         </button>
       </div>
 
-      {/* Notification Toast Dropdown */}
+      {/* Notification Toast Dropdown with Real Alerts */}
       {showNotificationToast && (
-        <div className="p-3 rounded-2xl bg-white border border-purple-200 text-xs text-slate-700 shadow-md flex items-center justify-between animate-fade-in">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 shrink-0 text-purple-600" />
-            <span className="font-semibold text-slate-800">
-              {isApproved
-                ? "Enrollment approved! All subjects & interactive live classes active."
-                : "Payment submitted. Admin verification in progress."}
-            </span>
+        <div className="p-3.5 rounded-2xl bg-white border border-purple-200 text-xs text-slate-700 shadow-md space-y-2 animate-fade-in">
+          <div className="flex items-center justify-between border-b border-purple-100/60 pb-2">
+            <div className="flex items-center gap-1.5 font-bold text-purple-900">
+              <Bell className="w-3.5 h-3.5 text-purple-600" />
+              <span>Notifications & Class Alerts</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowNotificationToast(false)}
+              className="text-xs font-bold text-slate-400 hover:text-slate-700 cursor-pointer p-0.5"
+            >
+              ✕
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowNotificationToast(false)}
-            className="text-xs font-bold text-slate-400 hover:text-slate-700 ml-2 cursor-pointer"
-          >
-            ✕
-          </button>
+
+          {/* Show enrollment status or latest notification */}
+          <div className="space-y-1.5">
+            {getNotifications().slice(0, 3).map((item) => (
+              <div key={item.id} className="p-2 rounded-xl bg-purple-50/50 space-y-1 text-slate-700">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="font-extrabold text-[11px] text-slate-900 flex items-center gap-1">
+                    {item.type === "CLASS_LIVE" && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />}
+                    <span>{item.title}</span>
+                  </span>
+                  <span className="text-[9px] text-slate-400">
+                    {new Date(item.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </div>
+                <p className="text-[10.5px] text-slate-600 leading-snug">{item.message}</p>
+                {item.meetingLink && (
+                  <a
+                    href={item.meetingLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block mt-1 py-0.5 px-2 rounded-md bg-purple-600 text-white font-bold text-[10px]"
+                  >
+                    Join {item.platform || "Meeting"} ➔
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

@@ -19,8 +19,10 @@ export interface CourseMaterial {
   title: string;
   courseId: string;
   courseName: string;
+  subjectId?: string;
   type: "PDF" | "VIDEO";
   fileOrUrl: string;
+  pdfUrl?: string;
   sizeOrDuration: string;
   uploadedAt: string;
   downloadCount: number;

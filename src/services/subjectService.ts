@@ -4,6 +4,7 @@ export interface SubjectChapter {
   duration: string;
   pdfTitle: string;
   pdfSize: string;
+  pdfUrl?: string;
   videoUrl?: string;
 }
 
@@ -258,4 +259,62 @@ export function saveTeacherWhatsApp(instructorName: string, whatsapp: string): v
   } catch (e) {
     console.error("Error saving teacher WhatsApp:", e);
   }
+}
+
+/**
+ * Adds a new chapter with attached PDF study notes to a specific Adaviyya subject.
+ */
+export function addChapterToSubject(
+  subjectId: "seerah" | "haddad" | "fiqh" | "hadith",
+  chapterData: {
+    title: string;
+    duration?: string;
+    pdfTitle: string;
+    pdfSize?: string;
+    pdfUrl?: string;
+  }
+): SubjectChapter {
+  const current = getAdaviyyaSubjects();
+  const newChapter: SubjectChapter = {
+    id: `${subjectId}-ch-${Date.now()}`,
+    title: chapterData.title.trim(),
+    duration: chapterData.duration || "45 mins",
+    pdfTitle: chapterData.pdfTitle.trim(),
+    pdfSize: chapterData.pdfSize || "3.5 MB",
+    pdfUrl: chapterData.pdfUrl,
+  };
+
+  const updated = current.map((s) => {
+    if (s.id === subjectId) {
+      return {
+        ...s,
+        chapters: [...s.chapters, newChapter],
+      };
+    }
+    return s;
+  });
+
+  saveAdaviyyaSubjects(updated);
+  return newChapter;
+}
+
+/**
+ * Removes a chapter from a specific Adaviyya subject.
+ */
+export function deleteChapterFromSubject(
+  subjectId: string,
+  chapterId: string
+): void {
+  const current = getAdaviyyaSubjects();
+  const updated = current.map((s) => {
+    if (s.id === subjectId) {
+      return {
+        ...s,
+        chapters: s.chapters.filter((ch) => ch.id !== chapterId),
+      };
+    }
+    return s;
+  });
+
+  saveAdaviyyaSubjects(updated);
 }

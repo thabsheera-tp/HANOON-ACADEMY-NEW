@@ -104,13 +104,27 @@ export default function SubjectClassHubModal({
     }
   };
 
-  const handleDownload = (chapterId: string) => {
+  const handleDownload = (chapterId: string, pdfUrl?: string, pdfTitle?: string) => {
     if (!isPaid) return;
     setDownloadingId(chapterId);
+
+    if (pdfUrl && typeof document !== "undefined") {
+      try {
+        const a = document.createElement("a");
+        a.href = pdfUrl;
+        a.download = pdfTitle || "notes.pdf";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } catch (err) {
+        console.warn("Direct PDF download fallback:", err);
+      }
+    }
+
     setTimeout(() => {
       setDownloadingId(null);
       setDownloadedChapters((prev) => ({ ...prev, [chapterId]: true }));
-    }, 1200);
+    }, 1000);
   };
 
   return (
@@ -332,7 +346,7 @@ export default function SubjectClassHubModal({
                       <button
                         type="button"
                         disabled={isDownloading}
-                        onClick={() => handleDownload(chapter.id)}
+                        onClick={() => handleDownload(chapter.id, chapter.pdfUrl, chapter.pdfTitle)}
                         className={`py-1 px-2.5 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all ${
                           isDownloaded
                             ? "bg-emerald-50 text-emerald-700 border border-emerald-200"

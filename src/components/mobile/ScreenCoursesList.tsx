@@ -9,10 +9,12 @@ import {
   BookMarked,
   Mic,
   Radio,
+  ExternalLink,
 } from "lucide-react";
 import { SelectedCourse } from "@/types/app";
 import { getActiveCourses } from "@/services/courseService";
 import { SpecialClass, getSpecialClasses } from "@/services/specialClassService";
+import { getTeacherClasses, LiveClassSession } from "@/services/teacherService";
 import SpecialClassModal from "@/components/mobile/SpecialClassModal";
 
 export const SHOWCASE_COURSES: SelectedCourse[] = [
@@ -95,8 +97,22 @@ export default function ScreenCoursesList({
   // Special Classes state for Tajweed & Burdah Live
   const [specialClasses, setSpecialClasses] = useState<SpecialClass[]>([]);
   const [selectedSpecialClass, setSelectedSpecialClass] = useState<SpecialClass | null>(null);
+  const [activeLiveClass, setActiveLiveClass] = useState<LiveClassSession | null>(null);
 
   useEffect(() => {
+    // Check if any class is currently LIVE_NOW
+    const checkLive = () => {
+      const cls = getTeacherClasses().find((c) => c.status === "LIVE_NOW");
+      setActiveLiveClass(cls || null);
+    };
+    checkLive();
+
+    const handleBroadcastStarted = () => checkLive();
+    const handleBroadcastEnded = () => checkLive();
+
+    window.addEventListener("hanoon_live_broadcast_started", handleBroadcastStarted);
+    window.addEventListener("hanoon_live_broadcast_ended", handleBroadcastEnded);
+
     getActiveCourses().then((data) => {
       if (data && data.length > 0) {
         if (data.length >= 4) {
@@ -134,6 +150,8 @@ export default function ScreenCoursesList({
     window.addEventListener("hanoon_special_classes_updated", handleSpecialUpdate as EventListener);
     return () => {
       window.removeEventListener("hanoon_special_classes_updated", handleSpecialUpdate as EventListener);
+      window.removeEventListener("hanoon_live_broadcast_started", handleBroadcastStarted);
+      window.removeEventListener("hanoon_live_broadcast_ended", handleBroadcastEnded);
     };
   }, []);
 
@@ -154,9 +172,37 @@ export default function ScreenCoursesList({
   };
 
   return (
-    <div className="w-full max-w-md mx-auto px-5 py-4 flex-1 flex flex-col justify-start space-y-5 select-none font-['Plus_Jakarta_Sans'] bg-purple-50/40">
+    <div className="w-full max-w-md mx-auto px-5 py-4 flex-1 flex flex-col justify-start space-y-4 select-none font-['Plus_Jakarta_Sans'] bg-purple-50/40">
+      {/* Live Classroom Active Banner */}
+      {activeLiveClass && (
+        <div className="p-3.5 rounded-2xl bg-gradient-to-r from-rose-600 via-purple-700 to-indigo-700 text-white shadow-md flex items-center justify-between gap-3 animate-fade-in border border-rose-300/40">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0">
+              <Radio className="w-4 h-4 text-white animate-pulse" />
+            </div>
+            <div className="min-w-0">
+              <span className="text-[9.5px] font-black uppercase tracking-wider text-rose-200 block">
+                🔴 Virtual Classroom Live Now
+              </span>
+              <h4 className="text-xs font-bold truncate text-white">
+                {activeLiveClass.title}
+              </h4>
+            </div>
+          </div>
+          <a
+            href={activeLiveClass.meetingLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="py-1.5 px-3 rounded-xl bg-white text-rose-700 hover:bg-rose-50 active:scale-95 font-extrabold text-xs shrink-0 shadow-xs flex items-center gap-1 transition-all"
+          >
+            <span>Join Live</span>
+            <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
+      )}
+
       {/* 1. Main Academic Programs: Balanced 2x2 Grid (Clean: Name & Icon Only) */}
-      <div className="grid grid-cols-2 gap-3.5 pt-1">
+      <div className="grid grid-cols-2 gap-3.5 pt-0.5">
         {courses.slice(0, 4).map((course) => {
           const icon = getCourseIcon(course.id);
           const isShamail =

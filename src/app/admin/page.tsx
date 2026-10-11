@@ -42,6 +42,8 @@ import {
   Image as ImageIcon,
   MessageCircle,
   X,
+  Bell,
+  FileUp,
 } from "lucide-react";
 import {
   getCurrentSession,
@@ -56,6 +58,10 @@ import HanoonLogo from "@/components/brand/HanoonLogo";
 import MonthlyRevenueBarChart from "@/components/charts/MonthlyRevenueBarChart";
 import TeacherManagementSection from "@/components/admin/TeacherManagementSection";
 import StudentRegistrationsSection from "@/components/admin/StudentRegistrationsSection";
+import PdfNotesUploadSection from "@/components/admin/PdfNotesUploadSection";
+import ClassScheduleManagerSection from "@/components/admin/ClassScheduleManagerSection";
+import NotificationsManagerSection from "@/components/admin/NotificationsManagerSection";
+import { getNotifications } from "@/services/notificationService";
 import { fetchPayments, updatePaymentStatus, getWhatsAppWelcomeUrl } from "@/services/paymentService";
 import { fetchStudents } from "@/services/studentService";
 import { fetchPayroll, markPayrollAsPaid, createPayrollRecord } from "@/services/payrollService";
@@ -122,8 +128,25 @@ export default function AdminDashboardPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<UserProfileRecord | null>(null);
 
-  // Active Main Tab: overview, upi, teachers, payroll, settings
-  const [activeTab, setActiveTab] = useState<"overview" | "upi" | "teachers" | "payroll" | "settings">("overview");
+  // Active Main Tab: overview, upi, classes, notes, notifications, teachers, payroll, settings
+  const [activeTab, setActiveTab] = useState<
+    "overview" | "upi" | "classes" | "notes" | "notifications" | "teachers" | "payroll" | "settings"
+  >("overview");
+  const [unreadNotifsCount, setUnreadNotifsCount] = useState<number>(0);
+
+  useEffect(() => {
+    const updateUnread = () => {
+      const count = getNotifications().filter((n) => !n.isRead).length;
+      setUnreadNotifsCount(count);
+    };
+    updateUnread();
+    window.addEventListener("hanoon_notifications_updated", updateUnread);
+    window.addEventListener("hanoon_new_notification", updateUnread);
+    return () => {
+      window.removeEventListener("hanoon_notifications_updated", updateUnread);
+      window.removeEventListener("hanoon_new_notification", updateUnread);
+    };
+  }, []);
 
   // Data States
   const [payments, setPayments] = useState<DbPayment[]>([]);
@@ -672,28 +695,86 @@ export default function AdminDashboardPage() {
 
         {/* Navigation Tabs Bar */}
         <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar pt-1 border-t border-purple-50 sm:border-0">
-          {isSuperAdmin ? (
-            <>
-              {/* Tab 1: 🎓 Student Registrations & Payments */}
-              <button
-                type="button"
-                onClick={() => setActiveTab("overview")}
-                className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-xs border-b-2 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all shrink-0 ${
-                  activeTab === "overview"
-                    ? "border-purple-600 text-purple-700 font-extrabold"
-                    : "border-transparent text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                <Users className="w-4 h-4 shrink-0 text-purple-600" />
-                <span>🎓 Student Registrations & Payments</span>
-                {pendingPaymentsCount > 0 && (
-                  <span className="w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center animate-pulse">
-                    {pendingPaymentsCount}
-                  </span>
-                )}
-              </button>
+          {/* Tab 1: 🎓 Student Registrations & Payments (or UPI Verification Queue for Verifiers) */}
+          <button
+            type="button"
+            onClick={() => setActiveTab("overview")}
+            className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-xs border-b-2 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all shrink-0 ${
+              activeTab === "overview"
+                ? "border-purple-600 text-purple-700 font-extrabold"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            {isSuperAdmin ? (
+              <Users className="w-4 h-4 shrink-0 text-purple-600" />
+            ) : (
+              <CreditCard className="w-4 h-4 shrink-0 text-emerald-600" />
+            )}
+            <span>{isSuperAdmin ? "🎓 Registrations & Payments" : "💳 Payment Verification"}</span>
+            {pendingPaymentsCount > 0 && (
+              <span className="w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center animate-pulse">
+                {pendingPaymentsCount}
+              </span>
+            )}
+          </button>
 
-              {/* Tab 2: 👩‍🏫 Teachers & Subjects Management */}
+          {/* Tab 2: 📅 Class Scheduling & Live Manager */}
+          <button
+            type="button"
+            onClick={() => setActiveTab("classes")}
+            className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-xs border-b-2 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all shrink-0 ${
+              activeTab === "classes"
+                ? "border-purple-600 text-purple-700 font-extrabold"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <Calendar className="w-4 h-4 shrink-0 text-purple-600" />
+            <span>📅 Class Scheduling & Live</span>
+            {teacherClasses.some((c) => c.status === "LIVE_NOW") && (
+              <span className="px-1.5 py-0.5 rounded-full bg-rose-600 text-white text-[9px] font-black animate-pulse flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                <span>LIVE</span>
+              </span>
+            )}
+          </button>
+
+          {/* Tab 3: 📚 PDF Notes & Materials Upload */}
+          <button
+            type="button"
+            onClick={() => setActiveTab("notes")}
+            className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-xs border-b-2 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all shrink-0 ${
+              activeTab === "notes"
+                ? "border-purple-600 text-purple-700 font-extrabold"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <FileUp className="w-4 h-4 shrink-0 text-indigo-600" />
+            <span>📚 PDF Notes Upload</span>
+          </button>
+
+          {/* Tab 4: 🔔 Notifications Center */}
+          <button
+            type="button"
+            onClick={() => setActiveTab("notifications")}
+            className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-xs border-b-2 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all shrink-0 ${
+              activeTab === "notifications"
+                ? "border-purple-600 text-purple-700 font-extrabold"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <Bell className="w-4 h-4 shrink-0 text-amber-500" />
+            <span>🔔 Notifications Hub</span>
+            {unreadNotifsCount > 0 && (
+              <span className="w-5 h-5 rounded-full bg-amber-500 text-white text-[10px] font-black flex items-center justify-center">
+                {unreadNotifsCount}
+              </span>
+            )}
+          </button>
+
+          {/* Additional Tabs for Super Admin Only */}
+          {isSuperAdmin && (
+            <>
+              {/* Tab 5: 👩‍🏫 Teachers & Subjects Management */}
               <button
                 type="button"
                 onClick={() => setActiveTab("teachers")}
@@ -704,7 +785,7 @@ export default function AdminDashboardPage() {
                 }`}
               >
                 <GraduationCap className="w-4 h-4 shrink-0 text-indigo-600" />
-                <span>👩‍🏫 Teachers & Subjects Management</span>
+                <span>👩‍🏫 Teachers & Subjects</span>
               </button>
 
               <button
@@ -746,16 +827,6 @@ export default function AdminDashboardPage() {
                 <span>Settings & Audit</span>
               </button>
             </>
-          ) : (
-            <div className="py-2.5 sm:py-3 px-3 sm:px-4 font-extrabold text-xs text-emerald-800 border-b-2 border-emerald-600 flex items-center gap-2 shrink-0">
-              <CreditCard className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>UPI Payment Verification Queue</span>
-              {pendingPaymentsCount > 0 && (
-                <span className="w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center animate-pulse">
-                  {pendingPaymentsCount}
-                </span>
-              )}
-            </div>
           )}
         </div>
       </header>
@@ -786,14 +857,14 @@ export default function AdminDashboardPage() {
                 <ShieldCheck className="w-4 h-4" />
               </div>
               <div>
-                <span className="font-extrabold text-emerald-950 block">Verification Staff Portal</span>
+                <span className="font-extrabold text-emerald-950 block">Staff & Verification Portal Active</span>
                 <span className="text-[11px] text-emerald-800">
-                  Restricted authorization: Verify or reject student UPI transactions. Financial metrics and system settings are secured.
+                  Full tools available: Payment Verification Queue, Class Scheduling & Live Google Meet/Zoom links, PDF Notes Upload, and Push Notifications.
                 </span>
               </div>
             </div>
             <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-white text-emerald-800 border border-emerald-200 shrink-0 self-start sm:self-auto">
-              Audit Trail Active
+              Staff Suite Online
             </span>
           </div>
         )}
@@ -803,6 +874,42 @@ export default function AdminDashboardPage() {
             ======================================================== */}
         {activeTab === "overview" && (
           <StudentRegistrationsSection isSuperAdmin={isSuperAdmin} />
+        )}
+
+        {/* ========================================================
+            TAB: 📅 CLASS NOTIFICATION & SCHEDULE MANAGER
+            ======================================================== */}
+        {activeTab === "classes" && (
+          <div className="animate-fade-in">
+            <ClassScheduleManagerSection
+              currentUserRole={currentUser?.role}
+              currentUserName={currentUser?.full_name}
+            />
+          </div>
+        )}
+
+        {/* ========================================================
+            TAB: 📚 PDF NOTES & MATERIALS UPLOAD TOOL
+            ======================================================== */}
+        {activeTab === "notes" && (
+          <div className="animate-fade-in">
+            <PdfNotesUploadSection
+              currentUserRole={currentUser?.role}
+              currentUserName={currentUser?.full_name}
+            />
+          </div>
+        )}
+
+        {/* ========================================================
+            TAB: 🔔 NOTIFICATIONS HUB & BROADCAST CENTER
+            ======================================================== */}
+        {activeTab === "notifications" && (
+          <div className="animate-fade-in">
+            <NotificationsManagerSection
+              currentUserRole={currentUser?.role}
+              currentUserName={currentUser?.full_name}
+            />
+          </div>
         )}
 
         {/* ========================================================
