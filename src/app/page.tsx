@@ -539,6 +539,13 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     }
   };
 
+  const handleSaveProfileAndProceed = (profile?: UserProfile) => {
+    if (profile) {
+      handleSaveProfile(profile);
+    }
+    setCurrentScreen("courses");
+  };
+
   // Step 4 -> Step 5
   const handleProceedToPayment = () => {
     setCurrentScreen("payment");
@@ -590,13 +597,6 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     (paymentDetails.status as string) === "APPROVED" ||
     (paymentDetails.status as string) === "ACTIVE";
   const hasPaymentSubmitted = paymentDetails.status === "pending_verification";
-
-  // Route Guard: Screen 3 (Courses) requires student details / onboarding
-  useEffect(() => {
-    if ((currentScreen === "courses" || currentScreen === "course-details") && (!userProfile.name || !userProfile.phone)) {
-      setCurrentScreen("splash");
-    }
-  }, [currentScreen, userProfile.name, userProfile.phone]);
 
   // Route Guard: Screen 4 (Payment) requires student details
   useEffect(() => {
@@ -686,7 +686,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
             <ScreenOnboarding
               userProfile={userProfile}
               onSaveProfile={handleSaveProfile}
-              onProceedToCourses={() => setCurrentScreen("courses")}
+              onProceedToCourses={handleSaveProfileAndProceed}
               onBackToHome={() => setCurrentScreen("splash")}
             />
           )}

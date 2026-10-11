@@ -10,7 +10,7 @@ interface ScreenOnboardingProps {
   selectedCourse?: SelectedCourse;
   onSaveProfile: (profile: UserProfile) => void;
   onSelectCourse?: (course: SelectedCourse) => void;
-  onProceedToCourses?: () => void;
+  onProceedToCourses?: (profile?: UserProfile) => void;
   onProceedToPayment?: () => void;
   onBackToHome?: () => void;
   onBackToCourse?: () => void;
@@ -95,16 +95,18 @@ export default function ScreenOnboarding({
       }
     }
 
-    setError(null);
-    onSaveProfile({
+    const newProfile: UserProfile = {
       name: name.trim(),
       phone: phone.trim(),
       place: place.trim(),
       age: age.trim() || undefined,
-    });
+    };
+
+    setError(null);
+    onSaveProfile(newProfile);
 
     if (onProceedToCourses) {
-      onProceedToCourses();
+      onProceedToCourses(newProfile);
     } else if (onProceedToPayment) {
       onProceedToPayment();
     }
