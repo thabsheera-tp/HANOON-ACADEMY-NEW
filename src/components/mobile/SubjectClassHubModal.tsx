@@ -206,7 +206,7 @@ export default function SubjectClassHubModal({
               }}
               className="w-full py-2.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-[0.98] text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
             >
-              <span>Join Course / Register</span>
+              <span>Enroll Now</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>

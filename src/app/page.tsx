@@ -40,7 +40,6 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const targetScreen = params.get("screen");
-      if (targetScreen === "payment") return "payment";
       if (targetScreen === "courses") return "courses";
       if (targetScreen === "dashboard") return "dashboard";
     }
@@ -92,7 +91,12 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
         const pendingRaw = localStorage.getItem("hanoon_pending_payment");
         if (pendingRaw) {
           const p = JSON.parse(pendingRaw);
-          if (p && (p.status === "PENDING" || p.status === "pending_verification")) {
+          if (
+            p &&
+            (p.status === "PENDING" || p.status === "pending_verification") &&
+            p.txId &&
+            p.txId !== "Pending Verification"
+          ) {
             return {
               upiTxId: p.txId || "",
               amount: p.amount || SHOWCASE_COURSES[0].fee,
@@ -114,15 +118,12 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
 
-  // Check URL query parameters for access restriction notice or target screen
+  // Check URL query parameters for access restriction notice
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const noticeParam = params.get("notice");
-      const screenParam = params.get("screen");
-      if (screenParam === "payment") {
-        setCurrentScreen("payment");
-      } else if (noticeParam) {
+      if (noticeParam) {
         setAccessNotice(noticeParam);
         setCurrentScreen("course-details");
       }
@@ -664,25 +665,13 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
             setSelectedCourse(matchedCourse);
           }
 
-          setPaymentDetails((prev) => ({
-            ...prev,
-            status: "pending_verification",
-          }));
-
-          // Persist pending registration locally
-          if (typeof window !== "undefined") {
-            const pendingRecord = {
-              txId: "Pending Verification",
-              courseId: courseId || selectedCourse.id,
-              courseTitle: matchedCourse?.title || selectedCourse.title,
-              amount: matchedCourse?.admissionFee || matchedCourse?.fee || selectedCourse.admissionFee || selectedCourse.fee,
-              submittedAt: new Date().toLocaleTimeString(),
-              studentName: profile.name,
-              studentPhone: profile.phone,
-              status: "PENDING",
-            };
-            localStorage.setItem("hanoon_pending_payment", JSON.stringify(pendingRecord));
-          }
+          // Transition to Screen 4 (UPI Payment): status is unpaid so QR code & TxID input is shown
+          setPaymentDetails({
+            upiTxId: "",
+            amount: matchedCourse?.admissionFee || matchedCourse?.fee || selectedCourse.admissionFee || selectedCourse.fee,
+            submittedAt: "",
+            status: "unpaid",
+          });
 
           setCurrentScreen("payment");
         }}

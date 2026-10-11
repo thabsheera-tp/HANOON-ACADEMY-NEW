@@ -81,10 +81,17 @@ export default function ScreenPayment({
 
   // Sync state if parent props update
   useEffect(() => {
+    if (userProfile?.name) setStudentName(userProfile.name);
+    if (userProfile?.phone) setStudentPhone(userProfile.phone);
+  }, [userProfile?.name, userProfile?.phone]);
+
+  useEffect(() => {
     if (paymentDetails.status === "verified") {
       setVerifiedStatus("verified");
     } else if (paymentDetails.status === "pending_verification") {
       setVerifiedStatus("pending");
+    } else if (paymentDetails.status === "unpaid") {
+      setVerifiedStatus("unpaid");
     }
   }, [paymentDetails.status]);
 
