@@ -237,6 +237,7 @@ export default function ScreenPayment({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
 
     if (!studentName.trim()) {
       setError("Please enter your Student Full Name.");

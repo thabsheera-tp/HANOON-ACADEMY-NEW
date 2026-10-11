@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { User, Phone, MapPin, Calendar, Lock, ArrowRight } from "lucide-react";
+import { User, Phone, MapPin, Calendar, Lock, ArrowRight, RefreshCw } from "lucide-react";
 import { UserProfile, SelectedCourse } from "@/types/app";
 
 interface ScreenOnboardingProps {
@@ -46,6 +46,7 @@ export default function ScreenOnboarding({
   const [place, setPlace] = useState(initialPlace);
   const [age, setAge] = useState(userProfile.age ? String(userProfile.age) : "");
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Clean any contaminated localStorage keys from past verifier tests
   useEffect(() => {
@@ -74,6 +75,8 @@ export default function ScreenOnboarding({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     if (!name.trim()) {
       setError("Please enter your Student Full Name.");
       return;
@@ -95,6 +98,9 @@ export default function ScreenOnboarding({
       }
     }
 
+    setError(null);
+    setIsSubmitting(true);
+
     const newProfile: UserProfile = {
       name: name.trim(),
       phone: phone.trim(),
@@ -102,7 +108,6 @@ export default function ScreenOnboarding({
       age: age.trim() || undefined,
     };
 
-    setError(null);
     onSaveProfile(newProfile);
 
     if (onProceedToCourses) {
@@ -213,10 +218,20 @@ export default function ScreenOnboarding({
           <div className="pt-3">
             <button
               type="submit"
-              className="w-full py-4 px-6 rounded-2xl font-black text-sm text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 active:scale-[0.98] shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer min-h-[52px]"
+              disabled={isSubmitting}
+              className="w-full py-4 px-6 rounded-2xl font-black text-sm text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 active:scale-[0.98] shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer min-h-[52px] disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <span>Continue to Courses</span>
-              <ArrowRight className="w-4 h-4" />
+              {isSubmitting ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
+                  <span>Submitting...</span>
+                </>
+              ) : (
+                <>
+                  <span>Continue to Courses</span>
+                  <ArrowRight className="w-4 h-4 shrink-0" />
+                </>
+              )}
             </button>
           </div>
         </form>

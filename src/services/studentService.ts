@@ -60,7 +60,35 @@ export interface RegistrationResult {
   isLiveSupabase: boolean;
 }
 
+// Session-level in-flight deduplication / debouncing maps
+const inFlightPaymentPromises = new Map<string, Promise<RegistrationResult>>();
+const inFlightLeadPromises = new Map<string, Promise<DbStudent | null>>();
+
 export async function registerStudentAndPayment(
+  params: RegisterStudentAndPaymentParams
+): Promise<RegistrationResult> {
+  const cleanPhone = (params.whatsappNum || "").replace(/\D/g, "");
+  const normalizedCourseId =
+    params.courseId === "shamail-muhammadiyya" ? "shamail" : params.courseId;
+  const inFlightKey = `${cleanPhone}_${normalizedCourseId}`;
+
+  if (inFlightPaymentPromises.has(inFlightKey)) {
+    return inFlightPaymentPromises.get(inFlightKey)!;
+  }
+
+  const promise = executeRegisterStudentAndPayment(params);
+  inFlightPaymentPromises.set(inFlightKey, promise);
+
+  try {
+    return await promise;
+  } finally {
+    setTimeout(() => {
+      inFlightPaymentPromises.delete(inFlightKey);
+    }, 2500);
+  }
+}
+
+async function executeRegisterStudentAndPayment(
   params: RegisterStudentAndPaymentParams
 ): Promise<RegistrationResult> {
   const {
@@ -348,6 +376,30 @@ const COURSE_NAMES_MAP: Record<string, string> = {
  * Saves a student lead when registering via the student registration modal
  */
 export async function saveStudentLead(profile: {
+  fullName: string;
+  whatsappNum: string;
+  district: string;
+}): Promise<DbStudent | null> {
+  const cleanPhone = (profile.whatsappNum || "").replace(/\D/g, "");
+  if (!cleanPhone) return null;
+
+  if (inFlightLeadPromises.has(cleanPhone)) {
+    return inFlightLeadPromises.get(cleanPhone)!;
+  }
+
+  const promise = executeSaveStudentLead(profile);
+  inFlightLeadPromises.set(cleanPhone, promise);
+
+  try {
+    return await promise;
+  } finally {
+    setTimeout(() => {
+      inFlightLeadPromises.delete(cleanPhone);
+    }, 2000);
+  }
+}
+
+async function executeSaveStudentLead(profile: {
   fullName: string;
   whatsappNum: string;
   district: string;
@@ -789,6 +841,260 @@ export function subscribeToStudentRegistrations(onChange: () => void): () => voi
       window.removeEventListener("hanoon_payment_event", handleWindowUpdate);
       window.removeEventListener("hanoon_students_updated", handleWindowUpdate);
     }
+  };
+}
+
+export interface PurgeResult {
+  purgedStudents: number;
+  purgedPayments: number;
+  remainingCount: number;
+}
+
+/**
+ * Purges duplicate registrations by phone number and removes dummy test records
+ * from both Supabase and localStorage.
+ */
+export async function purgeDuplicateAndDummyRegistrations(): Promise<PurgeResult> {
+  let purgedStudentsCount = 0;
+  let purgedPaymentsCount = 0;
+
+  // Helper to identify dummy / test students
+  const isDummy = (name?: string, phone?: string) => {
+    const n = (name || "").trim().toLowerCase();
+    const p = (phone || "").replace(/\D/g, "");
+    const isDummyName =
+      !n ||
+      n === "test" ||
+      n === "test student" ||
+      n === "demo" ||
+      n === "dummy" ||
+      n === "sample" ||
+      n === "undefined" ||
+      n === "null" ||
+      n === "student" ||
+      n === "abc" ||
+      n === "xyz" ||
+      n.startsWith("test ") ||
+      n.startsWith("demo ");
+    const isDummyPhone =
+      !p ||
+      p.length < 6 ||
+      p === "1234567890" ||
+      p === "0000000000" ||
+      p === "9999999999" ||
+      p === "1111111111" ||
+      p === "123456789" ||
+      p === "9876543210";
+    return isDummyName || isDummyPhone;
+  };
+
+  // 1. Live Supabase Purge
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data: allDbStudents } = await supabase.from("students").select("*");
+      const { data: allDbPayments } = await supabase.from("payments").select("*");
+
+      const students = allDbStudents || [];
+      const payments = allDbPayments || [];
+
+      // A. Dummy Students & Orphaned/Dummy Payments
+      const dummyStudentIds: string[] = [];
+      const validStudents: DbStudent[] = [];
+
+      for (const s of students) {
+        if (isDummy(s.full_name, s.whatsapp_num)) {
+          dummyStudentIds.push(s.id);
+        } else {
+          validStudents.push(s);
+        }
+      }
+
+      if (dummyStudentIds.length > 0) {
+        const { error: delDummyPayErr } = await supabase
+          .from("payments")
+          .delete()
+          .in("student_id", dummyStudentIds);
+        if (!delDummyPayErr) {
+          purgedPaymentsCount += dummyStudentIds.length;
+        }
+
+        const { error: delDummyStuErr } = await supabase
+          .from("students")
+          .delete()
+          .in("id", dummyStudentIds);
+        if (!delDummyStuErr) {
+          purgedStudentsCount += dummyStudentIds.length;
+        }
+      }
+
+      // B. Deduplicate Valid Students by Normalized Phone Number
+      const studentsByPhone = new Map<string, DbStudent[]>();
+      for (const s of validStudents) {
+        const phoneKey = (s.whatsapp_num || "").replace(/\D/g, "") || s.full_name.trim().toLowerCase();
+        const list = studentsByPhone.get(phoneKey) || [];
+        list.push(s);
+        studentsByPhone.set(phoneKey, list);
+      }
+
+      const duplicateStudentIdsToDelete: string[] = [];
+      for (const [, group] of studentsByPhone.entries()) {
+        if (group.length > 1) {
+          // Sort priorities: 1) Has APPROVED payment, 2) Has screenshot, 3) Newest created_at
+          group.sort((a, b) => {
+            const aPayments = payments.filter((p) => p.student_id === a.id);
+            const bPayments = payments.filter((p) => p.student_id === b.id);
+
+            const aHasApproved = aPayments.some((p) => p.status === "APPROVED");
+            const bHasApproved = bPayments.some((p) => p.status === "APPROVED");
+            if (aHasApproved && !bHasApproved) return -1;
+            if (!aHasApproved && bHasApproved) return 1;
+
+            const aHasProof = aPayments.some((p) => Boolean(p.screenshot_url));
+            const bHasProof = bPayments.some((p) => Boolean(p.screenshot_url));
+            if (aHasProof && !bHasProof) return -1;
+            if (!aHasProof && bHasProof) return 1;
+
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          });
+
+          const keeper = group[0];
+          const duplicates = group.slice(1);
+
+          for (const dup of duplicates) {
+            duplicateStudentIdsToDelete.push(dup.id);
+            // Reassign payments to keeper before deleting duplicate student row
+            await supabase
+              .from("payments")
+              .update({ student_id: keeper.id })
+              .eq("student_id", dup.id);
+          }
+        }
+      }
+
+      if (duplicateStudentIdsToDelete.length > 0) {
+        const { error: delDupStuErr } = await supabase
+          .from("students")
+          .delete()
+          .in("id", duplicateStudentIdsToDelete);
+        if (!delDupStuErr) {
+          purgedStudentsCount += duplicateStudentIdsToDelete.length;
+        }
+      }
+
+      // C. Deduplicate Payments for each Student + Course
+      const { data: updatedPayments } = await supabase.from("payments").select("*");
+      const currentPayments = updatedPayments || payments;
+
+      const paymentsByStudentCourse = new Map<string, DbPayment[]>();
+      for (const p of currentPayments) {
+        if (dummyStudentIds.includes(p.student_id)) continue;
+        const key = `${p.student_id}_${p.course_id || "adaviyya"}`;
+        const list = paymentsByStudentCourse.get(key) || [];
+        list.push(p);
+        paymentsByStudentCourse.set(key, list);
+      }
+
+      const duplicatePaymentIdsToDelete: string[] = [];
+      for (const [, group] of paymentsByStudentCourse.entries()) {
+        if (group.length > 1) {
+          // Priority: 1. APPROVED, 2. Has screenshot proof, 3. Newest date
+          group.sort((a, b) => {
+            if (a.status === "APPROVED" && b.status !== "APPROVED") return -1;
+            if (a.status !== "APPROVED" && b.status === "APPROVED") return 1;
+
+            if (a.screenshot_url && !b.screenshot_url) return -1;
+            if (!a.screenshot_url && b.screenshot_url) return 1;
+
+            const aDate = new Date(a.submitted_at || a.updated_at || 0).getTime();
+            const bDate = new Date(b.submitted_at || b.updated_at || 0).getTime();
+            return bDate - aDate;
+          });
+
+          const dupsPay = group.slice(1);
+          for (const dp of dupsPay) {
+            duplicatePaymentIdsToDelete.push(dp.id);
+          }
+        }
+      }
+
+      if (duplicatePaymentIdsToDelete.length > 0) {
+        const { error: delDupPayErr } = await supabase
+          .from("payments")
+          .delete()
+          .in("id", duplicatePaymentIdsToDelete);
+        if (!delDupPayErr) {
+          purgedPaymentsCount += duplicatePaymentIdsToDelete.length;
+        }
+      }
+    } catch (err) {
+      console.warn("Supabase purge duplicate registrations error:", err);
+    }
+  }
+
+  // 2. LocalStorage Purge & Clean
+  if (typeof window !== "undefined") {
+    try {
+      const localStudentsRaw: DbStudent[] = JSON.parse(
+        localStorage.getItem(LOCAL_STUDENTS_KEY) || "[]"
+      );
+      const localPaymentsRaw: DbPayment[] = JSON.parse(
+        localStorage.getItem(LOCAL_PAYMENTS_KEY) || "[]"
+      );
+
+      // Clean dummy students
+      const cleanStudents = localStudentsRaw.filter(
+        (s) => !isDummy(s.full_name, s.whatsapp_num)
+      );
+
+      // Deduplicate students by phone
+      const seenPhones = new Set<string>();
+      const dedupedStudents: DbStudent[] = [];
+      for (const s of cleanStudents) {
+        const p = (s.whatsapp_num || "").replace(/\D/g, "");
+        if (!seenPhones.has(p)) {
+          seenPhones.add(p);
+          dedupedStudents.push(s);
+        } else {
+          purgedStudentsCount++;
+        }
+      }
+
+      const validStudentIds = new Set(dedupedStudents.map((s) => s.id));
+
+      // Filter and deduplicate payments
+      const cleanPayments = localPaymentsRaw.filter((p) => {
+        if (p.student && isDummy(p.student.full_name, p.student.whatsapp_num)) return false;
+        return true;
+      });
+
+      const seenPayKeys = new Set<string>();
+      const dedupedPayments: DbPayment[] = [];
+      for (const p of cleanPayments) {
+        const payKey = `${p.student_id}_${p.course_id || "adaviyya"}`;
+        if (!seenPayKeys.has(payKey)) {
+          seenPayKeys.add(payKey);
+          dedupedPayments.push(p);
+        } else {
+          purgedPaymentsCount++;
+        }
+      }
+
+      localStorage.setItem(LOCAL_STUDENTS_KEY, JSON.stringify(dedupedStudents));
+      localStorage.setItem(LOCAL_PAYMENTS_KEY, JSON.stringify(dedupedPayments));
+
+      window.dispatchEvent(new CustomEvent("hanoon_students_updated"));
+      window.dispatchEvent(new CustomEvent("hanoon_payment_event", { detail: { status: "PURGED" } }));
+    } catch (e) {
+      console.warn("Local storage purge error:", e);
+    }
+  }
+
+  const remaining = await fetchUnifiedRegistrations();
+
+  return {
+    purgedStudents: purgedStudentsCount,
+    purgedPayments: purgedPaymentsCount,
+    remainingCount: remaining.length,
   };
 }
 

@@ -141,12 +141,21 @@ export default function AdminDashboardPage() {
       const count = getNotifications().filter((n) => !n.isRead).length;
       setUnreadNotifsCount(count);
     };
+    const updateAuditLogs = (e: any) => {
+      if (Array.isArray(e?.detail)) {
+        setAuditLogs(e.detail);
+      } else {
+        setAuditLogs(getAuditLogs());
+      }
+    };
     updateUnread();
     window.addEventListener("hanoon_notifications_updated", updateUnread);
     window.addEventListener("hanoon_new_notification", updateUnread);
+    window.addEventListener("hanoon_audit_logs_updated", updateAuditLogs);
     return () => {
       window.removeEventListener("hanoon_notifications_updated", updateUnread);
       window.removeEventListener("hanoon_new_notification", updateUnread);
+      window.removeEventListener("hanoon_audit_logs_updated", updateAuditLogs);
     };
   }, []);
 

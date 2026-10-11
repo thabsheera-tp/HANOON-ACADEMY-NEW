@@ -23,12 +23,16 @@ import {
   Image as ImageIcon,
   ExternalLink,
   Camera,
+  Trash2,
+  Sparkles,
+  AlertCircle,
 } from "lucide-react";
 import {
   UnifiedStudentRegistration,
   fetchUnifiedRegistrations,
   updateStudentPaymentStatusDirect,
   subscribeToStudentRegistrations,
+  purgeDuplicateAndDummyRegistrations,
 } from "@/services/studentService";
 import { getWhatsAppWelcomeUrl } from "@/services/paymentService";
 import { addAuditLog } from "@/services/settingsService";
@@ -48,6 +52,11 @@ export default function StudentRegistrationsSection({
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [copiedUtr, setCopiedUtr] = useState<string | null>(null);
   const [screenshotModalItem, setScreenshotModalItem] = useState<UnifiedStudentRegistration | null>(null);
+
+  // Duplicate / Dummy Data Purge States
+  const [isPurging, setIsPurging] = useState(false);
+  const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
+  const [purgeSuccessMsg, setPurgeSuccessMsg] = useState<string | null>(null);
 
   // WhatsApp Post-Approval Prompt Banner
   const [approvedNotification, setApprovedNotification] = useState<{
@@ -173,6 +182,25 @@ export default function StudentRegistrationsSection({
       alert("Could not update status. Please check your network connection.");
     } finally {
       setProcessingId(null);
+    }
+  };
+
+  // Purge Duplicate & Dummy Registrations
+  const handlePurgeDuplicates = async () => {
+    setIsPurging(true);
+    try {
+      const res = await purgeDuplicateAndDummyRegistrations();
+      setShowPurgeConfirm(false);
+      setPurgeSuccessMsg(
+        `Cleanup complete: Purged ${res.purgedStudents} duplicate/dummy student record(s) and ${res.purgedPayments} duplicate payment(s). Active students: ${res.remainingCount}`
+      );
+      setTimeout(() => setPurgeSuccessMsg(null), 6000);
+      await loadData();
+    } catch (err) {
+      console.error("Failed to purge duplicates:", err);
+      alert("Could not complete purge operation. Please check your network and try again.");
+    } finally {
+      setIsPurging(false);
     }
   };
 
@@ -432,6 +460,33 @@ export default function StudentRegistrationsSection({
         </div>
       )}
 
+      {/* Purge Success Alert Banner */}
+      {purgeSuccessMsg && (
+        <div className="p-4 rounded-2xl bg-amber-50 border-2 border-amber-300 text-amber-950 flex items-center justify-between gap-3 animate-fade-in shadow-md">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs sm:text-sm font-extrabold text-amber-950">
+                Registrations Database Cleaned
+              </h4>
+              <p className="text-[11px] text-amber-800 mt-0.5 font-medium">
+                {purgeSuccessMsg}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPurgeSuccessMsg(null)}
+            className="p-2 text-amber-700 hover:text-amber-950 hover:bg-amber-100 rounded-xl transition-colors cursor-pointer"
+            title="Dismiss"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* 3. Main Data Card & Controls */}
       <div className="bg-white rounded-3xl border border-purple-100 shadow-md p-4 sm:p-6 space-y-4">
         {/* Header & Controls */}
@@ -547,8 +602,20 @@ export default function StudentRegistrationsSection({
 
               <button
                 type="button"
+                onClick={() => setShowPurgeConfirm(true)}
+                disabled={loading || isPurging || totalCount === 0}
+                className="py-2 px-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Purge duplicate registrations and dummy test records"
+              >
+                <Sparkles className={`w-3.5 h-3.5 text-amber-600 ${isPurging ? "animate-spin" : ""}`} />
+                <span className="hidden sm:inline">Purge Duplicates</span>
+                <span className="sm:hidden">Purge</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={loadData}
-                disabled={loading}
+                disabled={loading || isPurging}
                 className="p-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-100 transition-all cursor-pointer disabled:opacity-50"
                 title="Refresh Data from Supabase"
               >
@@ -1124,6 +1191,68 @@ export default function StudentRegistrationsSection({
                   Close
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Purge Confirmation Modal */}
+      {showPurgeConfirm && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-amber-200 space-y-5 animate-scale-up">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+                  Purge Duplicate & Test Records?
+                </h3>
+                <p className="text-xs text-slate-500 leading-relaxed font-medium">
+                  This tool scans both Supabase and local cache to merge repeat student entries (by phone number), preserving their verified payment records, while removing dummy or test submissions (e.g. &apos;test&apos;, &apos;dummy&apos;, invalid phone numbers).
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-amber-50 rounded-2xl p-3.5 border border-amber-200 text-amber-900 text-xs space-y-1.5 font-medium">
+              <div className="flex items-center gap-1.5 font-bold text-amber-950">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Safe Deduplication Algorithm</span>
+              </div>
+              <p className="text-[11px] leading-relaxed text-amber-800">
+                • Real student records and approved payments will NOT be lost.<br />
+                • Multiple payments under duplicate phone numbers are linked to the primary student.<br />
+                • Duplicate identical pending payments are cleaned up.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowPurgeConfirm(false)}
+                disabled={isPurging}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handlePurgeDuplicates}
+                disabled={isPurging}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-black text-xs inline-flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isPurging ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Purging...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Purge Now</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

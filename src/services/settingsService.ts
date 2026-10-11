@@ -384,13 +384,18 @@ export async function fetchAuditLogs(): Promise<AuditLogItem[]> {
 export async function clearAuditLogs(): Promise<boolean> {
   if (isSupabaseConfigured && supabase) {
     try {
+      // 1. Try deleting all records matching not null
       const { error } = await supabase
         .from("audit_logs")
         .delete()
-        .neq("id", "00000000-0000-0000-0000-000000000000");
+        .not("id", "is", null);
 
       if (error) {
-        console.warn("Supabase clear audit logs error:", error);
+        // Fallback filter
+        await supabase
+          .from("audit_logs")
+          .delete()
+          .neq("id", "00000000-0000-0000-0000-000000000000");
       }
     } catch (err) {
       console.warn("Failed to clear Supabase audit logs:", err);
