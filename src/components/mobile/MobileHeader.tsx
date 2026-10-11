@@ -57,15 +57,28 @@ export default function MobileHeader({
       setTimeout(() => setHasNewAlertAnimation(false), 3000);
     };
 
+    const handleOpenDrawer = () => {
+      setIsNotifDrawerOpen(true);
+    };
+
     window.addEventListener("hanoon_notifications_updated", updateNotifs);
     window.addEventListener("hanoon_new_notification", updateNotifs);
+    window.addEventListener("hanoon_open_notifications_drawer", handleOpenDrawer);
     return () => {
       window.removeEventListener("hanoon_notifications_updated", updateNotifs);
       window.removeEventListener("hanoon_new_notification", updateNotifs);
+      window.removeEventListener("hanoon_open_notifications_drawer", handleOpenDrawer);
     };
   }, []);
 
+  const [filterType, setFilterType] = useState<string>("ALL");
+
   const unreadCount = notifications.filter((n) => !n.isRead).length;
+
+  const displayedNotifs = notifications.filter((item) => {
+    if (filterType === "ALL") return true;
+    return item.type === filterType;
+  });
 
   if (currentScreen === "splash") {
     return null;
@@ -268,15 +281,39 @@ export default function MobileHeader({
               </div>
             </div>
 
+            {/* Filter Pills Bar */}
+            <div className="px-4 py-2 bg-slate-50 border-b border-purple-50 flex items-center gap-1.5 overflow-x-auto no-scrollbar text-[10px]">
+              {[
+                { id: "ALL", label: "All Alerts" },
+                { id: "CLASS_LIVE", label: "🔴 Live" },
+                { id: "CLASS_SCHEDULED", label: "📅 Schedule" },
+                { id: "NOTES_UPLOADED", label: "📚 PDF Notes" },
+                { id: "BROADCAST", label: "📢 Notices" },
+              ].map((tab) => (
+                <button
+                  type="button"
+                  key={tab.id}
+                  onClick={() => setFilterType(tab.id)}
+                  className={`py-1 px-2.5 rounded-lg font-bold whitespace-nowrap transition-all border cursor-pointer ${
+                    filterType === tab.id
+                      ? "bg-purple-600 text-white border-purple-600 shadow-2xs"
+                      : "bg-white text-slate-600 border-purple-100 hover:bg-purple-50"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
             {/* Notifications List */}
             <div className="flex-1 overflow-y-auto p-3 space-y-2.5 max-h-[60vh]">
-              {notifications.length === 0 ? (
+              {displayedNotifs.length === 0 ? (
                 <div className="py-12 text-center space-y-2">
                   <Bell className="w-8 h-8 text-purple-200 mx-auto" />
-                  <p className="text-xs font-bold text-slate-500">No notifications yet</p>
+                  <p className="text-xs font-bold text-slate-500">No alerts in this category</p>
                 </div>
               ) : (
-                notifications.map((item) => {
+                displayedNotifs.map((item) => {
                   const isLive = item.type === "CLASS_LIVE";
 
                   return (

@@ -44,6 +44,7 @@ import {
   X,
   Bell,
   FileUp,
+  Megaphone,
 } from "lucide-react";
 import {
   getCurrentSession,
@@ -61,6 +62,7 @@ import StudentRegistrationsSection from "@/components/admin/StudentRegistrations
 import PdfNotesUploadSection from "@/components/admin/PdfNotesUploadSection";
 import ClassScheduleManagerSection from "@/components/admin/ClassScheduleManagerSection";
 import NotificationsManagerSection from "@/components/admin/NotificationsManagerSection";
+import AdminNoticeBoardManagerSection from "@/components/admin/AdminNoticeBoardManagerSection";
 import { getNotifications } from "@/services/notificationService";
 import { fetchPayments, updatePaymentStatus, getWhatsAppWelcomeUrl } from "@/services/paymentService";
 import { fetchStudents } from "@/services/studentService";
@@ -128,9 +130,9 @@ export default function AdminDashboardPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<UserProfileRecord | null>(null);
 
-  // Active Main Tab: overview, upi, classes, notes, notifications, teachers, payroll, settings
+  // Active Main Tab: overview, notices, upi, classes, notes, notifications, teachers, payroll, settings
   const [activeTab, setActiveTab] = useState<
-    "overview" | "upi" | "classes" | "notes" | "notifications" | "teachers" | "payroll" | "settings"
+    "overview" | "notices" | "upi" | "classes" | "notes" | "notifications" | "teachers" | "payroll" | "settings"
   >("overview");
   const [unreadNotifsCount, setUnreadNotifsCount] = useState<number>(0);
 
@@ -695,7 +697,7 @@ export default function AdminDashboardPage() {
 
         {/* Navigation Tabs Bar */}
         <div className="max-w-6xl mx-auto px-3 sm:px-6 flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar pt-1 border-t border-purple-50 sm:border-0">
-          {/* Tab 1: 🎓 Student Registrations & Payments (or UPI Verification Queue for Verifiers) */}
+          {/* Tab 1: 🎓 Student Registrations & Payments */}
           <button
             type="button"
             onClick={() => setActiveTab("overview")}
@@ -716,6 +718,20 @@ export default function AdminDashboardPage() {
                 {pendingPaymentsCount}
               </span>
             )}
+          </button>
+
+          {/* Tab 1.5: 📢 Notice Board & Announcements */}
+          <button
+            type="button"
+            onClick={() => setActiveTab("notices")}
+            className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-xs border-b-2 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all shrink-0 ${
+              activeTab === "notices"
+                ? "border-purple-600 text-purple-700 font-extrabold"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <Megaphone className="w-4 h-4 shrink-0 text-purple-600" />
+            <span>📢 Notice Board</span>
           </button>
 
           {/* Tab 2: 📅 Class Scheduling & Live Manager */}
@@ -874,6 +890,18 @@ export default function AdminDashboardPage() {
             ======================================================== */}
         {activeTab === "overview" && (
           <StudentRegistrationsSection isSuperAdmin={isSuperAdmin} />
+        )}
+
+        {/* ========================================================
+            TAB: 📢 NOTICE BOARD & ANNOUNCEMENTS PUBLISHER
+            ======================================================== */}
+        {activeTab === "notices" && (
+          <div className="animate-fade-in">
+            <AdminNoticeBoardManagerSection
+              currentUserName={currentUser?.full_name}
+              currentUserRole={currentUser?.role}
+            />
+          </div>
         )}
 
         {/* ========================================================
@@ -1828,7 +1856,12 @@ export default function AdminDashboardPage() {
         )}
 
         {/* Fallback for Verification Admin trying to access restricted tabs */}
-        {!isSuperAdmin && activeTab !== "overview" && (
+        {!isSuperAdmin &&
+          activeTab !== "overview" &&
+          activeTab !== "notices" &&
+          activeTab !== "classes" &&
+          activeTab !== "notes" &&
+          activeTab !== "notifications" && (
           <div className="bg-white rounded-2xl border border-amber-200 p-8 text-center space-y-4 max-w-lg mx-auto shadow-sm my-6">
             <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-100">
               <ShieldAlert className="w-6 h-6" />

@@ -16,7 +16,9 @@ import {
   ExternalLink,
   ShieldCheck,
   Check,
+  Megaphone,
 } from "lucide-react";
+import AdminNoticeBoardManagerSection from "@/components/admin/AdminNoticeBoardManagerSection";
 import {
   getNotifications,
   createNotification,
@@ -45,6 +47,7 @@ export default function NotificationsManagerSection({
   const [targetRole, setTargetRole] = useState<NotificationTargetRole>("students");
   const [targetCourseId, setTargetCourseId] = useState<string>("ALL");
   const [priority, setPriority] = useState<"normal" | "high" | "urgent">("normal");
+  const [viewMode, setViewMode] = useState<"broadcast" | "notice_board">("broadcast");
 
   // Push Permission State
   const [pushPermission, setPushPermission] = useState<NotificationPermission>("default");
@@ -197,8 +200,42 @@ export default function NotificationsManagerSection({
         </div>
       )}
 
-      {/* Grid: Broadcast Creator + Notification Feed */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      {/* Sub-view switcher: Broadcast Alerts vs Student Notice Board */}
+      <div className="flex items-center gap-2 p-1 rounded-2xl bg-purple-50/80 border border-purple-100 max-w-md">
+        <button
+          type="button"
+          onClick={() => setViewMode("broadcast")}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+            viewMode === "broadcast"
+              ? "bg-purple-600 text-white shadow-xs"
+              : "text-slate-600 hover:text-purple-700 hover:bg-white"
+          }`}
+        >
+          <Bell className="w-3.5 h-3.5" />
+          <span>Broadcast Alerts</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setViewMode("notice_board")}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+            viewMode === "notice_board"
+              ? "bg-purple-600 text-white shadow-xs"
+              : "text-slate-600 hover:text-purple-700 hover:bg-white"
+          }`}
+        >
+          <Megaphone className="w-3.5 h-3.5" />
+          <span>Student Notice Board</span>
+        </button>
+      </div>
+
+      {viewMode === "notice_board" ? (
+        <AdminNoticeBoardManagerSection
+          currentUserName={currentUserName}
+          currentUserRole={currentUserRole}
+        />
+      ) : (
+        /* Grid: Broadcast Creator + Notification Feed */
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Broadcast Composer (5 cols) */}
         <div className="lg:col-span-5 bg-white rounded-3xl p-5 sm:p-6 border border-purple-100 shadow-xs space-y-5">
           <div className="border-b border-purple-100 pb-3 flex items-center justify-between">
@@ -462,6 +499,7 @@ export default function NotificationsManagerSection({
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

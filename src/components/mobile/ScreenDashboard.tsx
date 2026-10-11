@@ -36,6 +36,7 @@ import AttendanceDonutChart from "@/components/charts/AttendanceDonutChart";
 import ProgressScoreBarChart from "@/components/charts/ProgressScoreBarChart";
 import { getAppSettings, formatWhatsAppLink } from "@/services/settingsService";
 import { getNotifications, AppNotification } from "@/services/notificationService";
+import StudentNoticeBoard from "@/components/mobile/StudentNoticeBoard";
 
 interface ScreenDashboardProps {
   userProfile: UserProfile;
@@ -58,6 +59,7 @@ export default function ScreenDashboard({
   const [showStudentIDModal, setShowStudentIDModal] = useState(false);
   const [showNotificationToast, setShowNotificationToast] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
+  const [unreadNotifs, setUnreadNotifs] = useState(0);
 
   // Special Classes State (Burdah Live)
   const [specialClasses, setSpecialClasses] = useState<SpecialClass[]>(() => getSpecialClasses());
@@ -96,8 +98,16 @@ export default function ScreenDashboard({
       }
     };
 
+    const updateNotifs = () => {
+      const count = getNotifications().filter((n) => !n.isRead).length;
+      setUnreadNotifs(count);
+    };
+    updateNotifs();
+
     window.addEventListener("hanoon_special_classes_updated", handleSpecialUpdate as EventListener);
     window.addEventListener("hanoon_certificates_updated", handleCertUpdate as EventListener);
+    window.addEventListener("hanoon_notifications_updated", updateNotifs);
+    window.addEventListener("hanoon_new_notification", updateNotifs);
 
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
@@ -111,6 +121,8 @@ export default function ScreenDashboard({
     return () => {
       window.removeEventListener("hanoon_special_classes_updated", handleSpecialUpdate as EventListener);
       window.removeEventListener("hanoon_certificates_updated", handleCertUpdate as EventListener);
+      window.removeEventListener("hanoon_notifications_updated", updateNotifs);
+      window.removeEventListener("hanoon_new_notification", updateNotifs);
       clearInterval(timer);
     };
   }, []);
@@ -246,13 +258,21 @@ export default function ScreenDashboard({
 
         <button
           type="button"
-          onClick={() => setShowNotificationToast((prev) => !prev)}
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent("hanoon_open_notifications_drawer"));
+            setShowNotificationToast((prev) => !prev);
+          }}
           className="relative w-9 h-9 rounded-2xl bg-white border border-purple-100 shadow-xs flex items-center justify-center hover:bg-purple-50 transition-all text-slate-700 cursor-pointer shrink-0"
           title="Notifications"
         >
           <Bell className="w-4 h-4 text-purple-600" />
-          <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
-          <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-rose-500" />
+          {unreadNotifs > 0 ? (
+            <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-rose-600 text-white font-black text-[9px] flex items-center justify-center shadow-xs animate-bounce">
+              {unreadNotifs}
+            </span>
+          ) : (
+            <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-purple-400" />
+          )}
         </button>
       </div>
 
@@ -397,6 +417,20 @@ export default function ScreenDashboard({
           </div>
         </div>
       </div>
+
+      {/* 2.5 ADMIN ANNOUNCEMENT BOARD / NOTICE BOARD (Prominently Placed for All Enrolled Students) */}
+      <StudentNoticeBoard
+        currentCourseId={selectedCourse.id}
+        onOpenMaterials={() => setShowMaterialsModal(true)}
+        onOpenSpecialClass={() => setShowSpecialModal(true)}
+        onOpenLiveClass={() => {
+          if (isApproved) {
+            setShowLiveModal(true);
+          } else {
+            setLockedNoticeSubject("Live Classroom");
+          }
+        }}
+      />
 
       {/* 3. ENROLLED SUBJECTS: COMPACT 2x2 QUICK ACCESS GRID (Real-time Unlock) */}
       <div className="space-y-2">
