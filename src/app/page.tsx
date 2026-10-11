@@ -43,8 +43,8 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
       if (targetScreen === "courses") return "courses";
       if (targetScreen === "dashboard") return "dashboard";
     }
-    // Main domain / root route ("/") strictly defaults to Public Landing Page ("splash")
-    return "splash";
+    // Users entering the app MUST land on the Course Catalog / Exploration page first
+    return "courses";
   });
   const [accessNotice, setAccessNotice] = useState<string | null>(null);
 
@@ -504,11 +504,11 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     else if (currentScreen === "onboarding") setCurrentScreen("courses");
     else if (currentScreen === "course-details") setCurrentScreen("courses");
     else if (currentScreen === "courses") {
-      setCurrentScreen("splash");
+      setCurrentScreen("courses");
     }
   };
 
-  const canGoBack = currentScreen !== "splash";
+  const canGoBack = currentScreen !== "courses" && currentScreen !== "splash";
   const isEnrolled =
     paymentDetails.status === "verified" ||
     (paymentDetails.status as string) === "APPROVED" ||

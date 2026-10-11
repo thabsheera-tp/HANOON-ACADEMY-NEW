@@ -611,7 +611,7 @@ export default function ScreenCourseDetails({
                 onClick={onProceedToRegister}
                 className="w-full py-3.5 px-5 rounded-2xl font-extrabold text-xs text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-md shadow-purple-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <span>Enroll Now</span>
+                <span>Enroll</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             )}
@@ -650,7 +650,7 @@ export default function ScreenCourseDetails({
                 onClick={onProceedToRegister}
                 className="w-full py-3.5 px-5 rounded-2xl font-extrabold text-xs text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-md shadow-purple-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <span>Enroll Now</span>
+                <span>Enroll</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             )}
@@ -689,7 +689,7 @@ export default function ScreenCourseDetails({
                 onClick={onProceedToRegister}
                 className="w-full py-3.5 px-5 rounded-2xl font-extrabold text-xs text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-md shadow-purple-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <span>Enroll Now</span>
+                <span>Enroll</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             )}

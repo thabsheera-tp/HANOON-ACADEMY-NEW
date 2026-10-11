@@ -8,7 +8,6 @@ import {
   MapPin,
   Calendar,
   ArrowRight,
-  BookOpen,
   RefreshCw,
 } from "lucide-react";
 import { UserProfile } from "@/types/app";
@@ -131,14 +130,11 @@ export default function StudentRegisterModal({
 
         {/* Modal Header */}
         <div className="mb-4 pr-6">
-          <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 bg-purple-100/70 px-2.5 py-0.5 rounded-full inline-block mb-1.5">
-            Step 1 of 2: Student Details
-          </span>
           <h2 className="text-xl font-black text-slate-900 tracking-tight">
             Student Registration
           </h2>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Fill in your details below to proceed to fee payment.
+            Please fill in your details to continue.
           </p>
         </div>
 
@@ -147,26 +143,6 @@ export default function StudentRegisterModal({
             {error}
           </div>
         )}
-
-        {/* Explored Course Banner (Read-only - Course is already explored & selected) */}
-        <div className="mb-3.5 p-3 rounded-2xl bg-purple-50/70 border border-purple-100 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0">
-              <BookOpen className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700 block leading-tight">
-                Enrolling Course
-              </span>
-              <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 truncate">
-                {selectedCourseObj.title}
-              </h4>
-            </div>
-          </div>
-          <span className="text-xs font-black text-purple-700 bg-white px-2.5 py-1 rounded-xl border border-purple-200/80 shrink-0">
-            ₹{selectedCourseObj.feeAmount}
-          </span>
-        </div>
 
         <form onSubmit={handleSubmit} className="space-y-3.5">
           {/* Field 1: Student Full Name * */}
@@ -242,7 +218,7 @@ export default function StudentRegisterModal({
             </div>
           </div>
 
-          {/* Submit Button -> Proceed to Screen 4 (UPI Payment) */}
+          {/* Submit Button -> Next ➔ */}
           <div className="pt-2">
             <button
               type="submit"
@@ -256,7 +232,7 @@ export default function StudentRegisterModal({
                 </>
               ) : (
                 <>
-                  <span>Proceed to UPI Payment</span>
+                  <span>Next</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
