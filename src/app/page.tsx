@@ -551,14 +551,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     if (profile) {
       await handleSaveProfile(profile);
     }
-    setPaymentDetails((prev) => ({
-      ...prev,
-      upiTxId: "",
-      amount: selectedCourse.admissionFee || selectedCourse.fee,
-      submittedAt: "",
-      status: "unpaid",
-    }));
-    setCurrentScreen("payment");
+    setCurrentScreen("courses");
   };
 
   // Step 4 -> Step 5
@@ -601,9 +594,9 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
   const handleBack = () => {
     if (currentScreen === "dashboard") setCurrentScreen("courses");
     else if (currentScreen === "payment") setCurrentScreen("course-details");
-    else if (currentScreen === "onboarding") setCurrentScreen(selectedCourse?.id ? "course-details" : "courses");
     else if (currentScreen === "course-details") setCurrentScreen("courses");
-    else if (currentScreen === "courses") setCurrentScreen("splash");
+    else if (currentScreen === "courses") setCurrentScreen("onboarding");
+    else if (currentScreen === "onboarding") setCurrentScreen("splash");
   };
 
   const canGoBack = currentScreen !== "splash";
@@ -683,7 +676,11 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
           {currentScreen === "splash" && (
             <ScreenSplash
               onGetStarted={() => {
-                setCurrentScreen("courses");
+                if (userProfile.name && userProfile.phone) {
+                  setCurrentScreen("courses");
+                } else {
+                  setCurrentScreen("onboarding");
+                }
               }}
               onExploreCourses={() => {
                 setCurrentScreen("courses");
@@ -698,9 +695,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
               selectedCourse={selectedCourse}
               onSaveProfile={handleSaveProfile}
               onProceedToCourses={handleSaveProfileAndProceed}
-              onProceedToPayment={handleProceedToPayment}
-              onBackToHome={() => setCurrentScreen("courses")}
-              onBackToCourse={() => setCurrentScreen("course-details")}
+              onBackToHome={() => setCurrentScreen("splash")}
             />
           )}
 
