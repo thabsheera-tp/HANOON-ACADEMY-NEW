@@ -708,9 +708,11 @@ export async function fetchUnifiedRegistrations(): Promise<UnifiedStudentRegistr
       ? "REJECTED"
       : "PENDING";
 
-    // For PENDING payments, deduplicate by student+course to show only the most recent
+    const cleanPhone = (phone || "").replace(/\D/g, "");
+
+    // For PENDING payments, deduplicate by student or phone + course to show only the most recent
     if (paymentStatus === "PENDING") {
-      const studentCourseKey = `${p.student_id}_${p.course_id || "adaviyya"}`;
+      const studentCourseKey = `${cleanPhone || p.student_id}_${p.course_id || "adaviyya"}`;
       if (pendingStudentCourseKeys.has(studentCourseKey)) continue;
       pendingStudentCourseKeys.add(studentCourseKey);
     }
@@ -739,15 +741,19 @@ export async function fetchUnifiedRegistrations(): Promise<UnifiedStudentRegistr
   }
 
   // 2. Add registered students who have NO payment records at all (leads without payments)
-  const existingStudentIds = new Set(result.map((r) => r.studentId));
+  const existingStudentIds = new Set(result.map((r) => r.studentId).filter(Boolean));
+  const existingPhones = new Set(
+    result
+      .map((r) => (r.whatsappNum || "").replace(/\D/g, ""))
+      .filter((p) => p && p.length >= 7)
+  );
 
   for (const s of allStudents) {
-    // Skip if this student already appears via a payment record
-    if (existingStudentIds.has(s.id)) continue;
-
-    // Skip students with obviously dummy/test phone numbers
     const cleanP = (s.whatsapp_num || "").replace(/\D/g, "");
     if (!cleanP || cleanP.length < 7) continue;
+
+    // Skip if this student already appears via a payment record (by studentId OR by phone number)
+    if (existingStudentIds.has(s.id) || existingPhones.has(cleanP)) continue;
 
     result.push({
       id: `reg-${s.id}`,
@@ -764,6 +770,7 @@ export async function fetchUnifiedRegistrations(): Promise<UnifiedStudentRegistr
       paymentId: undefined,
     });
     existingStudentIds.add(s.id);
+    existingPhones.add(cleanP);
   }
 
   // Sort latest first

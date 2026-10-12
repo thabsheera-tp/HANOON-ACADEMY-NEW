@@ -885,10 +885,7 @@ export default function ScreenPayment({
               )}
             </div>
 
-            <div className="p-3 rounded-xl bg-purple-50/80 border border-purple-100 flex items-center gap-2 text-xs text-purple-800">
-              <ShieldCheck className="w-4 h-4 text-purple-600 shrink-0" />
-              <span>Instant verification linked directly to Supabase admission desk.</span>
-            </div>
+
 
             <button
               type="submit"

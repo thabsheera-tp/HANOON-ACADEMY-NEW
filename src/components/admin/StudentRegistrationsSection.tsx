@@ -282,9 +282,33 @@ export default function StudentRegistrationsSection({
     }
   };
 
+  // Unique deduplicated registrations: records with screenshots or payments take precedence
+  const deduplicatedRegistrations = useMemo(() => {
+    const seenPhones = new Set<string>();
+    const result: UnifiedStudentRegistration[] = [];
+
+    // Sort so entries with real screenshots/payments take precedence over bare leads
+    const sorted = [...registrations].sort((a, b) => {
+      const aScore = a.screenshotUrl ? 2 : a.paymentId ? 1 : 0;
+      const bScore = b.screenshotUrl ? 2 : b.paymentId ? 1 : 0;
+      return bScore - aScore;
+    });
+
+    for (const item of sorted) {
+      const cleanPhone = (item.whatsappNum || "").replace(/\D/g, "");
+      const key = cleanPhone && cleanPhone.length >= 7 ? `${cleanPhone}_${item.courseId || "adaviyya"}` : item.id;
+      if (seenPhones.has(key)) continue;
+      seenPhones.add(key);
+      result.push(item);
+    }
+
+    // Keep newest first
+    return result.sort((a, b) => new Date(b.registrationDate).getTime() - new Date(a.registrationDate).getTime());
+  }, [registrations]);
+
   // Filtered registrations
   const filtered = useMemo(() => {
-    return registrations.filter((item) => {
+    return deduplicatedRegistrations.filter((item) => {
       // 1. Status Filter
       if (statusFilter === "PENDING" && item.paymentStatus !== "PENDING") return false;
       if (statusFilter === "APPROVED" && item.paymentStatus !== "APPROVED") return false;
@@ -303,14 +327,14 @@ export default function StudentRegistrationsSection({
 
       return true;
     });
-  }, [registrations, statusFilter, searchQuery]);
+  }, [deduplicatedRegistrations, statusFilter, searchQuery]);
 
   // Derived counts
-  const totalCount = registrations.length;
-  const approvedCount = registrations.filter((r) => r.paymentStatus === "APPROVED").length;
-  const pendingCount = registrations.filter((r) => r.paymentStatus === "PENDING").length;
-  const rejectedCount = registrations.filter((r) => r.paymentStatus === "REJECTED").length;
-  const verifiedRevenue = registrations
+  const totalCount = deduplicatedRegistrations.length;
+  const approvedCount = deduplicatedRegistrations.filter((r) => r.paymentStatus === "APPROVED").length;
+  const pendingCount = deduplicatedRegistrations.filter((r) => r.paymentStatus === "PENDING").length;
+  const rejectedCount = deduplicatedRegistrations.filter((r) => r.paymentStatus === "REJECTED").length;
+  const verifiedRevenue = deduplicatedRegistrations
     .filter((r) => r.paymentStatus === "APPROVED")
     .reduce((acc, r) => acc + (r.amount || 0), 0);
 
