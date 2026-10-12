@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   X,
   CheckCircle2,
@@ -55,6 +55,7 @@ export default function EnrollModal({
   const [inquirySubmitted, setInquirySubmitted] = useState(false);
   const [upiSubmitted, setUpiSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [upiError, setUpiError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -111,7 +112,7 @@ export default function EnrollModal({
 
   const handleUpiSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSubmitting) return;
+    if (isSubmittingRef.current || isSubmitting) return;
     const cleanTx = upiData.txId.trim();
 
     if (!upiData.name.trim()) {
@@ -132,6 +133,7 @@ export default function EnrollModal({
     }
 
     setUpiError(null);
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
 
     try {
@@ -150,6 +152,7 @@ export default function EnrollModal({
       const msg = err instanceof Error ? err.message : "Submission failed. Please check network.";
       setUpiError(msg);
     } finally {
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   };

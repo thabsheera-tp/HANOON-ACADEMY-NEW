@@ -64,6 +64,10 @@ export interface RegistrationResult {
 const inFlightPaymentPromises = new Map<string, Promise<RegistrationResult>>();
 const inFlightLeadPromises = new Map<string, Promise<DbStudent | null>>();
 
+// Session-level persistent caches to prevent duplicate database calls for the same user session
+const sessionRegisteredLeads = new Map<string, DbStudent>();
+const sessionRegisteredPayments = new Map<string, RegistrationResult>();
+
 export async function registerStudentAndPayment(
   params: RegisterStudentAndPaymentParams
 ): Promise<RegistrationResult> {
@@ -72,19 +76,50 @@ export async function registerStudentAndPayment(
     params.courseId === "shamail-muhammadiyya" ? "shamail" : params.courseId;
   const inFlightKey = `${cleanPhone}_${normalizedCourseId}`;
 
+  // 1. If this exact payment is already in flight, reuse the promise
   if (inFlightPaymentPromises.has(inFlightKey)) {
     return inFlightPaymentPromises.get(inFlightKey)!;
+  }
+
+  // 2. If already registered in this user session with same proof/tx and status, reuse session record
+  if (sessionRegisteredPayments.has(inFlightKey)) {
+    const existing = sessionRegisteredPayments.get(inFlightKey)!;
+    // If incoming params do not have a new screenshot and have the same or empty txId, return cached
+    if (!params.screenshotUrl && (!params.upiTxId || params.upiTxId === existing.payment?.upi_txid)) {
+      return existing;
+    }
+  }
+
+  if (typeof window !== "undefined") {
+    try {
+      const cached = sessionStorage.getItem(`hanoon_session_pay_${inFlightKey}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        sessionRegisteredPayments.set(inFlightKey, parsed);
+        if (!params.screenshotUrl && (!params.upiTxId || params.upiTxId === parsed.payment?.upi_txid)) {
+          return parsed;
+        }
+      }
+    } catch {}
   }
 
   const promise = executeRegisterStudentAndPayment(params);
   inFlightPaymentPromises.set(inFlightKey, promise);
 
   try {
-    return await promise;
+    const result = await promise;
+    sessionRegisteredPayments.set(inFlightKey, result);
+    if (result.student) {
+      sessionRegisteredLeads.set(cleanPhone, result.student);
+    }
+    if (typeof window !== "undefined") {
+      try {
+        sessionStorage.setItem(`hanoon_session_pay_${inFlightKey}`, JSON.stringify(result));
+      } catch {}
+    }
+    return result;
   } finally {
-    setTimeout(() => {
-      inFlightPaymentPromises.delete(inFlightKey);
-    }, 2500);
+    inFlightPaymentPromises.delete(inFlightKey);
   }
 }
 
@@ -112,44 +147,50 @@ async function executeRegisterStudentAndPayment(
       const normalizedCourseId =
         courseId === "shamail-muhammadiyya" ? "shamail" : courseId;
 
-      // Step A: Check for existing student record by phone
-      let studentData: DbStudent | null = null;
-      const { data: existingStudent } = await supabase
-        .from("students")
-        .select("*")
-        .eq("whatsapp_num", cleanPhone)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (existingStudent) {
-        // Update details
-        const { data: updatedStudent } = await supabase
+      // Step A: Check for existing student record by phone (or session cache)
+      let studentData: DbStudent | null = sessionRegisteredLeads.get(cleanPhone) || null;
+      if (!studentData) {
+        const { data: existingStudent } = await supabase
           .from("students")
-          .update({
-            full_name: fullName.trim(),
-            district: district.trim(),
-          })
-          .eq("id", existingStudent.id)
-          .select()
-          .single();
+          .select("*")
+          .eq("whatsapp_num", cleanPhone)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-        studentData = updatedStudent || existingStudent;
-      } else {
-        const { data: newStudent, error: studentError } = await supabase
-          .from("students")
-          .insert({
-            full_name: fullName.trim(),
-            whatsapp_num: cleanPhone,
-            district: district.trim(),
-          })
-          .select()
-          .single();
+        if (existingStudent) {
+          // Update details
+          const { data: updatedStudent } = await supabase
+            .from("students")
+            .update({
+              full_name: fullName.trim(),
+              district: district.trim(),
+            })
+            .eq("id", existingStudent.id)
+            .select()
+            .single();
 
-        if (studentError || !newStudent) {
-          throw new Error(`Failed to create student in Supabase: ${studentError?.message}`);
+          studentData = updatedStudent || existingStudent;
+        } else {
+          const { data: newStudent, error: studentError } = await supabase
+            .from("students")
+            .insert({
+              full_name: fullName.trim(),
+              whatsapp_num: cleanPhone,
+              district: district.trim(),
+            })
+            .select()
+            .single();
+
+          if (studentError || !newStudent) {
+            throw new Error(`Failed to create student in Supabase: ${studentError?.message}`);
+          }
+          studentData = newStudent;
         }
-        studentData = newStudent;
+      }
+
+      if (studentData) {
+        sessionRegisteredLeads.set(cleanPhone, studentData);
       }
 
       if (!studentData) {
@@ -411,19 +452,44 @@ export async function saveStudentLead(profile: {
   const cleanPhone = (profile.whatsappNum || "").replace(/\D/g, "");
   if (!cleanPhone) return null;
 
+  // 1. If currently in-flight, return active promise
   if (inFlightLeadPromises.has(cleanPhone)) {
     return inFlightLeadPromises.get(cleanPhone)!;
+  }
+
+  // 2. If student lead already registered in this user session, reuse session record
+  if (sessionRegisteredLeads.has(cleanPhone)) {
+    return sessionRegisteredLeads.get(cleanPhone)!;
+  }
+
+  // 3. Check sessionStorage fallback
+  if (typeof window !== "undefined") {
+    try {
+      const cached = sessionStorage.getItem(`hanoon_session_lead_${cleanPhone}`);
+      if (cached) {
+        const student: DbStudent = JSON.parse(cached);
+        sessionRegisteredLeads.set(cleanPhone, student);
+        return student;
+      }
+    } catch {}
   }
 
   const promise = executeSaveStudentLead(profile);
   inFlightLeadPromises.set(cleanPhone, promise);
 
   try {
-    return await promise;
+    const result = await promise;
+    if (result) {
+      sessionRegisteredLeads.set(cleanPhone, result);
+      if (typeof window !== "undefined") {
+        try {
+          sessionStorage.setItem(`hanoon_session_lead_${cleanPhone}`, JSON.stringify(result));
+        } catch {}
+      }
+    }
+    return result;
   } finally {
-    setTimeout(() => {
-      inFlightLeadPromises.delete(cleanPhone);
-    }, 2000);
+    inFlightLeadPromises.delete(cleanPhone);
   }
 }
 
@@ -436,11 +502,11 @@ async function executeSaveStudentLead(profile: {
   const cleanName = profile.fullName.trim();
   const cleanDistrict = profile.district.trim() || "Kerala";
 
-  let savedStudent: DbStudent | null = null;
+  let savedStudent: DbStudent | null = sessionRegisteredLeads.get(cleanPhone) || null;
 
-  if (isSupabaseConfigured && supabase) {
+  if (!savedStudent && isSupabaseConfigured && supabase) {
     try {
-      // Upsert by phone
+      // Upsert by phone - check for existing student first
       const { data: existing } = await supabase
         .from("students")
         .select("*")

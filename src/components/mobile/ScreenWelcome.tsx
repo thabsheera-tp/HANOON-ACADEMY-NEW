@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   GraduationCap,
   Sparkles,
@@ -30,15 +30,17 @@ export default function ScreenWelcome({
   const [place, setPlace] = useState(userProfile.place || "");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSubmitting) return;
+    if (isSubmittingRef.current || isSubmitting) return;
     if (!name.trim() || !phone.trim() || !place.trim()) {
       setError("Please fill in Name, Phone, and Place to continue.");
       return;
     }
     setError(null);
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
     onSaveProfile({ name, phone, place });
     onContinue();

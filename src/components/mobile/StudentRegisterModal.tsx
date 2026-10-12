@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   X,
   User,
@@ -73,6 +73,7 @@ export default function StudentRegisterModal({
   const [age, setAge] = useState(initialProfile.age ? String(initialProfile.age) : "");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
 
   useEffect(() => {
     if (initialProfile.name && !isStaffOrOfficer(initialProfile.name)) setName(initialProfile.name);
@@ -88,7 +89,7 @@ export default function StudentRegisterModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSubmitting) return;
+    if (isSubmittingRef.current || isSubmitting) return;
 
     // Strict Form Validation
     if (!name.trim()) {
@@ -114,6 +115,7 @@ export default function StudentRegisterModal({
     }
 
     setError(null);
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
 
     const userProfileData: UserProfile = {
@@ -247,7 +249,7 @@ export default function StudentRegisterModal({
                 </>
               ) : (
                 <>
-                  <span>Next</span>
+                  <span>Submit & Next</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}

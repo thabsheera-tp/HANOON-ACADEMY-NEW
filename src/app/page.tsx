@@ -523,7 +523,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     setCurrentScreen("payment");
   };
 
-  const handleSaveProfile = (profile: UserProfile) => {
+  const handleSaveProfile = async (profile: UserProfile) => {
     setUserProfile(profile);
     if (typeof window !== "undefined") {
       try {
@@ -531,17 +531,21 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
       } catch {}
     }
     if (profile.name && profile.phone) {
-      saveStudentLead({
-        fullName: profile.name,
-        whatsappNum: profile.phone,
-        district: profile.place || "Kerala",
-      }).catch((e) => console.warn("saveStudentLead async warning:", e));
+      try {
+        await saveStudentLead({
+          fullName: profile.name,
+          whatsappNum: profile.phone,
+          district: profile.place || "Kerala",
+        });
+      } catch (e) {
+        console.warn("saveStudentLead async warning:", e);
+      }
     }
   };
 
   const handleSaveProfileAndProceed = (profile?: UserProfile) => {
     if (profile) {
-      handleSaveProfile(profile);
+      setUserProfile(profile);
     }
     setCurrentScreen("courses");
   };

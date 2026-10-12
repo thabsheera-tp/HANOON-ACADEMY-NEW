@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { User, Phone, MapPin, Calendar, Lock, ArrowRight, RefreshCw } from "lucide-react";
 import { UserProfile, SelectedCourse } from "@/types/app";
@@ -8,7 +8,7 @@ import { UserProfile, SelectedCourse } from "@/types/app";
 interface ScreenOnboardingProps {
   userProfile: UserProfile;
   selectedCourse?: SelectedCourse;
-  onSaveProfile: (profile: UserProfile) => void;
+  onSaveProfile: (profile: UserProfile) => Promise<void> | void;
   onSelectCourse?: (course: SelectedCourse) => void;
   onProceedToCourses?: (profile?: UserProfile) => void;
   onProceedToPayment?: () => void;
@@ -47,6 +47,7 @@ export default function ScreenOnboarding({
   const [age, setAge] = useState(userProfile.age ? String(userProfile.age) : "");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
 
   // Clean any contaminated localStorage keys from past verifier tests
   useEffect(() => {
@@ -73,15 +74,19 @@ export default function ScreenOnboarding({
     }
   }, [userProfile.name, userProfile.phone, userProfile.place]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    // 1. Explicitly prevent default form reload to prevent kickout to "/"
     e.preventDefault();
-    if (isSubmitting) return;
+
+    // 2. Synchronous debouncing guard to prevent multiple submissions
+    if (isSubmittingRef.current || isSubmitting) return;
 
     if (!name.trim()) {
       setError("Please enter your Student Full Name.");
       return;
     }
-    if (!phone.trim() || phone.trim().length < 10) {
+    const cleanDigits = phone.replace(/\D/g, "");
+    if (!cleanDigits || cleanDigits.length < 10) {
       setError("Please enter a valid 10-digit WhatsApp or mobile number.");
       return;
     }
@@ -99,17 +104,25 @@ export default function ScreenOnboarding({
     }
 
     setError(null);
+    // Instantly lock and show loading state
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
 
     const newProfile: UserProfile = {
       name: name.trim(),
-      phone: phone.trim(),
+      phone: cleanDigits,
       place: place.trim(),
       age: age.trim() || undefined,
     };
 
-    onSaveProfile(newProfile);
+    try {
+      // 3. Save profile securely
+      await onSaveProfile(newProfile);
+    } catch (saveErr) {
+      console.warn("Could not save student profile:", saveErr);
+    }
 
+    // 4. Smoothly route user to next step without hard reload or redirecting to "/"
     if (onProceedToCourses) {
       onProceedToCourses(newProfile);
     } else if (onProceedToPayment) {
@@ -228,7 +241,7 @@ export default function ScreenOnboarding({
                 </>
               ) : (
                 <>
-                  <span>Continue to Courses</span>
+                  <span>Submit & Continue to Courses</span>
                   <ArrowRight className="w-4 h-4 shrink-0" />
                 </>
               )}

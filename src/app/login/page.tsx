@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -46,6 +46,7 @@ function LoginFormContent() {
 
   // Status & Feedback States
   const [isLoading, setIsLoading] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -116,6 +117,8 @@ function LoginFormContent() {
   // Handle Student Login / Onboarding (Full Name, Age, Phone, District)
   const handleStudentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current || isLoading) return;
+
     setErrorMessage(null);
     setSuccessMessage(null);
 
@@ -150,6 +153,7 @@ function LoginFormContent() {
       return;
     }
 
+    isSubmittingRef.current = true;
     setIsLoading(true);
 
     try {
@@ -188,6 +192,7 @@ function LoginFormContent() {
       const msg = err instanceof Error ? err.message : "Authentication error occurred.";
       setErrorMessage(msg);
     } finally {
+      isSubmittingRef.current = false;
       setIsLoading(false);
     }
   };

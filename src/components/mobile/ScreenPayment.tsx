@@ -68,6 +68,7 @@ export default function ScreenPayment({
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [verifiedStatus, setVerifiedStatus] = useState<"unpaid" | "pending" | "verified">(
     paymentDetails.status === "verified"
       ? "verified"
@@ -245,7 +246,7 @@ export default function ScreenPayment({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSubmitting) return;
+    if (isSubmittingRef.current || isSubmitting) return;
 
     if (!studentName.trim()) {
       setError("Please enter your Student Full Name.");
@@ -268,6 +269,7 @@ export default function ScreenPayment({
     }
 
     setError(null);
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
 
     if (onSaveProfile) {
@@ -302,11 +304,13 @@ export default function ScreenPayment({
 
       // 4. Update UI state smoothly without hard page reload or redirecting to "/"
       setVerifiedStatus("pending");
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
       onSubmitPayment(refId, res.payment?.id, finalScreenshotUrl);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Submission failed. Please check network.";
       setError(msg);
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   };
