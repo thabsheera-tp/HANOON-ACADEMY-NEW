@@ -29,6 +29,7 @@ const isStaffOrOfficer = (val?: string) => {
 
 export default function ScreenOnboarding({
   userProfile,
+  selectedCourse,
   onSaveProfile,
   onProceedToCourses,
   onProceedToPayment,
@@ -135,9 +136,17 @@ export default function ScreenOnboarding({
       <div className="space-y-4">
         {/* Mobile Header Banner */}
         <div className="pt-1 pb-1">
+          {selectedCourse && (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-100/90 text-purple-700 text-xs font-bold mb-2">
+              <span>Enrollment: {selectedCourse.title}</span>
+            </div>
+          )}
           <h1 className="text-2xl font-black text-slate-900 tracking-tight leading-tight">
             Student Registration
           </h1>
+          <p className="text-xs text-slate-500 font-medium mt-1">
+            Fill in your details once to proceed directly to fee payment.
+          </p>
         </div>
 
         {/* Validation Error Notice */}
@@ -237,11 +246,11 @@ export default function ScreenOnboarding({
               {isSubmitting ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
-                  <span>Submitting...</span>
+                  <span>Saving details...</span>
                 </>
               ) : (
                 <>
-                  <span>Submit & Continue to Course Details</span>
+                  <span>Continue to Payment</span>
                   <ArrowRight className="w-4 h-4 shrink-0" />
                 </>
               )}
@@ -256,10 +265,10 @@ export default function ScreenOnboarding({
           <div>
             <button
               type="button"
-              onClick={onBackToHome || onBackToCourse}
+              onClick={onBackToCourse || onBackToHome}
               className="text-xs font-bold text-purple-600 hover:text-purple-700 py-1.5 px-3 rounded-lg hover:bg-purple-50 transition-colors cursor-pointer"
             >
-              ← Back to Home
+              {selectedCourse ? "← Back to Course Details" : "← Back to Courses"}
             </button>
           </div>
         )}

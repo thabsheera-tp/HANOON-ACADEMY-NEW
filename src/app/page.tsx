@@ -601,9 +601,9 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
   const handleBack = () => {
     if (currentScreen === "dashboard") setCurrentScreen("courses");
     else if (currentScreen === "payment") setCurrentScreen("course-details");
+    else if (currentScreen === "onboarding") setCurrentScreen(selectedCourse?.id ? "course-details" : "courses");
     else if (currentScreen === "course-details") setCurrentScreen("courses");
-    else if (currentScreen === "courses") setCurrentScreen("onboarding");
-    else if (currentScreen === "onboarding") setCurrentScreen("splash");
+    else if (currentScreen === "courses") setCurrentScreen("splash");
   };
 
   const canGoBack = currentScreen !== "splash";
@@ -636,10 +636,6 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     if (screen === "dashboard" && !isEnrolled) {
       setAccessNotice("Please complete enrollment to access your dashboard.");
       setCurrentScreen("course-details");
-      return;
-    }
-    if ((screen === "courses" || screen === "course-details") && (!userProfile.name || !userProfile.phone)) {
-      setCurrentScreen("onboarding");
       return;
     }
     setCurrentScreen(screen);
@@ -687,11 +683,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
           {currentScreen === "splash" && (
             <ScreenSplash
               onGetStarted={() => {
-                if (userProfile.name && userProfile.phone) {
-                  setCurrentScreen("payment");
-                } else {
-                  setCurrentScreen("onboarding");
-                }
+                setCurrentScreen("courses");
               }}
               onExploreCourses={() => {
                 setCurrentScreen("courses");
@@ -703,9 +695,12 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
           {currentScreen === "onboarding" && (
             <ScreenOnboarding
               userProfile={userProfile}
+              selectedCourse={selectedCourse}
               onSaveProfile={handleSaveProfile}
               onProceedToCourses={handleSaveProfileAndProceed}
-              onBackToHome={() => setCurrentScreen("splash")}
+              onProceedToPayment={handleProceedToPayment}
+              onBackToHome={() => setCurrentScreen("courses")}
+              onBackToCourse={() => setCurrentScreen("course-details")}
             />
           )}
 
