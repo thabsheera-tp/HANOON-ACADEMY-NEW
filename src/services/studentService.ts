@@ -477,23 +477,9 @@ async function executeSaveStudentLead(profile: {
       }
 
       if (savedStudent) {
-        // Ensure pending payment record exists in Supabase so status is Pending Verification by default
-        const { data: existingPay } = await supabase
-          .from("payments")
-          .select("id")
-          .eq("student_id", savedStudent.id)
-          .limit(1)
-          .maybeSingle();
-
-        if (!existingPay) {
-          await supabase.from("payments").insert({
-            student_id: savedStudent.id,
-            course_id: "adaviyya",
-            upi_txid: `PENDING_${Date.now().toString().slice(-6)}`,
-            status: "PENDING",
-            amount: 500,
-          });
-        }
+        // NOTE: Do NOT auto-create a dummy PENDING payment here.
+        // Ghost pending entries confuse the admin dashboard.
+        // Only real payments submitted by the student should appear.
       }
     } catch (e) {
       console.warn("Supabase saveStudentLead error:", e);
@@ -522,25 +508,8 @@ async function executeSaveStudentLead(profile: {
       ];
       localStorage.setItem(LOCAL_STUDENTS_KEY, JSON.stringify(nextStudents));
 
-      // Also ensure local pending payment exists
-      const localPayments: DbPayment[] = JSON.parse(
-        localStorage.getItem(LOCAL_PAYMENTS_KEY) || "[]"
-      );
-      const hasPay = localPayments.some((p) => p.student_id === savedStudent?.id);
-      if (!hasPay) {
-        const fallbackPendingPay: DbPayment = {
-          id: `pay-${Date.now()}`,
-          student_id: savedStudent.id,
-          course_id: "adaviyya",
-          upi_txid: `PENDING_${Date.now().toString().slice(-6)}`,
-          status: "PENDING",
-          amount: 500,
-          submitted_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          student: savedStudent,
-        };
-        localStorage.setItem(LOCAL_PAYMENTS_KEY, JSON.stringify([fallbackPendingPay, ...localPayments]));
-      }
+      // NOTE: Do NOT auto-create a dummy local pending payment here.
+      // Only real payments submitted by the student should appear in the admin dashboard.
 
       window.dispatchEvent(new CustomEvent("hanoon_students_updated"));
       window.dispatchEvent(new CustomEvent("hanoon_payment_event", { detail: { status: "PENDING" } }));
@@ -557,30 +526,50 @@ async function executeSaveStudentLead(profile: {
  */
 export async function fetchUnifiedRegistrations(): Promise<UnifiedStudentRegistration[]> {
   const result: UnifiedStudentRegistration[] = [];
-  const processedKeys = new Set<string>();
 
-  // 1. Fetch payments with student relation from Supabase
+  // 1. Fetch payments and students concurrently from Supabase
   let payments: DbPayment[] = [];
+  let allStudents: DbStudent[] = [];
   let fetchedPaymentsFromSupabase = false;
+  let fetchedStudentsFromSupabase = false;
 
   if (isSupabaseConfigured && supabase) {
     try {
-      const { data, error } = await supabase
-        .from("payments")
-        .select(`
-          *,
-          student:students(*)
-        `)
-        .order("submitted_at", { ascending: false });
+      const [payRes, stuRes] = await Promise.all([
+        supabase
+          .from("payments")
+          .select(`
+            *,
+            student:students(*)
+          `)
+          .order("submitted_at", { ascending: false }),
+        supabase
+          .from("students")
+          .select("*")
+          .order("created_at", { ascending: false }),
+      ]);
 
-      if (!error && data !== null) {
-        payments = data as DbPayment[];
+      if (!payRes.error && payRes.data !== null) {
+        payments = payRes.data as DbPayment[];
         fetchedPaymentsFromSupabase = true;
-      } else if (error) {
-        console.warn("Supabase payments query error:", error.message);
+      } else {
+        // Fallback: Query payments without join in case relationship is missing
+        const plainPay = await supabase
+          .from("payments")
+          .select("*")
+          .order("submitted_at", { ascending: false });
+        if (!plainPay.error && plainPay.data !== null) {
+          payments = plainPay.data as DbPayment[];
+          fetchedPaymentsFromSupabase = true;
+        }
+      }
+
+      if (!stuRes.error && stuRes.data !== null) {
+        allStudents = stuRes.data as DbStudent[];
+        fetchedStudentsFromSupabase = true;
       }
     } catch (err) {
-      console.warn("Supabase fetchUnifiedRegistrations payments query error:", err);
+      console.warn("Supabase fetchUnifiedRegistrations query error:", err);
     }
   }
 
@@ -596,17 +585,54 @@ export async function fetchUnifiedRegistrations(): Promise<UnifiedStudentRegistr
     }
   }
 
-  // Add all payments with strict PENDING default
-  for (const p of payments) {
-    const student = p.student;
-    const phone = student?.whatsapp_num || "";
-    const key = `${p.id}-${phone}`;
-    processedKeys.add(key);
+  if (!fetchedStudentsFromSupabase && typeof window !== "undefined") {
+    try {
+      const local = localStorage.getItem(LOCAL_STUDENTS_KEY);
+      if (local) {
+        allStudents = JSON.parse(local) as DbStudent[];
+      }
+    } catch (e) {
+      console.warn("Local students read error:", e);
+    }
+  }
 
-    const courseTitle =
-      p.course?.title_en ||
-      COURSE_NAMES_MAP[p.course_id] ||
-      (p.course_id ? p.course_id.charAt(0).toUpperCase() + p.course_id.slice(1) : "Adaviyya Track");
+  // Build lookup maps for fast, robust student resolution
+  const studentById = new Map<string, DbStudent>();
+  const studentByPhone = new Map<string, DbStudent>();
+  for (const s of allStudents) {
+    if (s.id) studentById.set(s.id, s);
+    const pClean = (s.whatsapp_num || "").replace(/\D/g, "");
+    if (pClean) studentByPhone.set(pClean, s);
+  }
+
+  // Add all payments with strict PENDING default
+  // Deduplicate by payment ID first, then by student+course for PENDING entries
+  const seenPaymentIds = new Set<string>();
+  const pendingStudentCourseKeys = new Set<string>();
+
+  // Sort payments so APPROVED/REJECTED take priority over PENDING for deduplication
+  const sortedPayments = [...payments].sort((a, b) => {
+    const priorityA = a.status === "APPROVED" ? 0 : a.status === "REJECTED" ? 1 : 2;
+    const priorityB = b.status === "APPROVED" ? 0 : b.status === "REJECTED" ? 1 : 2;
+    if (priorityA !== priorityB) return priorityA - priorityB;
+    // Within same status, newest first
+    const dateA = new Date(a.submitted_at || a.updated_at || 0).getTime();
+    const dateB = new Date(b.submitted_at || b.updated_at || 0).getTime();
+    return dateB - dateA;
+  });
+
+  for (const p of sortedPayments) {
+    // Skip duplicate payment IDs
+    if (seenPaymentIds.has(p.id)) continue;
+    seenPaymentIds.add(p.id);
+
+    // Resolve student reliably even if Supabase relation was null
+    const student =
+      p.student ||
+      studentById.get(p.student_id) ||
+      studentByPhone.get((p.upi_txid || "").replace(/\D/g, ""));
+    const phone = student?.whatsapp_num || (p as any).whatsapp_num || "";
+    const resolvedName = student?.full_name || (p as any).student_name || (p as any).full_name || "Enrolled Student";
 
     // Strictly APPROVED only if explicitly approved in admin; otherwise strictly PENDING
     const isApproved = p.status === "APPROVED" || (p.status as string) === "verified";
@@ -617,10 +643,22 @@ export async function fetchUnifiedRegistrations(): Promise<UnifiedStudentRegistr
       ? "REJECTED"
       : "PENDING";
 
+    // For PENDING payments, deduplicate by student+course to show only the most recent
+    if (paymentStatus === "PENDING") {
+      const studentCourseKey = `${p.student_id}_${p.course_id || "adaviyya"}`;
+      if (pendingStudentCourseKeys.has(studentCourseKey)) continue;
+      pendingStudentCourseKeys.add(studentCourseKey);
+    }
+
+    const courseTitle =
+      p.course?.title_en ||
+      COURSE_NAMES_MAP[p.course_id] ||
+      (p.course_id ? p.course_id.charAt(0).toUpperCase() + p.course_id.slice(1) : "Adaviyya Track");
+
     result.push({
       id: p.id,
       studentId: student?.id || p.student_id,
-      fullName: student?.full_name || "Enrolled Student",
+      fullName: resolvedName,
       whatsappNum: phone,
       district: student?.district || "Kerala",
       courseChoice: courseTitle,
@@ -635,63 +673,32 @@ export async function fetchUnifiedRegistrations(): Promise<UnifiedStudentRegistr
     });
   }
 
-  // 2. Fetch all registered students from Supabase to catch leads who registered
-  let allStudents: DbStudent[] = [];
-  let fetchedStudentsFromSupabase = false;
-
-  if (isSupabaseConfigured && supabase) {
-    try {
-      const { data, error } = await supabase
-        .from("students")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (!error && data !== null) {
-        allStudents = data;
-        fetchedStudentsFromSupabase = true;
-      } else if (error) {
-        console.warn("Supabase students query error:", error.message);
-      }
-    } catch (err) {
-      console.warn("Supabase students query error:", err);
-    }
-  }
-
-  // Fallback to local storage ONLY if Supabase is unconfigured or failed
-  if (!fetchedStudentsFromSupabase && typeof window !== "undefined") {
-    try {
-      const local = localStorage.getItem(LOCAL_STUDENTS_KEY);
-      if (local) {
-        allStudents = JSON.parse(local) as DbStudent[];
-      }
-    } catch (e) {
-      console.warn("Local students read error:", e);
-    }
-  }
-
-  // Identify registered students not yet listed in payments
-  const existingPhones = new Set(result.map((r) => r.whatsappNum.replace(/\D/g, "")));
+  // 2. Add registered students who have NO payment records at all (leads without payments)
   const existingStudentIds = new Set(result.map((r) => r.studentId));
 
   for (const s of allStudents) {
+    // Skip if this student already appears via a payment record
+    if (existingStudentIds.has(s.id)) continue;
+
+    // Skip students with obviously dummy/test phone numbers
     const cleanP = (s.whatsapp_num || "").replace(/\D/g, "");
-    if (!existingStudentIds.has(s.id) && !existingPhones.has(cleanP)) {
-      result.push({
-        id: `reg-${s.id}`,
-        studentId: s.id,
-        fullName: s.full_name,
-        whatsappNum: s.whatsapp_num,
-        district: s.district || "Kerala",
-        courseChoice: "Adaviyya (General Admission)",
-        courseId: "adaviyya",
-        registrationDate: s.created_at || new Date().toISOString(),
-        paymentStatus: "PENDING",
-        amount: 500,
-        upiTxId: "Pending Verification",
-        paymentId: undefined,
-      });
-      existingPhones.add(cleanP);
-    }
+    if (!cleanP || cleanP.length < 7) continue;
+
+    result.push({
+      id: `reg-${s.id}`,
+      studentId: s.id,
+      fullName: s.full_name || "Enrolled Student",
+      whatsappNum: s.whatsapp_num,
+      district: s.district || "Kerala",
+      courseChoice: "Adaviyya (General Admission)",
+      courseId: "adaviyya",
+      registrationDate: s.created_at || new Date().toISOString(),
+      paymentStatus: "PENDING",
+      amount: 500,
+      upiTxId: "Pending Verification",
+      paymentId: undefined,
+    });
+    existingStudentIds.add(s.id);
   }
 
   // Sort latest first
@@ -1168,4 +1175,77 @@ export async function purgeDuplicateAndDummyRegistrations(
     remainingCount: remaining.length,
   };
 }
+
+/**
+ * Safely deletes a student registration and/or payment record from Supabase and local cache
+ */
+export async function deleteStudentRegistrationDirect(params: {
+  studentId: string;
+  paymentId?: string;
+}): Promise<boolean> {
+  const { studentId, paymentId } = params;
+
+  // 1. Delete from Supabase
+  if (isSupabaseConfigured && supabase) {
+    try {
+      if (paymentId) {
+        const { error: payErr } = await supabase
+          .from("payments")
+          .delete()
+          .eq("id", paymentId);
+        if (payErr) console.warn("Supabase delete payment error:", payErr.message);
+      }
+
+      // Check if student has any remaining payments before deleting student row
+      const { data: remainingPays } = await supabase
+        .from("payments")
+        .select("id")
+        .eq("student_id", studentId)
+        .limit(1);
+
+      if (!remainingPays || remainingPays.length === 0) {
+        const { error: stuErr } = await supabase
+          .from("students")
+          .delete()
+          .eq("id", studentId);
+        if (stuErr) console.warn("Supabase delete student error:", stuErr.message);
+      }
+    } catch (err) {
+      console.warn("Supabase delete registration error:", err);
+    }
+  }
+
+  // 2. Delete from LocalStorage
+  if (typeof window !== "undefined") {
+    try {
+      if (paymentId) {
+        const localPays: DbPayment[] = JSON.parse(
+          localStorage.getItem(LOCAL_PAYMENTS_KEY) || "[]"
+        );
+        const filteredPays = localPays.filter((p) => p.id !== paymentId);
+        localStorage.setItem(LOCAL_PAYMENTS_KEY, JSON.stringify(filteredPays));
+      }
+
+      const localStudents: DbStudent[] = JSON.parse(
+        localStorage.getItem(LOCAL_STUDENTS_KEY) || "[]"
+      );
+      const remainingLocalPays: DbPayment[] = JSON.parse(
+        localStorage.getItem(LOCAL_PAYMENTS_KEY) || "[]"
+      );
+      const hasOtherPay = remainingLocalPays.some((p) => p.student_id === studentId);
+      if (!hasOtherPay) {
+        const filteredStudents = localStudents.filter((s) => s.id !== studentId);
+        localStorage.setItem(LOCAL_STUDENTS_KEY, JSON.stringify(filteredStudents));
+      }
+
+      window.dispatchEvent(new CustomEvent("hanoon_students_updated"));
+      window.dispatchEvent(new CustomEvent("hanoon_payment_event", { detail: { action: "delete", id: paymentId } }));
+    } catch (e) {
+      console.error("Local storage delete error:", e);
+    }
+  }
+
+  return true;
+}
+
 

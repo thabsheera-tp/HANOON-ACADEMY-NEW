@@ -645,6 +645,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
           canGoBack={canGoBack}
           userProfile={userProfile}
           isApproved={isEnrolled}
+          isPending={hasPaymentSubmitted}
         />
 
         {/* Access Notice Banner (Displayed if an unpaid student attempts to access dashboard) */}

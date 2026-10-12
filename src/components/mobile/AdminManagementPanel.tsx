@@ -265,7 +265,7 @@ export default function AdminManagementPanel({
   const approvedPayments = payments.filter((p) => p.status === "APPROVED");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs animate-fade-in font-['Plus_Jakarta_Sans']">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-sm animate-fade-in font-['Plus_Jakarta_Sans']">
       <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-purple-100 overflow-hidden text-slate-900">
         
         {/* Modal Top Header */}

@@ -43,47 +43,7 @@ export default function SubjectClassHubModal({
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadedChapters, setDownloadedChapters] = useState<Record<string, boolean>>({});
   const [activePlayingId, setActivePlayingId] = useState<string | null>(null);
-
-  // Dynamic payment status resolution (respects prop or fallback localStorage cache)
-  const [internalIsPaid, setInternalIsPaid] = useState<boolean>(() => {
-    if (typeof isPaidProp === "boolean") return isPaidProp;
-    if (typeof window === "undefined") return false;
-    try {
-      const saved = localStorage.getItem("hanoon_local_payments");
-      if (saved) {
-        const list = JSON.parse(saved);
-        if (Array.isArray(list)) {
-          return list.some(
-            (p: any) => p.status === "APPROVED" || p.status === "verified"
-          );
-        }
-      }
-    } catch {}
-    return false;
-  });
-
-  useEffect(() => {
-    if (typeof isPaidProp === "boolean") {
-      setInternalIsPaid(isPaidProp);
-    }
-  }, [isPaidProp]);
-
-  // Real-time payment verification event listener
-  useEffect(() => {
-    const handlePaymentEvent = (e: Event) => {
-      const customEvt = e as CustomEvent;
-      if (customEvt.detail) {
-        const { status } = customEvt.detail;
-        if (status === "APPROVED" || status === "verified") {
-          setInternalIsPaid(true);
-        }
-      }
-    };
-    window.addEventListener("hanoon_payment_event", handlePaymentEvent);
-    return () => window.removeEventListener("hanoon_payment_event", handlePaymentEvent);
-  }, []);
-
-  const isPaid = typeof isPaidProp === "boolean" ? isPaidProp : internalIsPaid;
+  const isPaid = Boolean(isPaidProp);
 
   if (!isOpen || !subject) return null;
 

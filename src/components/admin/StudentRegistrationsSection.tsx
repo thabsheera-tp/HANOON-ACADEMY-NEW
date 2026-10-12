@@ -33,6 +33,7 @@ import {
   updateStudentPaymentStatusDirect,
   subscribeToStudentRegistrations,
   purgeDuplicateAndDummyRegistrations,
+  deleteStudentRegistrationDirect,
 } from "@/services/studentService";
 import { getWhatsAppWelcomeUrl } from "@/services/paymentService";
 import { addAuditLog, clearAuditLogs } from "@/services/settingsService";
@@ -61,6 +62,10 @@ export default function StudentRegistrationsSection({
   const [isClearingLogs, setIsClearingLogs] = useState(false);
   const [showClearLogConfirm, setShowClearLogConfirm] = useState(false);
 
+  // Single Item Delete State
+  const [deleteTarget, setDeleteTarget] = useState<UnifiedStudentRegistration | null>(null);
+  const [isDeletingItem, setIsDeletingItem] = useState(false);
+
   // WhatsApp Post-Approval Prompt Banner
   const [approvedNotification, setApprovedNotification] = useState<{
     name: string;
@@ -69,8 +74,14 @@ export default function StudentRegistrationsSection({
     whatsappUrl: string;
   } | null>(null);
 
+  // Strict debounced loading to avoid race conditions & duplicate entries
+  const debounceTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+  const inFlightRef = React.useRef(false);
+
   // Load Data
   const loadData = useCallback(async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setLoading(true);
     try {
       const data = await fetchUnifiedRegistrations();
@@ -79,16 +90,27 @@ export default function StudentRegistrationsSection({
       console.warn("Failed to load student registrations:", err);
     } finally {
       setLoading(false);
+      inFlightRef.current = false;
     }
   }, []);
+
+  const debouncedLoadData = useCallback(() => {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(() => {
+      loadData();
+    }, 250);
+  }, [loadData]);
 
   useEffect(() => {
     loadData();
     const unsubscribe = subscribeToStudentRegistrations(() => {
-      loadData();
+      debouncedLoadData();
     });
-    return () => unsubscribe();
-  }, [loadData]);
+    return () => {
+      unsubscribe();
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    };
+  }, [loadData, debouncedLoadData]);
 
   // Copy UTR handler
   const handleCopy = (text: string) => {
@@ -222,6 +244,36 @@ export default function StudentRegistrationsSection({
       alert("Could not clear activity logs. Please check your network connection.");
     } finally {
       setIsClearingLogs(false);
+    }
+  };
+
+  // Delete Individual Student / Dummy Registration Record
+  const handleDeleteRegistration = async () => {
+    if (!deleteTarget) return;
+    setIsDeletingItem(true);
+    try {
+      await deleteStudentRegistrationDirect({
+        studentId: deleteTarget.studentId,
+        paymentId: deleteTarget.paymentId,
+      });
+
+      addAuditLog({
+        actor: "Admin",
+        action: "Deleted Registration Record",
+        category: "PAYMENT",
+        details: `Deleted student registration record for ${deleteTarget.fullName} (${deleteTarget.whatsappNum}).`,
+      });
+
+      setRegistrations((prev) => prev.filter((r) => r.id !== deleteTarget.id));
+      const deletedName = deleteTarget.fullName;
+      setDeleteTarget(null);
+      setPurgeSuccessMsg(`Successfully deleted record for ${deletedName}.`);
+      setTimeout(() => setPurgeSuccessMsg(null), 5000);
+    } catch (err) {
+      console.error("Failed to delete registration record:", err);
+      alert("Could not delete record. Please check your network connection.");
+    } finally {
+      setIsDeletingItem(false);
     }
   };
 
@@ -868,8 +920,19 @@ export default function StudentRegistrationsSection({
                             title="Send WhatsApp Alert to Student"
                           >
                             <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Send WhatsApp Alert</span>
+                            <span>WhatsApp Alert</span>
                           </a>
+
+                          {/* Delete Dummy / Test Record Button */}
+                          <button
+                            type="button"
+                            onClick={() => setDeleteTarget(item)}
+                            disabled={isProcessing || isDeletingItem}
+                            className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition-all cursor-pointer disabled:opacity-40"
+                            title="Delete / Remove Record"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1080,16 +1143,28 @@ export default function StudentRegistrationsSection({
                       </button>
                     </div>
 
-                    {/* WhatsApp Action Alert Button */}
-                    <a
-                      href={waUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full py-2 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all min-h-[38px]"
-                    >
-                      <MessageCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      <span>Send WhatsApp Alert</span>
-                    </a>
+                    {/* WhatsApp Action Alert Button + Delete Record Button */}
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={waUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 py-2 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all min-h-[44px]"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>WhatsApp Alert</span>
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget(item)}
+                        disabled={isProcessing || isDeletingItem}
+                        className="py-2 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs flex items-center justify-center gap-1 transition-all cursor-pointer min-h-[44px] shrink-0"
+                        title="Delete Record"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                        <span>Delete</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -1101,7 +1176,7 @@ export default function StudentRegistrationsSection({
       {/* 6. Admin / Verifier Full-Size Payment Screenshot Lightbox Modal */}
       {screenshotModalItem && (
         <div
-          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 animate-fade-in"
+          className="fixed inset-0 z-[9999] bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 animate-fade-in"
           onClick={() => setScreenshotModalItem(null)}
         >
           <div
@@ -1231,8 +1306,8 @@ export default function StudentRegistrationsSection({
 
       {/* Purge Confirmation Modal */}
       {showPurgeConfirm && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-amber-200 space-y-5 animate-scale-up">
+        <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowPurgeConfirm(false)}>
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-amber-200 space-y-5 overflow-y-auto max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start gap-4">
               <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
                 <Trash2 className="w-6 h-6" />
@@ -1268,12 +1343,12 @@ export default function StudentRegistrationsSection({
               </label>
             </div>
 
-            <div className="flex items-center gap-2.5 pt-1">
+            <div className="flex flex-col sm:flex-row items-center gap-2.5 pt-1 w-full">
               <button
                 type="button"
                 onClick={() => setShowPurgeConfirm(false)}
                 disabled={isPurging}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
+                className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer disabled:opacity-50 min-h-[44px]"
               >
                 Cancel
               </button>
@@ -1281,7 +1356,7 @@ export default function StudentRegistrationsSection({
                 type="button"
                 onClick={handlePurgeDuplicates}
                 disabled={isPurging}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-black text-xs inline-flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-black text-xs inline-flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50 min-h-[44px]"
               >
                 {isPurging ? (
                   <>
@@ -1302,8 +1377,8 @@ export default function StudentRegistrationsSection({
 
       {/* Clear Activity Log Confirmation Modal */}
       {showClearLogConfirm && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-rose-200 space-y-5 animate-scale-up">
+        <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowClearLogConfirm(false)}>
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-rose-200 space-y-5 overflow-y-auto max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start gap-4">
               <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
                 <Trash2 className="w-6 h-6" />
@@ -1318,12 +1393,12 @@ export default function StudentRegistrationsSection({
               </div>
             </div>
 
-            <div className="flex items-center gap-2.5 pt-1">
+            <div className="flex flex-col sm:flex-row items-center gap-2.5 pt-1 w-full">
               <button
                 type="button"
                 onClick={() => setShowClearLogConfirm(false)}
                 disabled={isClearingLogs}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
+                className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer disabled:opacity-50 min-h-[44px]"
               >
                 Cancel
               </button>
@@ -1331,7 +1406,7 @@ export default function StudentRegistrationsSection({
                 type="button"
                 onClick={handleClearActivityLogs}
                 disabled={isClearingLogs}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-black text-xs inline-flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-black text-xs inline-flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50 min-h-[44px]"
               >
                 {isClearingLogs ? (
                   <>
@@ -1342,6 +1417,81 @@ export default function StudentRegistrationsSection({
                   <>
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>Yes, Clear Logs</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Individual Item Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in"
+          onClick={() => !isDeletingItem && setDeleteTarget(null)}
+        >
+          <div
+            className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-rose-200 space-y-5 overflow-y-auto max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+                  Delete Registration Record?
+                </h3>
+                <p className="text-xs text-slate-500 leading-relaxed font-medium">
+                  This will safely delete this registration and payment record from Supabase and the system. This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-rose-50/60 border border-rose-100 text-xs text-slate-700 space-y-1.5">
+              <div className="flex justify-between">
+                <span className="font-medium text-slate-500">Student:</span>
+                <span className="font-extrabold text-slate-900">{deleteTarget.fullName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-medium text-slate-500">WhatsApp:</span>
+                <span className="font-bold text-purple-700">{deleteTarget.whatsappNum || "N/A"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-medium text-slate-500">Course:</span>
+                <span className="font-bold text-slate-800">{deleteTarget.courseChoice}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-medium text-slate-500">Status:</span>
+                <span className="font-black text-amber-700">{deleteTarget.paymentStatus}</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-2.5 pt-1 w-full">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={isDeletingItem}
+                className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer disabled:opacity-50 min-h-[44px]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteRegistration}
+                disabled={isDeletingItem}
+                className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-black text-xs inline-flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50 min-h-[44px]"
+              >
+                {isDeletingItem ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Yes, Delete Record</span>
                   </>
                 )}
               </button>

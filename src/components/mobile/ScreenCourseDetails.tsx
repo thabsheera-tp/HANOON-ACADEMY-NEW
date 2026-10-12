@@ -53,73 +53,13 @@ export default function ScreenCourseDetails({
   const [specialClasses, setSpecialClasses] = useState<SpecialClass[]>([]);
   const [selectedSpecialClass, setSelectedSpecialClass] = useState<SpecialClass | null>(null);
 
-  // Dynamic payment verification check
-  const [internalIsPaid, setInternalIsPaid] = useState<boolean>(() => {
-    if (typeof isPaidProp === "boolean") return isPaidProp;
-    if (
-      paymentDetails?.status === "verified" ||
-      (paymentDetails?.status as string) === "APPROVED"
-    ) {
-      return true;
-    }
-    if (typeof window === "undefined") return false;
-    try {
-      const saved = localStorage.getItem("hanoon_local_payments");
-      if (saved) {
-        const list = JSON.parse(saved);
-        if (Array.isArray(list)) {
-          return list.some(
-            (p: any) =>
-              (p.status === "APPROVED" || p.status === "verified") &&
-              (!selectedCourse.id ||
-                p.course_id === selectedCourse.id ||
-                p.course?.id === selectedCourse.id ||
-                selectedCourse.id === "adaviyya" ||
-                selectedCourse.id === "athaviy")
-          );
-        }
-      }
-    } catch {}
-    return false;
-  });
-
-  useEffect(() => {
-    if (typeof isPaidProp === "boolean") {
-      setInternalIsPaid(isPaidProp);
-    }
-  }, [isPaidProp]);
-
-  useEffect(() => {
-    if (
-      paymentDetails?.status === "verified" ||
-      (paymentDetails?.status as string) === "APPROVED"
-    ) {
-      setInternalIsPaid(true);
-    }
-  }, [paymentDetails?.status]);
-
-  useEffect(() => {
-    const handlePaymentEvent = (e: Event) => {
-      const customEvt = e as CustomEvent;
-      if (customEvt.detail) {
-        const { status, course_id } = customEvt.detail;
-        if (status === "APPROVED" || status === "verified") {
-          if (
-            !course_id ||
-            course_id === selectedCourse.id ||
-            selectedCourse.id === "adaviyya" ||
-            selectedCourse.id === "athaviy"
-          ) {
-            setInternalIsPaid(true);
-          }
-        }
-      }
-    };
-    window.addEventListener("hanoon_payment_event", handlePaymentEvent);
-    return () => window.removeEventListener("hanoon_payment_event", handlePaymentEvent);
-  }, [selectedCourse.id]);
-
-  const isPaid = typeof isPaidProp === "boolean" ? isPaidProp : internalIsPaid;
+  // Strict payment verification check (strictly bound to verified status, no loose fallback)
+  const isPaid = Boolean(
+    isPaidProp ||
+    paymentDetails?.status === "verified" ||
+    (paymentDetails?.status as string) === "APPROVED" ||
+    (paymentDetails?.status as string) === "ACTIVE"
+  );
 
   useEffect(() => {
     const loaded = getAdaviyyaSubjects();

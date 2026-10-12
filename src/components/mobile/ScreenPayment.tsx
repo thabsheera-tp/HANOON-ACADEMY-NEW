@@ -22,6 +22,7 @@ import {
   Eye,
   Trash2,
   X,
+  FileText,
 } from "lucide-react";
 import { SelectedCourse, PaymentDetails, UserProfile } from "@/types/app";
 import { registerStudentAndPayment, uploadPaymentScreenshot } from "@/services/studentService";
@@ -52,6 +53,13 @@ export default function ScreenPayment({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [studentName, setStudentName] = useState(userProfile.name || "");
   const [studentPhone, setStudentPhone] = useState(userProfile.phone || "");
+  const [txIdInput, setTxIdInput] = useState<string>(
+    paymentDetails.upiTxId &&
+      !paymentDetails.upiTxId.startsWith("PROOF_") &&
+      !paymentDetails.upiTxId.startsWith("PENDING_")
+      ? paymentDetails.upiTxId
+      : ""
+  );
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(
     paymentDetails.screenshotUrl || null
@@ -243,12 +251,19 @@ export default function ScreenPayment({
       setError("Please enter your Student Full Name.");
       return;
     }
-    if (!studentPhone.trim() || studentPhone.trim().length < 10) {
+    const cleanPhone = studentPhone.trim().replace(/\D/g, "");
+    if (!cleanPhone || cleanPhone.length < 10) {
       setError("Please enter a valid 10-digit WhatsApp number.");
       return;
     }
-    if (!screenshotFile && !screenshotPreview) {
-      setError("Please upload your payment screenshot before submitting.");
+
+    const cleanTx = txIdInput.trim().replace(/\s+/g, "");
+    if (!cleanTx && !screenshotFile && !screenshotPreview) {
+      setError("Please enter your 12-digit UPI Transaction ID / UTR or upload a payment screenshot.");
+      return;
+    }
+    if (cleanTx && cleanTx.length < 8) {
+      setError("Transaction ID must be at least 8 to 12 digits.");
       return;
     }
 
@@ -264,14 +279,14 @@ export default function ScreenPayment({
     }
 
     try {
-      // 1. Upload screenshot to Supabase Storage (with fallback to base64 Data URL)
+      // 1. Upload screenshot to Supabase Storage (if file provided)
       let finalScreenshotUrl = paymentDetails.screenshotUrl || screenshotPreview || "";
       if (screenshotFile) {
         finalScreenshotUrl = await uploadPaymentScreenshot(screenshotFile);
       }
 
-      // 2. Generate secure proof reference
-      const refId = paymentDetails.upiTxId || `PROOF_${Date.now().toString().slice(-6)}`;
+      // 2. Generate secure proof reference from Transaction ID or proof tag
+      const refId = cleanTx || paymentDetails.upiTxId || `PROOF_${Date.now().toString().slice(-6)}`;
 
       // 3. Register in Supabase (with resilient local storage fallback)
       const res = await registerStudentAndPayment({
@@ -285,13 +300,13 @@ export default function ScreenPayment({
         amount: payableAmount,
       });
 
+      // 4. Update UI state smoothly without hard page reload or redirecting to "/"
       setVerifiedStatus("pending");
-      onSubmitPayment(refId, res.payment.id, finalScreenshotUrl);
-      // Student remains on pending verification screen until payment is approved by admin
+      setIsSubmitting(false);
+      onSubmitPayment(refId, res.payment?.id, finalScreenshotUrl);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Submission failed. Please check network.";
       setError(msg);
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -464,6 +479,14 @@ export default function ScreenPayment({
               <span className="text-slate-500 font-semibold">Student Name:</span>
               <span className="font-bold text-slate-800">{studentName || userProfile.name}</span>
             </div>
+            {paymentDetails.upiTxId && !paymentDetails.upiTxId.startsWith("PROOF_") && (
+              <div className="flex justify-between items-center pb-1.5 border-b border-amber-100">
+                <span className="text-slate-500 font-semibold">Transaction ID / UTR:</span>
+                <span className="font-mono font-bold text-slate-800 text-[11px] select-all">
+                  {paymentDetails.upiTxId}
+                </span>
+              </div>
+            )}
 
             {/* Uploaded Screenshot Thumbnail Display */}
             {(paymentDetails.screenshotUrl || screenshotPreview) && (
@@ -546,7 +569,7 @@ export default function ScreenPayment({
                   try {
                     localStorage.removeItem("hanoon_pending_payment");
                   } catch {}
-                  window.location.href = "/";
+                  router.push("/#courses");
                 }}
                 className="text-[11px] font-bold text-slate-500 hover:text-purple-700 underline cursor-pointer"
               >
@@ -680,6 +703,28 @@ export default function ScreenPayment({
               </div>
             </div>
 
+            {/* UPI Transaction ID / UTR (Optional if screenshot is attached) */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700 block">
+                  UPI Transaction ID / UTR <span className="text-slate-400 font-normal">(Optional if receipt uploaded)</span>
+                </label>
+                <span className="text-[10px] font-mono text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100">
+                  12-digit UTR
+                </span>
+              </div>
+              <div className="relative">
+                <FileText className="w-4 h-4 text-purple-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="e.g. 408512345678 or 12-digit UTR"
+                  value={txIdInput}
+                  onChange={(e) => setTxIdInput(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-mono font-medium"
+                />
+              </div>
+            </div>
+
             {/* SCREENSHOT UPLOAD COMPONENT (Completely replaced 12-digit TxID input) */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -803,11 +848,11 @@ export default function ScreenPayment({
               {isSubmitting ? (
                 <span className="flex items-center gap-2">
                   <RefreshCw className="w-4 h-4 animate-spin" />
-                  Uploading Screenshot to Supabase...
+                  Submitting for Verification...
                 </span>
               ) : (
                 <>
-                  <span>Submit Screenshot for Verification</span>
+                  <span>Submit for Verification</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
@@ -819,7 +864,7 @@ export default function ScreenPayment({
       {/* Screenshot Full-Size Lightbox Modal */}
       {previewModalUrl && (
         <div
-          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in"
+          className="fixed inset-0 z-[9999] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in"
           onClick={() => setPreviewModalUrl(null)}
         >
           <div

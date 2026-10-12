@@ -123,14 +123,15 @@ export default function StudentRegisterModal({
       age: age.trim() || undefined,
     };
 
-    // Transition directly to Screen 4 (UPI Payment)
+    // Transition directly to Screen 4 (UPI Payment).
+    // Do NOT reset isSubmitting here — the modal closes via onClose() which unmounts
+    // the component, preventing any double-submit naturally. This guards duplicate entries.
     onSubmit(userProfileData, selectedCourseObj.id);
-    setIsSubmitting(false);
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in select-none font-['Plus_Jakarta_Sans']">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in select-none font-['Plus_Jakarta_Sans']">
       <div className="bg-white text-slate-900 rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-purple-100 relative max-h-[92vh] overflow-y-auto">
         {/* Close Button */}
         <button

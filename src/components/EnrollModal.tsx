@@ -161,7 +161,7 @@ export default function EnrollModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#0F172A]/70 backdrop-blur-xs animate-in fade-in select-none font-['Plus_Jakarta_Sans']">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-[#0F172A]/70 backdrop-blur-sm animate-in fade-in select-none font-['Plus_Jakarta_Sans']">
       <div
         className="relative w-full max-w-lg bg-white rounded-3xl p-5 sm:p-7 shadow-2xl border border-purple-100 max-h-[92vh] overflow-y-auto no-scrollbar text-slate-900"
         onClick={(e) => e.stopPropagation()}

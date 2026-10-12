@@ -41,46 +41,7 @@ export default function SpecialClassModal({
   const [activeTab, setActiveTab] = useState<"live" | "materials" | "about">("live");
   const [downloadSuccess, setDownloadSuccess] = useState(false);
 
-  // Dynamic payment status resolution
-  const [internalIsPaid, setInternalIsPaid] = useState<boolean>(() => {
-    if (typeof isPaidProp === "boolean") return isPaidProp;
-    if (typeof window === "undefined") return false;
-    try {
-      const saved = localStorage.getItem("hanoon_local_payments");
-      if (saved) {
-        const list = JSON.parse(saved);
-        if (Array.isArray(list)) {
-          return list.some(
-            (p: any) => p.status === "APPROVED" || p.status === "verified"
-          );
-        }
-      }
-    } catch {}
-    return false;
-  });
-
-  useEffect(() => {
-    if (typeof isPaidProp === "boolean") {
-      setInternalIsPaid(isPaidProp);
-    }
-  }, [isPaidProp]);
-
-  // Real-time payment verification event listener
-  useEffect(() => {
-    const handlePaymentEvent = (e: Event) => {
-      const customEvt = e as CustomEvent;
-      if (customEvt.detail) {
-        const { status } = customEvt.detail;
-        if (status === "APPROVED" || status === "verified") {
-          setInternalIsPaid(true);
-        }
-      }
-    };
-    window.addEventListener("hanoon_payment_event", handlePaymentEvent);
-    return () => window.removeEventListener("hanoon_payment_event", handlePaymentEvent);
-  }, []);
-
-  const isPaid = typeof isPaidProp === "boolean" ? isPaidProp : internalIsPaid;
+  const isPaid = Boolean(isPaidProp);
 
   if (!isOpen || !specialClass) return null;
 
@@ -93,8 +54,8 @@ export default function SpecialClassModal({
   const isLive = specialClass.status === "LIVE_NOW";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-900/60 backdrop-blur-xs animate-fade-in duration-200 select-none font-['Plus_Jakarta_Sans']">
-      <div className="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-3xl bg-white border border-purple-100 shadow-2xl flex flex-col text-slate-900">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 bg-black/60 backdrop-blur-sm animate-fade-in duration-200 select-none font-['Plus_Jakarta_Sans']" onClick={onClose}>
+      <div className="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-3xl bg-white border border-purple-100 shadow-2xl flex flex-col text-slate-900" onClick={(e) => e.stopPropagation()}>
         
         {/* Modal Top Bar */}
         <div className="sticky top-0 z-20 flex items-center justify-between p-4 pb-3 bg-white border-b border-purple-100">

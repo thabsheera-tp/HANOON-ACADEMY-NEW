@@ -32,6 +32,7 @@ interface MobileHeaderProps {
   canGoBack: boolean;
   userProfile?: UserProfile;
   isApproved?: boolean;
+  isPending?: boolean;
 }
 
 export default function MobileHeader({
@@ -41,6 +42,7 @@ export default function MobileHeader({
   canGoBack,
   userProfile,
   isApproved = false,
+  isPending = false,
 }: MobileHeaderProps) {
   const router = useRouter();
   const [isPortalMenuOpen, setIsPortalMenuOpen] = useState(false);
@@ -211,6 +213,17 @@ export default function MobileHeader({
                   </div>
                 </>
               )}
+            </div>
+          ) : isPending ? (
+            /* Pending Verification Status Badge for Unverified Users */
+            <div className="flex items-center">
+              <span
+                className="py-1 px-2.5 rounded-full text-[10px] font-extrabold text-amber-800 bg-amber-50 border border-amber-200/90 inline-flex items-center gap-1.5 shadow-2xs"
+                title="Your payment is submitted and pending admin verification"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                <span>Pending Verification</span>
+              </span>
             </div>
           ) : (
             /* Clean Public / Guest Header (Direct WhatsApp Support) */

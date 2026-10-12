@@ -49,31 +49,8 @@ export default function CourseMaterialsModal({
   const [downloadingPdfId, setDownloadingPdfId] = useState<string | null>(null);
   const [downloadedPdfs, setDownloadedPdfs] = useState<Record<string, boolean>>({});
 
-  // Dynamic payment resolution
-  const [internalIsPaid, setInternalIsPaid] = useState<boolean>(() => {
-    if (typeof isPaidProp === "boolean") return isPaidProp;
-    if (typeof window === "undefined") return false;
-    try {
-      const saved = localStorage.getItem("hanoon_local_payments");
-      if (saved) {
-        const list = JSON.parse(saved);
-        if (Array.isArray(list)) {
-          return list.some(
-            (p: any) => p.status === "APPROVED" || p.status === "verified"
-          );
-        }
-      }
-    } catch {}
-    return false;
-  });
-
-  useEffect(() => {
-    if (typeof isPaidProp === "boolean") {
-      setInternalIsPaid(isPaidProp);
-    }
-  }, [isPaidProp]);
-
-  const isPaid = typeof isPaidProp === "boolean" ? isPaidProp : internalIsPaid;
+  // Strict payment verification binding
+  const isPaid = Boolean(isPaidProp);
 
   if (!isOpen) return null;
 

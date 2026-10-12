@@ -7,6 +7,9 @@ const LOCAL_PAYMENTS_KEY = "hanoon_local_payments";
 export async function fetchPayments(): Promise<DbPayment[]> {
   if (isSupabaseConfigured && supabase) {
     try {
+      let rawPayments: any[] | null = null;
+
+      // 1. Try relational query
       const { data, error } = await supabase
         .from("payments")
         .select(`
@@ -16,10 +19,47 @@ export async function fetchPayments(): Promise<DbPayment[]> {
         .order("submitted_at", { ascending: false });
 
       if (!error && data) {
-        return data as DbPayment[];
+        rawPayments = data;
+      } else {
+        // Fallback: Fetch plain payments if relation is not configured in schema
+        const fallbackRes = await supabase
+          .from("payments")
+          .select("*")
+          .order("submitted_at", { ascending: false });
+        if (!fallbackRes.error && fallbackRes.data) {
+          rawPayments = fallbackRes.data;
+        }
       }
-      if (error) {
-        console.warn("Supabase payments fetch error:", error.message);
+
+      if (rawPayments && rawPayments.length > 0) {
+        // Ensure student object is always populated by fetching students table
+        const { data: stdData } = await supabase
+          .from("students")
+          .select("*");
+
+        const studentMap = new Map<string, any>();
+        if (stdData) {
+          for (const s of stdData) {
+            if (s.id) studentMap.set(s.id, s);
+            const p = (s.whatsapp_num || "").replace(/\D/g, "");
+            if (p) studentMap.set(p, s);
+          }
+        }
+
+        const enriched: DbPayment[] = rawPayments.map((p) => {
+          let student = p.student;
+          if (!student || !student.full_name) {
+            student = studentMap.get(p.student_id) || studentMap.get((p.whatsapp_num || "").replace(/\D/g, "")) || null;
+          }
+          return {
+            ...p,
+            student: student || null,
+          };
+        });
+
+        return enriched;
+      } else if (rawPayments && rawPayments.length === 0) {
+        return [];
       }
     } catch (err) {
       console.warn("Failed to fetch payments from Supabase, loading local:", err);
