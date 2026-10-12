@@ -51,8 +51,26 @@ export default function ScreenPayment({
 }: ScreenPaymentProps) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [studentName, setStudentName] = useState(userProfile.name || "");
-  const [studentPhone, setStudentPhone] = useState(userProfile.phone || "");
+  const [studentName, setStudentName] = useState(() => {
+    if (userProfile?.name) return userProfile.name;
+    if (typeof window !== "undefined") {
+      try {
+        const raw = localStorage.getItem("hanoon_student_profile");
+        if (raw) return JSON.parse(raw).name || "";
+      } catch {}
+    }
+    return "";
+  });
+  const [studentPhone, setStudentPhone] = useState(() => {
+    if (userProfile?.phone) return userProfile.phone;
+    if (typeof window !== "undefined") {
+      try {
+        const raw = localStorage.getItem("hanoon_student_profile");
+        if (raw) return JSON.parse(raw).phone || "";
+      } catch {}
+    }
+    return "";
+  });
   const [txIdInput, setTxIdInput] = useState<string>(
     paymentDetails.upiTxId &&
       !paymentDetails.upiTxId.startsWith("PROOF_") &&
@@ -673,39 +691,67 @@ export default function ScreenPayment({
 
           {/* Student Info & Screenshot Submission Form (TxID completely removed) */}
           <form onSubmit={handleSubmit} className="space-y-4 pt-1">
-            {/* Student Full Name */}
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-700 block">
-                Student Full Name <span className="text-rose-500">*</span>
-              </label>
-              <div className="relative">
-                <User className="w-4 h-4 text-purple-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Enter student full name"
-                  value={studentName}
-                  onChange={(e) => setStudentName(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-medium"
-                />
+            {/* Confirmed Student Details Card (Only show inputs if editing or missing) */}
+            {studentName && studentPhone && !showEditForm ? (
+              <div className="p-3.5 rounded-2xl bg-purple-50/70 border border-purple-200/80 flex items-center justify-between shadow-2xs">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                    <User className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 bg-purple-100/80 px-2 py-0.5 rounded-full inline-block">
+                      Enrolled Student
+                    </span>
+                    <p className="text-xs font-black text-slate-900 truncate mt-0.5">
+                      {studentName} • <span className="font-mono text-slate-600 font-bold">{studentPhone}</span>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowEditForm(true)}
+                  className="text-[11px] font-extrabold text-purple-700 hover:text-purple-900 underline px-2 py-1 cursor-pointer shrink-0"
+                >
+                  Edit
+                </button>
               </div>
-            </div>
+            ) : (
+              <div className="space-y-3 p-3.5 rounded-2xl bg-purple-50/40 border border-purple-100">
+                {/* Student Full Name */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 block">
+                    Student Full Name <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <User className="w-4 h-4 text-purple-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Enter student full name"
+                      value={studentName}
+                      onChange={(e) => setStudentName(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-purple-200/80 focus:border-purple-600 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-medium"
+                    />
+                  </div>
+                </div>
 
-            {/* WhatsApp Number */}
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-700 block">
-                WhatsApp Number <span className="text-rose-500">*</span>
-              </label>
-              <div className="relative">
-                <Phone className="w-4 h-4 text-purple-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="tel"
-                  placeholder="Enter 10-digit WhatsApp number"
-                  value={studentPhone}
-                  onChange={(e) => setStudentPhone(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-medium"
-                />
+                {/* WhatsApp Number */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 block">
+                    WhatsApp Number <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <Phone className="w-4 h-4 text-purple-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="tel"
+                      placeholder="Enter 10-digit WhatsApp number"
+                      value={studentPhone}
+                      onChange={(e) => setStudentPhone(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-purple-200/80 focus:border-purple-600 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-medium"
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* UPI Transaction ID / UTR (Optional if screenshot is attached) */}
             <div className="space-y-1">

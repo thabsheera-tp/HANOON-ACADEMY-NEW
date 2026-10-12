@@ -183,7 +183,7 @@ function LoginFormContent() {
 
         const redirectParam = searchParams.get("redirect");
         setTimeout(() => {
-          router.push(redirectParam || "/student");
+          router.push(redirectParam || "/student?screen=payment");
         }, 350);
       } else {
         setErrorMessage(result.error || "Please enter a valid 10-digit mobile number.");

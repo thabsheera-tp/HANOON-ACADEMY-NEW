@@ -38,10 +38,14 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
   const [currentScreen, setCurrentScreen] = useState<ScreenTab>(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
-      const targetScreen = params.get("screen");
-      if (targetScreen === "dashboard") return "dashboard";
+      const targetScreen = params.get("screen") as ScreenTab;
+      if (targetScreen) return targetScreen;
     }
-    // Screen 1 (Welcome Landing Page): Visitors strictly land on Welcome Splash Screen
+    // If user arrived from login or already has a profile saved, start on course-details
+    if (initialUser?.full_name) {
+      return "course-details";
+    }
+    // Screen 1 (Welcome Landing Page): Visitors land on Welcome Splash Screen
     return "splash";
   });
   const [accessNotice, setAccessNotice] = useState<string | null>(null);
@@ -547,7 +551,14 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     if (profile) {
       await handleSaveProfile(profile);
     }
-    setCurrentScreen("course-details");
+    setPaymentDetails((prev) => ({
+      ...prev,
+      upiTxId: "",
+      amount: selectedCourse.admissionFee || selectedCourse.fee,
+      submittedAt: "",
+      status: "unpaid",
+    }));
+    setCurrentScreen("payment");
   };
 
   // Step 4 -> Step 5
@@ -675,13 +686,15 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
           {/* Step 1: Welcome Screen (Ultra-minimalist branding & "Get Started" button) */}
           {currentScreen === "splash" && (
             <ScreenSplash
-              onGetStarted={() => setCurrentScreen("onboarding")}
-              onExploreCourses={() => {
-                if (!userProfile.name || !userProfile.phone) {
-                  setCurrentScreen("onboarding");
+              onGetStarted={() => {
+                if (userProfile.name && userProfile.phone) {
+                  setCurrentScreen("payment");
                 } else {
-                  setCurrentScreen("courses");
+                  setCurrentScreen("onboarding");
                 }
+              }}
+              onExploreCourses={() => {
+                setCurrentScreen("courses");
               }}
             />
           )}

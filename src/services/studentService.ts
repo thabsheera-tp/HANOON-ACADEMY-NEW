@@ -578,7 +578,6 @@ async function executeSaveStudentLead(profile: {
       // Only real payments submitted by the student should appear in the admin dashboard.
 
       window.dispatchEvent(new CustomEvent("hanoon_students_updated"));
-      window.dispatchEvent(new CustomEvent("hanoon_payment_event", { detail: { status: "PENDING" } }));
     } catch (e) {
       console.warn("Local storage save error in saveStudentLead:", e);
     }
