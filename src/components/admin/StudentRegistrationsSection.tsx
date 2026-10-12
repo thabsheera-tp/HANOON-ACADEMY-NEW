@@ -38,6 +38,7 @@ import {
 import { getWhatsAppWelcomeUrl } from "@/services/paymentService";
 import { addAuditLog, clearAuditLogs } from "@/services/settingsService";
 import { sendWhatsAppAlert, getPaymentVerificationWhatsAppUrl } from "@/services/whatsappService";
+import { isSupabaseConfigured } from "@/lib/supabaseClient";
 
 interface StudentRegistrationsSectionProps {
   isSuperAdmin?: boolean;
@@ -375,6 +376,31 @@ export default function StudentRegistrationsSection({
 
   return (
     <div className="space-y-5 sm:space-y-6 w-full animate-fade-in font-['Plus_Jakarta_Sans']">
+      {/* Supabase Connection Status Banner */}
+      {!isSupabaseConfigured ? (
+        <div className="p-4 rounded-2xl bg-amber-50 border-2 border-amber-300 text-amber-950 flex items-start gap-3 shadow-xs">
+          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="text-xs space-y-1">
+            <p className="font-black text-amber-900 text-sm">
+              Offline Device-Only Mode Active (Supabase Not Connected)
+            </p>
+            <p className="text-amber-800 leading-relaxed font-medium">
+              Student records are currently saving <strong>only inside this phone&apos;s browser memory</strong>. They will <strong>NOT</strong> sync to other phones or the Super Admin dashboard until your <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> is set in your Vercel Environment Variables.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="px-4 py-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-center justify-between text-xs font-bold shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Supabase Cloud Database Connected (Multi-Device Live Sync Active)</span>
+          </div>
+          <span className="text-[10px] uppercase font-black tracking-wider text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-md border border-emerald-300">
+            Live Cloud
+          </span>
+        </div>
+      )}
+
       {/* 1. Metrics Overview Banner */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Total Registrations */}

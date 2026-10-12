@@ -170,6 +170,7 @@ CREATE TABLE IF NOT EXISTS public.payments (
 );
 
 ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS screenshot_url TEXT;
 
 -- ==============================================================================
 -- 8. TEACHERS TABLE
