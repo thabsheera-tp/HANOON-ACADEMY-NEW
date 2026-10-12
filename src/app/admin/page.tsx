@@ -45,6 +45,7 @@ import {
   Bell,
   FileUp,
   Megaphone,
+  Eye,
 } from "lucide-react";
 import {
   getCurrentSession,
@@ -634,12 +635,12 @@ export default function AdminDashboardPage() {
     <div className="min-h-screen bg-purple-50 text-slate-900 font-['Plus_Jakarta_Sans'] select-none w-full overflow-x-hidden">
       {/* Top Admin Navigation Header */}
       <header className="bg-white border-b border-purple-100 shadow-xs sticky top-0 z-40 w-full max-w-full overflow-x-hidden">
-        <div className="w-full max-w-md sm:max-w-6xl mx-auto px-4 sm:px-6 py-2.5 sm:py-3.5 flex items-center justify-between gap-1.5 sm:gap-2 min-w-0 max-w-full">
+        <div className="w-full max-w-md sm:max-w-6xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3.5 flex items-center justify-between gap-1.5 sm:gap-2 min-w-0 max-w-full">
           <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0 shrink">
             <HanoonLogo size="sm" compactMobile />
             <div className="hidden sm:block h-4 w-px bg-purple-200 shrink-0" />
             <span
-              className={`text-[9px] sm:text-[11px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 truncate ${
+              className={`text-[9px] sm:text-[11px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap ${
                 isSuperAdmin
                   ? "bg-purple-100 text-purple-800 border border-purple-200/60"
                   : "bg-emerald-100 text-emerald-800 border border-emerald-200/60"
@@ -649,20 +650,31 @@ export default function AdminDashboardPage() {
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             <span className="text-xs font-bold text-slate-600 hidden lg:inline max-w-[130px] truncate">
               {currentUser.full_name}
             </span>
+
+            {/* Student View Button */}
+            <Link
+              href="/"
+              title="Preview Student Portal"
+              className="p-1.5 sm:py-1.5 sm:px-2.5 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-[10px] sm:text-xs font-bold text-purple-800 flex items-center gap-1 cursor-pointer transition-colors shadow-2xs shrink-0"
+            >
+              <Eye className="w-3.5 h-3.5 shrink-0 text-purple-600" />
+              <span className="hidden sm:inline font-bold">Student View</span>
+            </Link>
 
             {/* Role Switcher: Live evaluation toggle between Super Admin & Verification Staff */}
             <button
               type="button"
               onClick={handleToggleRolePreview}
               title={`Switch live role preview to ${isSuperAdmin ? "Verification Staff" : "Super Admin"}`}
-              className="py-1.5 px-2 sm:px-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-[10px] sm:text-xs font-bold text-slate-700 flex items-center gap-1 cursor-pointer transition-colors shadow-2xs shrink-0"
+              className="p-1.5 sm:py-1.5 sm:px-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-[10px] sm:text-xs font-bold text-slate-700 flex items-center gap-1 cursor-pointer transition-colors shadow-2xs shrink-0"
+              aria-label={`Switch mode to ${isSuperAdmin ? "Verifier" : "Admin"}`}
             >
               <ShieldCheck className={`w-3.5 h-3.5 shrink-0 ${isSuperAdmin ? "text-purple-600" : "text-emerald-600"}`} />
-              <span className="font-extrabold text-purple-700">
+              <span className="hidden sm:inline font-extrabold text-purple-700">
                 {isSuperAdmin ? "Admin" : "Verifier"}
               </span>
             </button>
@@ -672,10 +684,11 @@ export default function AdminDashboardPage() {
               type="button"
               onClick={handleSignOut}
               title="Sign Out"
-              className="py-1.5 px-2.5 sm:px-3 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs font-bold text-rose-700 flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+              className="p-1.5 sm:py-1.5 sm:px-3 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs font-bold text-rose-700 flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+              aria-label="Sign Out"
             >
               <LogOut className="w-3.5 h-3.5 shrink-0" />
-              <span className="text-[11px] sm:text-xs font-bold">Logout</span>
+              <span className="hidden sm:inline text-xs font-bold">Logout</span>
             </button>
           </div>
         </div>

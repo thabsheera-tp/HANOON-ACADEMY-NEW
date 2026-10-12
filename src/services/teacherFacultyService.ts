@@ -110,16 +110,23 @@ export async function fetchFacultyTeachers(): Promise<FacultyTeacher[]> {
         (row: any) => !DUMMY_TEACHER_IDS.has(row.id) && !DUMMY_TEACHER_EMAILS.has(row.email)
       );
 
-      const mapped: FacultyTeacher[] = realRows.map((row: any) => ({
-        id: row.id,
-        fullName: row.full_name || "Faculty Instructor",
-        email: row.email || "",
-        specialization: row.specialization || "General Islamic Studies",
-        phone: row.phone || "",
-        ratePerClass: Number(row.rate_per_class) || 750,
-        isActive: row.is_active ?? true,
-        createdAt: row.created_at || new Date().toISOString(),
-      }));
+      const seenIds = new Set<string>();
+      const mapped: FacultyTeacher[] = [];
+      for (const row of realRows) {
+        if (row.id && !seenIds.has(row.id)) {
+          seenIds.add(row.id);
+          mapped.push({
+            id: row.id,
+            fullName: row.full_name || "Faculty Instructor",
+            email: row.email || "",
+            specialization: row.specialization || "General Islamic Studies",
+            phone: row.phone || "",
+            ratePerClass: Number(row.rate_per_class) || 750,
+            isActive: row.is_active ?? true,
+            createdAt: row.created_at || new Date().toISOString(),
+          });
+        }
+      }
 
       saveLocalFacultyTeachers(mapped);
       return mapped;
@@ -132,6 +139,9 @@ export async function fetchFacultyTeachers(): Promise<FacultyTeacher[]> {
   }
 }
 
+// In-flight guard to strictly prevent double submission and duplicate Supabase inserts
+const inFlightTeacherAdds = new Map<string, Promise<FacultyTeacher>>();
+
 /**
  * Adds a new teacher to Supabase and local storage
  */
@@ -143,62 +153,87 @@ export async function addFacultyTeacher(params: {
   ratePerClass?: number;
   isActive?: boolean;
 }): Promise<FacultyTeacher> {
-  const generatedId = `tch-${Date.now()}`;
   const cleanName = params.fullName.trim();
   const cleanSpec = params.specialization.trim();
   const cleanPhone = params.phone.trim();
-  const cleanEmail =
-    params.email?.trim() ||
-    `teacher-${cleanName.toLowerCase().replace(/[^a-z0-9]/g, "") || Date.now()}@hanoon.academy`;
-  const rate = params.ratePerClass || 750;
-  const active = params.isActive ?? true;
+  const dedupeKey = `${cleanName.toLowerCase()}_${cleanPhone.replace(/\D/g, "")}`;
 
-  const newTeacher: FacultyTeacher = {
-    id: generatedId,
-    fullName: cleanName,
-    email: cleanEmail,
-    specialization: cleanSpec,
-    phone: cleanPhone,
-    ratePerClass: rate,
-    isActive: active,
-    createdAt: new Date().toISOString(),
-  };
-
-  // 1. Update Supabase if connected
-  if (isSupabaseConfigured && supabase) {
-    try {
-      const { error } = await supabase.from("teachers").insert({
-        id: generatedId,
-        full_name: cleanName,
-        email: cleanEmail,
-        specialization: cleanSpec,
-        phone: cleanPhone,
-        rate_per_class: rate,
-        is_active: active,
-      });
-
-      if (error) {
-        console.warn("Supabase teacher insert error, saving locally:", error);
-      }
-    } catch (err) {
-      console.warn("Supabase teacher insert exception:", err);
-    }
+  if (inFlightTeacherAdds.has(dedupeKey)) {
+    return inFlightTeacherAdds.get(dedupeKey)!;
   }
 
-  // 2. Update Local Storage
-  const current = getLocalFacultyTeachers();
-  const updated = [newTeacher, ...current.filter((t) => t.id !== generatedId)];
-  saveLocalFacultyTeachers(updated);
+  const addPromise = (async () => {
+    const generatedId = `tch-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const cleanEmail =
+      params.email?.trim() ||
+      `teacher-${cleanName.toLowerCase().replace(/[^a-z0-9]/g, "") || Date.now()}@hanoon.academy`;
+    const rate = params.ratePerClass || 750;
+    const active = params.isActive ?? true;
 
-  // 3. Log audit event
-  addAuditLog({
-    actor: "Super Admin",
-    action: "Added New Faculty Instructor",
-    category: "CURRICULUM",
-    details: `Appointed ${cleanName} for course/subject "${cleanSpec}" (Phone: ${cleanPhone || "N/A"}).`,
-  });
+    const newTeacher: FacultyTeacher = {
+      id: generatedId,
+      fullName: cleanName,
+      email: cleanEmail,
+      specialization: cleanSpec,
+      phone: cleanPhone,
+      ratePerClass: rate,
+      isActive: active,
+      createdAt: new Date().toISOString(),
+    };
 
-  return newTeacher;
+    // 1. Update Supabase if connected (strictly once per submission)
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase.from("teachers").insert({
+          id: generatedId,
+          full_name: cleanName,
+          email: cleanEmail,
+          specialization: cleanSpec,
+          phone: cleanPhone,
+          rate_per_class: rate,
+          is_active: active,
+        });
+
+        if (error) {
+          console.warn("Supabase teacher insert error, saving locally:", error);
+        }
+      } catch (err) {
+        console.warn("Supabase teacher insert exception:", err);
+      }
+    }
+
+    // 2. Update Local Storage with deduplicated list
+    const current = getLocalFacultyTeachers();
+    const seen = new Set<string>([generatedId]);
+    const nextList: FacultyTeacher[] = [newTeacher];
+    for (const t of current) {
+      if (t.id && !seen.has(t.id)) {
+        seen.add(t.id);
+        nextList.push(t);
+      }
+    }
+    saveLocalFacultyTeachers(nextList);
+
+    // 3. Log audit event
+    addAuditLog({
+      actor: "Super Admin",
+      action: "Added New Faculty Instructor",
+      category: "CURRICULUM",
+      details: `Appointed ${cleanName} for course/subject "${cleanSpec}" (Phone: ${cleanPhone || "N/A"}).`,
+    });
+
+    return newTeacher;
+  })();
+
+  inFlightTeacherAdds.set(dedupeKey, addPromise);
+  try {
+    const res = await addPromise;
+    return res;
+  } finally {
+    setTimeout(() => {
+      inFlightTeacherAdds.delete(dedupeKey);
+    }, 2000);
+  }
 }
 
 /**

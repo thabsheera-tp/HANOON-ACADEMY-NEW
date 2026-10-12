@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Clock, ArrowRight, Home, ShieldCheck } from "lucide-react";
+import { Clock, ArrowRight, Home, ShieldCheck, MessageCircle } from "lucide-react";
 import HanoonLogo from "@/components/brand/HanoonLogo";
 import { checkActiveSupabaseSession } from "@/services/authService";
 
@@ -76,7 +76,7 @@ export default function PendingVerificationPage() {
 
   return (
     <div className="min-h-screen bg-purple-50/50 flex justify-center items-center sm:py-6 px-4 font-['Plus_Jakarta_Sans'] select-none">
-      <div className="w-full max-w-md bg-white text-slate-900 rounded-3xl shadow-xl border border-purple-100 p-6 flex flex-col items-center text-center space-y-5">
+      <div className="w-full max-w-md mx-auto overflow-x-hidden bg-white text-slate-900 rounded-3xl shadow-xl border border-purple-100 p-6 flex flex-col items-center text-center space-y-5">
         {/* Logo */}
         <HanoonLogo size="md" />
 
@@ -118,11 +118,23 @@ export default function PendingVerificationPage() {
         </div>
 
         {/* Action Buttons */}
-        <div className="w-full space-y-2 pt-2">
+        <div className="w-full space-y-2.5 pt-2">
+          <a
+            href={`https://wa.me/919846012345?text=${encodeURIComponent(
+              `Assalamu Alaikum Admin, I have submitted my payment for verification. Student: ${studentName}${txId ? ` (TxID: ${txId})` : ""}. Please check and approve my enrollment.`
+            )}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full py-3.5 px-4 rounded-xl font-bold text-xs text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-emerald-600/20"
+          >
+            <MessageCircle className="w-4 h-4" />
+            <span>Need Help? Contact Admin on WhatsApp</span>
+          </a>
+
           <button
             type="button"
             onClick={() => router.push("/")}
-            className="w-full py-3 px-4 rounded-xl font-bold text-xs text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+            className="w-full py-3 px-4 rounded-xl font-bold text-xs text-slate-700 bg-slate-100 hover:bg-slate-200 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
             <Home className="w-4 h-4" />
             <span>Return to Homepage</span>

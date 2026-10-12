@@ -241,7 +241,7 @@ export default function ScreenOnboarding({
                 </>
               ) : (
                 <>
-                  <span>Submit & Continue to Courses</span>
+                  <span>Submit & Continue to Course Details</span>
                   <ArrowRight className="w-4 h-4 shrink-0" />
                 </>
               )}
@@ -263,16 +263,6 @@ export default function ScreenOnboarding({
             </button>
           </div>
         )}
-        <div>
-          <button
-            type="button"
-            onClick={() => router.push("/login?portal=staff")}
-            className="text-[11px] font-semibold text-slate-500 hover:text-purple-700 transition-colors inline-flex items-center gap-1.5 cursor-pointer py-1.5 px-2"
-          >
-            <Lock className="w-3 h-3 text-purple-600" />
-            <span>Institute Staff? Login Here</span>
-          </button>
-        </div>
       </div>
     </div>
   );

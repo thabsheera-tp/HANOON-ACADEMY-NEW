@@ -161,7 +161,9 @@ export default function StudentRegistrationsSection({
 
         setRegistrations((prev) =>
           prev.map((r) =>
-            r.id === item.id ? { ...r, paymentStatus: "APPROVED" } : r
+            r.id === item.id || (item.paymentId && r.paymentId === item.paymentId)
+              ? { ...r, paymentStatus: "APPROVED" }
+              : r
           )
         );
       }
@@ -198,7 +200,9 @@ export default function StudentRegistrationsSection({
 
         setRegistrations((prev) =>
           prev.map((r) =>
-            r.id === item.id ? { ...r, paymentStatus: "REJECTED" } : r
+            r.id === item.id || (item.paymentId && r.paymentId === item.paymentId)
+              ? { ...r, paymentStatus: "REJECTED" }
+              : r
           )
         );
       }
@@ -1121,10 +1125,10 @@ export default function StudentRegistrationsSection({
                             ? "bg-emerald-100 text-emerald-800 border border-emerald-200 cursor-default"
                             : "bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white disabled:opacity-50"
                         }`}
-                        title="Approve / Mark Verified"
+                        title="Verify / Mark as Paid in Supabase"
                       >
                         <CheckCircle2 className="w-4 h-4 shrink-0" />
-                        <span className="truncate">{isProcessing ? "Processing..." : isVerified ? "Approved ✅" : "Approve ✅"}</span>
+                        <span className="truncate">{isProcessing ? "Processing..." : isVerified ? "Verified (Paid) ✓" : "Verify / Mark as Paid"}</span>
                       </button>
 
                       <button
@@ -1136,10 +1140,10 @@ export default function StudentRegistrationsSection({
                             ? "bg-rose-100 text-rose-800 border border-rose-200 cursor-default"
                             : "bg-rose-600 hover:bg-rose-700 active:scale-95 text-white disabled:opacity-50"
                         }`}
-                        title="Reject Registration"
+                        title="Reject Registration in Supabase"
                       >
                         <XCircle className="w-4 h-4 shrink-0" />
-                        <span className="truncate">{isProcessing ? "Processing..." : isRejected ? "Rejected ❌" : "Reject ❌"}</span>
+                        <span className="truncate">{isProcessing ? "Processing..." : isRejected ? "Rejected 🔴" : "Reject"}</span>
                       </button>
                     </div>
 

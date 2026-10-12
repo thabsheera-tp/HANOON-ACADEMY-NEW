@@ -214,19 +214,8 @@ export default function MobileHeader({
                 </>
               )}
             </div>
-          ) : isPending ? (
-            /* Pending Verification Status Badge for Unverified Users */
-            <div className="flex items-center">
-              <span
-                className="py-1 px-2.5 rounded-full text-[10px] font-extrabold text-amber-800 bg-amber-50 border border-amber-200/90 inline-flex items-center gap-1.5 shadow-2xs"
-                title="Your payment is submitted and pending admin verification"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
-                <span>Pending Verification</span>
-              </span>
-            </div>
           ) : (
-            /* Clean Public / Guest Header (Direct WhatsApp Support) */
+            /* Clean Support Link for Unpaid / Unverified Users (No Avatar or Badge in Header) */
             <div className="flex items-center">
               <a
                 href="https://wa.me/919846012345?text=Assalamu%20Alaikum%20Admin,%20I%20need%20help%20with%20Hanoon%20Academy."

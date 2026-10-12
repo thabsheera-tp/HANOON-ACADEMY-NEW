@@ -239,7 +239,7 @@ export default function ScreenDashboard({
   };
 
   return (
-    <div className="w-full max-w-md mx-auto px-4 py-3 flex-1 flex flex-col justify-start space-y-3.5 select-none font-['Plus_Jakarta_Sans'] bg-purple-50/30 text-slate-900">
+    <div className="w-full max-w-md mx-auto overflow-x-hidden px-4 py-3 flex-1 flex flex-col justify-start space-y-3.5 select-none font-['Plus_Jakarta_Sans'] bg-purple-50/30 text-slate-900">
       {/* 1. TOP PROFILE BAR (Compact, Modern) */}
       <div className="flex items-center justify-between pt-0.5">
         <div className="flex items-center gap-2.5">

@@ -543,11 +543,11 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     }
   };
 
-  const handleSaveProfileAndProceed = (profile?: UserProfile) => {
+  const handleSaveProfileAndProceed = async (profile?: UserProfile) => {
     if (profile) {
-      setUserProfile(profile);
+      await handleSaveProfile(profile);
     }
-    setCurrentScreen("courses");
+    setCurrentScreen("course-details");
   };
 
   // Step 4 -> Step 5

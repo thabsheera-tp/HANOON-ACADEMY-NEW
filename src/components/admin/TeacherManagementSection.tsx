@@ -75,6 +75,17 @@ export default function TeacherManagementSection({
     type: "success" | "error";
   } | null>(null);
 
+  // Deduplicate teachers helper based on unique ID
+  const deduplicateFaculty = (list: FacultyTeacher[]): FacultyTeacher[] => {
+    const seen = new Set<string>();
+    return list.filter((t) => {
+      if (!t || !t.id) return false;
+      if (seen.has(t.id)) return false;
+      seen.add(t.id);
+      return true;
+    });
+  };
+
   // Load teachers on mount
   useEffect(() => {
     let isMounted = true;
@@ -82,7 +93,7 @@ export default function TeacherManagementSection({
       setLoading(true);
       try {
         const data = await fetchFacultyTeachers();
-        if (isMounted) setTeachers(data);
+        if (isMounted) setTeachers(deduplicateFaculty(data));
       } catch (err) {
         console.error("Failed to load teachers:", err);
       } finally {
@@ -92,7 +103,7 @@ export default function TeacherManagementSection({
     load();
 
     const unsubscribe = subscribeToFacultyTeachers((updated) => {
-      if (isMounted) setTeachers(updated);
+      if (isMounted) setTeachers(deduplicateFaculty(updated));
     });
 
     return () => {
@@ -135,6 +146,8 @@ export default function TeacherManagementSection({
 
   const handleSubmitForm = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     if (!fullName.trim()) {
       setFormError("Please enter the teacher's full name.");
       return;
@@ -170,7 +183,7 @@ export default function TeacherManagementSection({
 
         if (updated) {
           setTeachers((prev) =>
-            prev.map((t) => (t.id === editingTeacher.id ? updated : t))
+            deduplicateFaculty(prev.map((t) => (t.id === editingTeacher.id ? updated : t)))
           );
         }
 
@@ -188,7 +201,7 @@ export default function TeacherManagementSection({
           ratePerClass: Number(ratePerClass) || 750,
         });
 
-        setTeachers((prev) => [added, ...prev]);
+        setTeachers((prev) => deduplicateFaculty([added, ...prev]));
         setFeedback({
           message: `Successfully appointed instructor "${fullName.trim()}".`,
           type: "success",
@@ -250,7 +263,7 @@ export default function TeacherManagementSection({
   };
 
   // Filtered teachers
-  const filteredTeachers = teachers.filter((teacher) => {
+  const filteredTeachers = deduplicateFaculty(teachers).filter((teacher) => {
     const matchesSearch =
       teacher.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       teacher.specialization.toLowerCase().includes(searchQuery.toLowerCase()) ||
