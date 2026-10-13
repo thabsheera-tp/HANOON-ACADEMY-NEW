@@ -89,6 +89,8 @@ export default function MobileHeader({
         return "Student Registration";
       case "payment":
         return "UPI Fee Payment";
+      case "pending-verification":
+        return "Payment Under Review";
       case "dashboard":
         return "Student Dashboard";
       default:

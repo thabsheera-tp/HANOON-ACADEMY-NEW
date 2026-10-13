@@ -24,7 +24,7 @@ export default function PendingVerificationPage() {
         // Check if there is local pending payment record from student checkout
         const pendingRaw = localStorage.getItem("hanoon_pending_payment");
         if (!pendingRaw) {
-          router.replace("/login?portal=staff");
+          router.replace("/");
           return;
         }
       } else {

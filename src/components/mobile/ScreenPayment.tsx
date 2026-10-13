@@ -591,7 +591,7 @@ export default function ScreenPayment({
                   try {
                     localStorage.removeItem("hanoon_pending_payment");
                   } catch {}
-                  router.push("/#courses");
+                  router.push("/");
                 }}
                 className="text-[11px] font-bold text-slate-500 hover:text-purple-700 underline cursor-pointer"
               >

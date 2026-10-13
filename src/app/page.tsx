@@ -9,6 +9,7 @@ import ScreenCoursesList, { SHOWCASE_COURSES } from "@/components/mobile/ScreenC
 import ScreenCourseDetails from "@/components/mobile/ScreenCourseDetails";
 import ScreenOnboarding from "@/components/mobile/ScreenOnboarding";
 import ScreenPayment from "@/components/mobile/ScreenPayment";
+import ScreenPendingVerification from "@/components/mobile/ScreenPendingVerification";
 import ScreenDashboard from "@/components/mobile/ScreenDashboard";
 import ReceiptModal from "@/components/mobile/ReceiptModal";
 import StudentRegisterModal from "@/components/mobile/StudentRegisterModal";
@@ -33,19 +34,21 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
   // Screen 1: "splash" -> Welcome Landing Page with Hanoon Academy Logo and Get Started button
   // Screen 2: "onboarding" -> Student Onboarding / Auth Form (Name, Phone, Place, Age)
   // Screen 3: "courses" & "course-details" -> Course Exploration & Selection
-  // Screen 4: "payment" (unpaid) -> Direct UPI Payment (QR code, UPI ID, TxID form)
-  // Screen 5: "payment" (pending) -> Verification Pending ("Payment Under Review")
+  // Screen 4: "payment" -> Direct UPI Payment (QR code, UPI ID, TxID form)
+  // Screen 5: "pending-verification" -> Verification Pending ("Payment Under Review")
   const [currentScreen, setCurrentScreen] = useState<ScreenTab>(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const targetScreen = params.get("screen") as ScreenTab;
-      if (targetScreen) return targetScreen;
+      if (targetScreen) {
+        if (targetScreen === "pending-verification") return "pending-verification";
+        if (targetScreen === "payment") return "payment";
+        if (targetScreen === "courses" || targetScreen === "course-details") {
+          return targetScreen;
+        }
+      }
     }
-    // If user arrived from login or already has a profile saved, start on course-details
-    if (initialUser?.full_name) {
-      return "course-details";
-    }
-    // Screen 1 (Welcome Landing Page): Visitors land on Welcome Splash Screen
+    // Screen 1 (Welcome Landing Page): Visitors strictly land on Welcome Splash Screen
     return "splash";
   });
   const [accessNotice, setAccessNotice] = useState<string | null>(null);
@@ -559,7 +562,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     setCurrentScreen("payment");
   };
 
-  // Step 5 -> Verification Submitted ("Payment Under Review")
+  // Step 4 -> Step 5: Advance to Verification Submitted ("Payment Under Review")
   const handleSubmitPayment = (txId: string, paymentId?: string, screenshotUrl?: string) => {
     const updatedDetails: PaymentDetails = {
       upiTxId: txId,
@@ -587,12 +590,13 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
       localStorage.setItem("hanoon_pending_payment", JSON.stringify(pendingRecord));
     }
 
-    // Keep student on pending verification screen without kicking them out
-    setCurrentScreen("payment");
+    // Advance directly to Screen 5: Dedicated "Payment Under Review" state
+    setCurrentScreen("pending-verification");
   };
 
   const handleBack = () => {
     if (currentScreen === "dashboard") setCurrentScreen("courses");
+    else if (currentScreen === "pending-verification") setCurrentScreen("courses");
     else if (currentScreen === "payment") setCurrentScreen("course-details");
     else if (currentScreen === "course-details") setCurrentScreen("courses");
     else if (currentScreen === "courses") setCurrentScreen("onboarding");
@@ -604,20 +608,25 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     paymentDetails.status === "verified" ||
     (paymentDetails.status as string) === "APPROVED" ||
     (paymentDetails.status as string) === "ACTIVE";
-  const hasPaymentSubmitted = paymentDetails.status === "pending_verification";
+  const hasPaymentSubmitted =
+    paymentDetails.status === "pending_verification" || currentScreen === "pending-verification";
 
-  // Route Guard: Screen 4 (Payment) requires student details
+  // Route Guard: Screen 3 (Courses / Course Details) and Screen 4 (Payment) REQUIRE Student Details (Screen 2)
   useEffect(() => {
-    if (currentScreen === "payment" && !hasPaymentSubmitted && (!userProfile.name || !userProfile.phone)) {
+    const hasStudentDetails = Boolean(userProfile.name?.trim() && userProfile.phone?.trim() && userProfile.place?.trim());
+    if (
+      (currentScreen === "courses" || currentScreen === "course-details" || currentScreen === "payment") &&
+      !hasStudentDetails
+    ) {
       setCurrentScreen("onboarding");
     }
-  }, [currentScreen, hasPaymentSubmitted, userProfile.name, userProfile.phone]);
+  }, [currentScreen, userProfile.name, userProfile.phone, userProfile.place]);
 
   // Route Guard: Restrict Dashboard access strictly to APPROVED / ACTIVE students
   useEffect(() => {
     if (currentScreen === "dashboard" && !isEnrolled) {
       if (hasPaymentSubmitted || paymentDetails.status === "pending_verification") {
-        setCurrentScreen("payment");
+        setCurrentScreen("pending-verification");
       } else {
         setAccessNotice("Please complete enrollment to access your dashboard.");
         setCurrentScreen("course-details");
@@ -626,7 +635,16 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
   }, [currentScreen, isEnrolled, hasPaymentSubmitted, paymentDetails.status]);
 
   const handleSelectScreen = (screen: ScreenTab) => {
+    const hasStudentDetails = Boolean(userProfile.name?.trim() && userProfile.phone?.trim() && userProfile.place?.trim());
+    if ((screen === "courses" || screen === "course-details" || screen === "payment") && !hasStudentDetails) {
+      setCurrentScreen("onboarding");
+      return;
+    }
     if (screen === "dashboard" && !isEnrolled) {
+      if (hasPaymentSubmitted) {
+        setCurrentScreen("pending-verification");
+        return;
+      }
       setAccessNotice("Please complete enrollment to access your dashboard.");
       setCurrentScreen("course-details");
       return;
@@ -672,23 +690,16 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
 
         {/* Scrollable Viewport */}
         <div className="flex-1 overflow-y-auto flex flex-col relative z-10 bg-white">
-          {/* Step 1: Welcome Screen (Ultra-minimalist branding & "Get Started" button) */}
+          {/* Screen 1: Welcome Screen (Logo & Get Started button) */}
           {currentScreen === "splash" && (
             <ScreenSplash
               onGetStarted={() => {
-                if (userProfile.name && userProfile.phone) {
-                  setCurrentScreen("courses");
-                } else {
-                  setCurrentScreen("onboarding");
-                }
-              }}
-              onExploreCourses={() => {
-                setCurrentScreen("courses");
+                setCurrentScreen("onboarding");
               }}
             />
           )}
 
-          {/* Step 2: Student Onboarding / Auth Form */}
+          {/* Screen 2: Student Onboarding (Student Details: Name, Phone, Place, Age) */}
           {currentScreen === "onboarding" && (
             <ScreenOnboarding
               userProfile={userProfile}
@@ -699,12 +710,12 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
             />
           )}
 
-          {/* Step 3: Course Selection View */}
+          {/* Screen 3: Course Catalog / Selection View */}
           {currentScreen === "courses" && (
             <ScreenCoursesList onSelectCourse={handleSelectCourse} />
           )}
 
-          {/* Step 3 (Detail): Course Details & Pricing Sheet */}
+          {/* Screen 3 (Detail): Course Details & Pricing Sheet */}
           {currentScreen === "course-details" && (
             <ScreenCourseDetails
               selectedCourse={selectedCourse}
@@ -716,8 +727,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
             />
           )}
 
-
-          {/* Step 5: Manual UPI Payment Screen */}
+          {/* Screen 4: Manual UPI Payment Screen */}
           {currentScreen === "payment" && (
             <ScreenPayment
               userProfile={userProfile}
@@ -730,7 +740,19 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
             />
           )}
 
-          {/* Step 6: Student Dashboard & Profile View (Strictly gated for APPROVED/ACTIVE students) */}
+          {/* Screen 5: Pending Verification ("Payment Under Review" state) */}
+          {currentScreen === "pending-verification" && (
+            <ScreenPendingVerification
+              userProfile={userProfile}
+              selectedCourse={selectedCourse}
+              paymentDetails={paymentDetails}
+              onGoToCourses={() => setCurrentScreen("courses")}
+              onGoToDashboard={() => handleSelectScreen("dashboard")}
+              onReuploadPayment={() => setCurrentScreen("payment")}
+            />
+          )}
+
+          {/* Gated Post-Enrollment: Student Dashboard (Strictly gated for APPROVED/ACTIVE students) */}
           {currentScreen === "dashboard" && isEnrolled && (
             <ScreenDashboard
               userProfile={userProfile}

@@ -63,9 +63,9 @@ export default function MobileBottomNav({
           {isPendingVerification && (
             <button
               type="button"
-              onClick={() => onChangeScreen("payment")}
+              onClick={() => onChangeScreen("pending-verification")}
               className={`flex items-center justify-center gap-2 py-2 px-4 rounded-full transition-all cursor-pointer ${
-                currentScreen === "payment"
+                currentScreen === "pending-verification"
                   ? "bg-amber-600 text-white shadow-xs font-bold"
                   : "text-amber-800 bg-amber-50 hover:bg-amber-100 font-semibold"
               }`}

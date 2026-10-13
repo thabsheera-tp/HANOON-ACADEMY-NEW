@@ -32,8 +32,9 @@ export interface PaymentDetails {
 
 export type ScreenTab =
   | "splash"
+  | "onboarding"
   | "courses"
   | "course-details"
-  | "onboarding"
   | "payment"
+  | "pending-verification"
   | "dashboard";

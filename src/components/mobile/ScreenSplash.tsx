@@ -22,12 +22,6 @@ export default function ScreenSplash({
   const handleGetStarted = () => {
     if (onGetStarted) {
       onGetStarted();
-    } else if (onExploreCourses) {
-      onExploreCourses();
-    } else if (onEnterPortal) {
-      onEnterPortal();
-    } else {
-      router.push("/#courses");
     }
   };
 

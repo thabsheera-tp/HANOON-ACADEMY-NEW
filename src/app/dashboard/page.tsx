@@ -109,7 +109,7 @@ export default function DashboardRouteGuardPage() {
       // Gracefully direct pending students to the Pending Verification screen, NEVER kick out
       if (!isApproved) {
         if (isPending) {
-          router.replace("/student?screen=payment");
+          router.replace("/student?screen=pending-verification");
           return;
         }
         const noticeParam = encodeURIComponent("Please complete enrollment to access your dashboard.");

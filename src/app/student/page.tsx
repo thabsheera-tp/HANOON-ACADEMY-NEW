@@ -22,7 +22,7 @@ export default function StudentPage() {
       if (!isMounted) return;
 
       if (!session || !session.user) {
-        router.replace("/login");
+        router.replace("/");
         return;
       }
 
