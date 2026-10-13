@@ -75,7 +75,7 @@ export default function MobileHeader({
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
-  if (currentScreen === "splash") {
+  if (currentScreen === "splash" || currentScreen === "onboarding") {
     return null;
   }
 
@@ -85,8 +85,6 @@ export default function MobileHeader({
         return "Courses";
       case "course-details":
         return "Course Details";
-      case "onboarding":
-        return "Student Registration";
       case "payment":
         return "UPI Fee Payment";
       case "pending-verification":

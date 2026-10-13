@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { User, Phone, MapPin, Calendar, Lock, ArrowRight, RefreshCw } from "lucide-react";
+import { User, Phone, MapPin, Calendar, Lock, ArrowRight, RefreshCw, MessageCircle } from "lucide-react";
 import { UserProfile, SelectedCourse } from "@/types/app";
+import { getAppSettings, formatWhatsAppLink } from "@/services/settingsService";
 
 interface ScreenOnboardingProps {
   userProfile: UserProfile;
@@ -86,6 +87,15 @@ export default function ScreenOnboarding({
       setError("Please enter your Student Full Name.");
       return;
     }
+    if (!age.trim()) {
+      setError("Please enter your Age.");
+      return;
+    }
+    const ageNum = parseInt(age.trim(), 10);
+    if (isNaN(ageNum) || ageNum < 3 || ageNum > 100) {
+      setError("Please enter a valid age between 3 and 100.");
+      return;
+    }
     const cleanDigits = phone.replace(/\D/g, "");
     if (!cleanDigits || cleanDigits.length < 10) {
       setError("Please enter a valid 10-digit WhatsApp or mobile number.");
@@ -94,14 +104,6 @@ export default function ScreenOnboarding({
     if (!place.trim()) {
       setError("Please enter your Place & District.");
       return;
-    }
-
-    if (age.trim()) {
-      const ageNum = parseInt(age.trim(), 10);
-      if (isNaN(ageNum) || ageNum < 3 || ageNum > 100) {
-        setError("Please enter a valid age between 3 and 100.");
-        return;
-      }
     }
 
     setError(null);
@@ -134,17 +136,11 @@ export default function ScreenOnboarding({
   return (
     <div className="w-full max-w-md mx-auto px-4 sm:px-6 py-5 flex-1 flex flex-col justify-between select-none font-['Plus_Jakarta_Sans'] bg-white">
       <div className="space-y-4">
-        {/* Mobile Header Banner */}
+        {/* Header Title: Student Details */}
         <div className="pt-1 pb-1">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-100/90 text-purple-700 text-xs font-bold mb-2">
-            <span>Student Registration</span>
-          </div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight leading-tight">
-            Enter Student Details
+            Student Details
           </h1>
-          <p className="text-xs text-slate-500 font-medium mt-1">
-            Fill in your basic details once to explore all courses and programs.
-          </p>
         </div>
 
         {/* Validation Error Notice */}
@@ -156,7 +152,7 @@ export default function ScreenOnboarding({
 
         {/* Mobile-First Form Fields */}
         <form onSubmit={handleSubmit} className="space-y-3.5 pt-1">
-          {/* Field 1: Student Full Name */}
+          {/* Field 1: Student Full Name * */}
           <div className="space-y-1.5">
             <label className="text-xs font-extrabold text-slate-700 block">
               Student Full Name <span className="text-rose-500">*</span>
@@ -167,7 +163,7 @@ export default function ScreenOnboarding({
                 type="text"
                 required
                 autoComplete="name"
-                placeholder="Enter student full name"
+                placeholder="e.g. Fathima Zahra"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 sm:py-3.5 min-h-[48px] rounded-2xl bg-purple-50/40 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-base sm:text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-semibold focus:ring-4 focus:ring-purple-500/10"
@@ -175,7 +171,28 @@ export default function ScreenOnboarding({
             </div>
           </div>
 
-          {/* Field 2: WhatsApp / Mobile Number */}
+          {/* Field 2: Age * (Placeholder: e.g. 14) */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-extrabold text-slate-700 block">
+              Age <span className="text-rose-500">*</span>
+            </label>
+            <div className="relative w-32 sm:w-36">
+              <Calendar className="w-4 h-4 text-purple-600 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="number"
+                inputMode="numeric"
+                required
+                min="3"
+                max="100"
+                placeholder="e.g. 14"
+                value={age}
+                onChange={(e) => setAge(e.target.value)}
+                className="w-full pl-10 pr-3 py-3 sm:py-3.5 min-h-[48px] rounded-2xl bg-purple-50/40 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-base sm:text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-semibold focus:ring-4 focus:ring-purple-500/10"
+              />
+            </div>
+          </div>
+
+          {/* Field 3: WhatsApp / Mobile Number * */}
           <div className="space-y-1.5">
             <label className="text-xs font-extrabold text-slate-700 block">
               WhatsApp / Mobile Number <span className="text-rose-500">*</span>
@@ -195,7 +212,7 @@ export default function ScreenOnboarding({
             </div>
           </div>
 
-          {/* Field 3: Place & District */}
+          {/* Field 4: Place & District * */}
           <div className="space-y-1.5">
             <label className="text-xs font-extrabold text-slate-700 block">
               Place & District <span className="text-rose-500">*</span>
@@ -214,32 +231,12 @@ export default function ScreenOnboarding({
             </div>
           </div>
 
-          {/* Field 4: Age (Optional) */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-extrabold text-slate-700 block">
-              Age <span className="text-slate-400 font-normal">(Optional)</span>
-            </label>
-            <div className="relative w-40">
-              <Calendar className="w-4 h-4 text-purple-600 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="number"
-                inputMode="numeric"
-                min="3"
-                max="100"
-                placeholder="e.g. 18"
-                value={age}
-                onChange={(e) => setAge(e.target.value)}
-                className="w-full pl-10 pr-3 py-3 sm:py-3.5 min-h-[48px] rounded-2xl bg-purple-50/40 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-base sm:text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-semibold focus:ring-4 focus:ring-purple-500/10"
-              />
-            </div>
-          </div>
-
-          {/* Full-Width Mobile Action CTA Button */}
-          <div className="pt-3">
+          {/* Full-Width Action CTA Button */}
+          <div className="pt-2">
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full py-4 px-6 rounded-2xl font-black text-sm text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 active:scale-[0.98] shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer min-h-[52px] disabled:opacity-60 disabled:cursor-not-allowed"
+              className="w-full py-4 px-6 rounded-2xl font-bold text-sm text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-md shadow-purple-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer min-h-[50px] disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {isSubmitting ? (
                 <>
@@ -247,29 +244,52 @@ export default function ScreenOnboarding({
                   <span>Saving details...</span>
                 </>
               ) : (
-                <>
-                  <span>Save & Explore Courses</span>
-                  <ArrowRight className="w-4 h-4 shrink-0" />
-                </>
+                <span>Proceed to Enrollment →</span>
               )}
             </button>
           </div>
         </form>
-      </div>
 
-      {/* Mobile Footer Links */}
-      <div className="text-center pt-6 pb-2 space-y-3">
-        {(onBackToHome || onBackToCourse) && (
+        {/* Bottom Links Directly Below Button */}
+        <div className="text-center pt-3 pb-2 space-y-2.5">
+          {/* Link 1: Institute Staff? Login Here */}
           <div>
             <button
               type="button"
-              onClick={onBackToHome || onBackToCourse}
-              className="text-xs font-bold text-purple-600 hover:text-purple-700 py-1.5 px-3 rounded-lg hover:bg-purple-50 transition-colors cursor-pointer"
+              onClick={() => router.push("/login?portal=staff")}
+              className="text-xs font-semibold text-slate-500 hover:text-purple-700 transition-colors inline-flex items-center gap-1.5 cursor-pointer py-1"
             >
-              ← Back to Home
+              <span>Institute Staff? Login Here</span>
             </button>
           </div>
-        )}
+
+          {/* Link 2: ← Return to Home / Course Catalog */}
+          <div>
+            <button
+              type="button"
+              onClick={onBackToHome || (() => router.push("/"))}
+              className="text-xs font-bold text-purple-600 hover:text-purple-700 transition-colors inline-flex items-center gap-1 cursor-pointer py-1"
+            >
+              <span>← Return to Home / Course Catalog</span>
+            </button>
+          </div>
+
+          {/* Link 3: Need Help? Chat with Admin on WhatsApp */}
+          <div>
+            <a
+              href={formatWhatsAppLink(
+                getAppSettings().contactWhatsApp,
+                "Assalamu Alaikum Admin, I need assistance with registration/enrollment at Hanoon Academy."
+              )}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11.5px] font-semibold text-slate-500 hover:text-emerald-700 transition-colors inline-flex items-center gap-1.5 cursor-pointer py-1"
+            >
+              <MessageCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>Need Help? Chat with Admin on WhatsApp</span>
+            </a>
+          </div>
+        </div>
       </div>
     </div>
   );

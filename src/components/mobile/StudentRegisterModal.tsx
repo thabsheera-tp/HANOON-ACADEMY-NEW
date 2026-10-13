@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
   X,
   User,
@@ -9,8 +10,10 @@ import {
   Calendar,
   ArrowRight,
   RefreshCw,
+  MessageCircle,
 } from "lucide-react";
 import { UserProfile } from "@/types/app";
+import { getAppSettings, formatWhatsAppLink } from "@/services/settingsService";
 
 export const REGISTRATION_COURSE_OPTIONS = [
   {
@@ -64,6 +67,7 @@ export default function StudentRegisterModal({
   initialProfile = { name: "", phone: "", place: "" },
   selectedCourseId = "adaviyya",
 }: StudentRegisterModalProps) {
+  const router = useRouter();
   const initialName = isStaffOrOfficer(initialProfile.name) ? "" : initialProfile.name || "";
   const initialPlace = isStaffOrOfficer(initialProfile.name) ? "" : initialProfile.place || "";
 
@@ -96,6 +100,15 @@ export default function StudentRegisterModal({
       setError("Please enter your Student Full Name.");
       return;
     }
+    if (!age.trim()) {
+      setError("Please enter your Age.");
+      return;
+    }
+    const ageNum = parseInt(age.trim(), 10);
+    if (isNaN(ageNum) || ageNum < 3 || ageNum > 100) {
+      setError("Please enter a valid age between 3 and 100.");
+      return;
+    }
     const cleanDigits = phone.replace(/\D/g, "");
     if (!cleanDigits || cleanDigits.length < 10) {
       setError("Please enter a valid 10-digit WhatsApp or mobile number.");
@@ -104,14 +117,6 @@ export default function StudentRegisterModal({
     if (!place.trim()) {
       setError("Please enter your Place & District.");
       return;
-    }
-
-    if (age.trim()) {
-      const ageNum = parseInt(age.trim(), 10);
-      if (isNaN(ageNum) || ageNum < 3 || ageNum > 100) {
-        setError("Please enter a valid age between 3 and 100.");
-        return;
-      }
     }
 
     setError(null);
@@ -148,11 +153,8 @@ export default function StudentRegisterModal({
         {/* Modal Header */}
         <div className="mb-4 pr-6">
           <h2 className="text-xl font-black text-slate-900 tracking-tight">
-            Student Registration
+            Student Details
           </h2>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Please fill in your details to continue.
-          </p>
         </div>
 
         {error && (
@@ -180,7 +182,28 @@ export default function StudentRegisterModal({
             </div>
           </div>
 
-          {/* Field 2: WhatsApp / Mobile Number * */}
+          {/* Field 2: Age * (Placeholder: e.g. 14) */}
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-700 block">
+              Age <span className="text-rose-500">*</span>
+            </label>
+            <div className="relative w-32 sm:w-36">
+              <Calendar className="w-4 h-4 text-purple-600 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="number"
+                inputMode="numeric"
+                required
+                min="3"
+                max="100"
+                placeholder="e.g. 14"
+                value={age}
+                onChange={(e) => setAge(e.target.value)}
+                className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-semibold"
+              />
+            </div>
+          </div>
+
+          {/* Field 3: WhatsApp / Mobile Number * */}
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-700 block">
               WhatsApp / Mobile Number <span className="text-rose-500">*</span>
@@ -189,16 +212,17 @@ export default function StudentRegisterModal({
               <Phone className="w-4 h-4 text-purple-600 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="tel"
+                inputMode="tel"
                 required
                 placeholder="e.g. 9846012345"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-semibold"
+                onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-semibold font-mono"
               />
             </div>
           </div>
 
-          {/* Field 3: Place & District * */}
+          {/* Field 4: Place & District * */}
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-700 block">
               Place & District <span className="text-rose-500">*</span>
@@ -216,26 +240,7 @@ export default function StudentRegisterModal({
             </div>
           </div>
 
-          {/* Field 4: Age (Optional) */}
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-700 block">
-              Age <span className="text-slate-400 font-normal">(Optional)</span>
-            </label>
-            <div className="relative w-36">
-              <Calendar className="w-4 h-4 text-purple-600 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="number"
-                min="3"
-                max="100"
-                placeholder="e.g. 18"
-                value={age}
-                onChange={(e) => setAge(e.target.value)}
-                className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-semibold"
-              />
-            </div>
-          </div>
-
-          {/* Submit Button -> Next ➔ */}
+          {/* Submit Button */}
           <div className="pt-2">
             <button
               type="submit"
@@ -248,14 +253,55 @@ export default function StudentRegisterModal({
                   <span>Submitting...</span>
                 </>
               ) : (
-                <>
-                  <span>Submit & Next</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
+                <span>Proceed to Enrollment →</span>
               )}
             </button>
           </div>
         </form>
+
+        {/* Bottom Links Directly Below Button */}
+        <div className="text-center pt-3 space-y-2">
+          {/* Link 1: Institute Staff? Login Here */}
+          <div>
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                router.push("/login?portal=staff");
+              }}
+              className="text-xs font-semibold text-slate-500 hover:text-purple-700 transition-colors inline-flex items-center gap-1.5 cursor-pointer py-1"
+            >
+              <span>Institute Staff? Login Here</span>
+            </button>
+          </div>
+
+          {/* Link 2: ← Return to Home / Course Catalog */}
+          <div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-xs font-bold text-purple-600 hover:text-purple-700 transition-colors inline-flex items-center gap-1 cursor-pointer py-1"
+            >
+              <span>← Return to Home / Course Catalog</span>
+            </button>
+          </div>
+
+          {/* Link 3: Need Help? Chat with Admin on WhatsApp */}
+          <div>
+            <a
+              href={formatWhatsAppLink(
+                getAppSettings().contactWhatsApp,
+                "Assalamu Alaikum Admin, I need assistance with registration/enrollment at Hanoon Academy."
+              )}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11.5px] font-semibold text-slate-500 hover:text-emerald-700 transition-colors inline-flex items-center gap-1.5 cursor-pointer py-1"
+            >
+              <MessageCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>Need Help? Chat with Admin on WhatsApp</span>
+            </a>
+          </div>
+        </div>
       </div>
     </div>
   );
