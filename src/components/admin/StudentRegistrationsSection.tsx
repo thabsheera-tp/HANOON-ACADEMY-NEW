@@ -901,9 +901,16 @@ export default function StudentRegistrationsSection({
                             <span className="font-extrabold text-slate-900 block leading-tight">
                               {item.fullName}
                             </span>
-                            <span className="text-[10px] text-slate-400 font-medium">
-                              ₹{item.amount?.toLocaleString("en-IN") || "1,500"}
-                            </span>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[10px] text-purple-700 font-bold">
+                                ₹{item.amount?.toLocaleString("en-IN") || "1,500"}
+                              </span>
+                              {item.upiTxId && item.upiTxId !== "Pending Verification" && (
+                                <span className="text-[10px] text-slate-400 font-mono" title={item.upiTxId}>
+                                  Tx: {item.upiTxId.length > 12 ? `${item.upiTxId.slice(0, 10)}...` : item.upiTxId}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -961,6 +968,25 @@ export default function StudentRegistrationsSection({
                           <div className="text-[10px] text-slate-400 italic flex items-center gap-1.5 py-1">
                             <ImageIcon className="w-3.5 h-3.5 text-slate-300 shrink-0" />
                             <span>No screenshot</span>
+                          </div>
+                        )}
+                        {item.upiTxId && item.upiTxId !== "Pending Verification" && item.upiTxId !== "Pending Payment" && (
+                          <div className="mt-1 flex items-center gap-1 text-[10px] font-mono text-slate-500">
+                            <span className="truncate max-w-[100px]" title={item.upiTxId}>
+                              {item.upiTxId}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(item.upiTxId)}
+                              className="text-purple-600 hover:text-purple-800 p-0.5 rounded cursor-pointer transition-colors"
+                              title="Copy Transaction ID"
+                            >
+                              {copiedUtr === item.upiTxId ? (
+                                <Check className="w-2.5 h-2.5 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-2.5 h-2.5" />
+                              )}
+                            </button>
                           </div>
                         )}
                       </td>
@@ -1211,6 +1237,16 @@ export default function StudentRegistrationsSection({
                       <span>{item.whatsappNum}</span>
                     </a>
                   </div>
+
+                  {/* Payment TxID Badge */}
+                  {item.upiTxId && (
+                    <div className="flex items-center justify-between text-[11px] font-mono bg-purple-50/50 px-2.5 py-1.5 rounded-xl border border-purple-100">
+                      <span className="text-slate-400 font-sans font-medium text-[10px]">TxID / UTR:</span>
+                      <span className="font-bold text-slate-800 truncate max-w-[170px]" title={item.upiTxId}>
+                        {item.upiTxId}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Uploaded Screenshot Thumbnail Section */}
                   {item.screenshotUrl ? (

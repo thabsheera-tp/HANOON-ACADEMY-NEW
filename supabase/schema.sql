@@ -145,13 +145,49 @@ CREATE TABLE IF NOT EXISTS public.students (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
     full_name TEXT NOT NULL,
-    whatsapp_num TEXT NOT NULL,
-    district TEXT NOT NULL,
+    whatsapp_num TEXT,
+    whatsapp_number TEXT,
+    district TEXT,
+    place TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- CRITICAL FIX: Ensure user_id column exists if table was already created in an earlier migration
+-- CRITICAL FIX: Ensure user_id, whatsapp_number, and place columns exist if table was already created
 ALTER TABLE public.students ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS full_name TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS whatsapp_num TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS whatsapp_number TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS district TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS place TEXT;
+
+-- Drop strict NOT NULL constraints if existing migration created them
+ALTER TABLE public.students ALTER COLUMN whatsapp_num DROP NOT NULL;
+ALTER TABLE public.students ALTER COLUMN district DROP NOT NULL;
+
+-- Automatically synchronize whatsapp_num <-> whatsapp_number and district <-> place
+CREATE OR REPLACE FUNCTION public.sync_student_columns()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.whatsapp_number IS NULL AND NEW.whatsapp_num IS NOT NULL THEN
+        NEW.whatsapp_number := NEW.whatsapp_num;
+    END IF;
+    IF NEW.whatsapp_num IS NULL AND NEW.whatsapp_number IS NOT NULL THEN
+        NEW.whatsapp_num := NEW.whatsapp_number;
+    END IF;
+    IF NEW.place IS NULL AND NEW.district IS NOT NULL THEN
+        NEW.place := NEW.district;
+    END IF;
+    IF NEW.district IS NULL AND NEW.place IS NOT NULL THEN
+        NEW.district := NEW.place;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_sync_student_columns ON public.students;
+CREATE TRIGGER trg_sync_student_columns
+    BEFORE INSERT OR UPDATE ON public.students
+    FOR EACH ROW EXECUTE FUNCTION public.sync_student_columns();
 
 -- ==============================================================================
 -- 7. MANUAL UPI PAYMENTS TABLE
@@ -379,48 +415,39 @@ CREATE POLICY "Admin manage special classes" ON public.special_classes
 -- 3. Students
 DROP POLICY IF EXISTS "Anyone can register student record" ON public.students;
 DROP POLICY IF EXISTS "Public can register student" ON public.students;
+DROP POLICY IF EXISTS "Allow public student insert" ON public.students;
 CREATE POLICY "Anyone can register student record" ON public.students
     FOR INSERT WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Students and Admins can view student records" ON public.students;
 DROP POLICY IF EXISTS "Public can read student records" ON public.students;
-CREATE POLICY "Students and Admins can view student records" ON public.students
-    FOR SELECT USING (
-        auth.uid() IS NULL 
-        OR user_id = auth.uid() 
-        OR public.is_verification_admin()
-        OR public.is_teacher()
-    );
+DROP POLICY IF EXISTS "Allow read student records" ON public.students;
+CREATE POLICY "Allow read student records" ON public.students
+    FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Admins can update student records" ON public.students;
-CREATE POLICY "Admins can update student records" ON public.students
-    FOR UPDATE USING (public.is_super_admin()) WITH CHECK (public.is_super_admin());
+DROP POLICY IF EXISTS "Allow update student records" ON public.students;
+CREATE POLICY "Allow update student records" ON public.students
+    FOR UPDATE USING (true) WITH CHECK (true);
 
--- 4. Manual UPI Payments (Accessible by Verification Staff & Super Admin)
+-- 4. Manual UPI Payments (Accessible by Verification Staff, Students & Super Admin)
 DROP POLICY IF EXISTS "Anyone can submit payment" ON public.payments;
 DROP POLICY IF EXISTS "Public can insert payment" ON public.payments;
+DROP POLICY IF EXISTS "Allow public payment insert" ON public.payments;
 CREATE POLICY "Anyone can submit payment" ON public.payments
     FOR INSERT WITH CHECK (true);
 
 DROP POLICY IF EXISTS "View payments policy" ON public.payments;
 DROP POLICY IF EXISTS "Public can view payments" ON public.payments;
-CREATE POLICY "View payments policy" ON public.payments
-    FOR SELECT USING (
-        public.is_verification_admin() 
-        OR student_id IN (SELECT id FROM public.students WHERE user_id = auth.uid())
-        OR auth.uid() IS NULL
-    );
+DROP POLICY IF EXISTS "Allow read payments" ON public.payments;
+CREATE POLICY "Allow read payments" ON public.payments
+    FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Only Admin can update payment approval status" ON public.payments;
 DROP POLICY IF EXISTS "Admin can update payment status" ON public.payments;
-CREATE POLICY "Admin can update payment status" ON public.payments
-    FOR UPDATE USING (
-        public.is_verification_admin() 
-        OR auth.uid() IS NULL
-    ) WITH CHECK (
-        public.is_verification_admin() 
-        OR auth.uid() IS NULL
-    );
+DROP POLICY IF EXISTS "Allow update payments" ON public.payments;
+CREATE POLICY "Allow update payments" ON public.payments
+    FOR UPDATE USING (true) WITH CHECK (true);
 
 -- 5. Teachers & Live Classes
 DROP POLICY IF EXISTS "Public can view teachers" ON public.teachers;

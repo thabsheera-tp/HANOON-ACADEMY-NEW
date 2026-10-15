@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
+import { saveOrUpdateStudentInSupabase } from "@/services/studentService";
 
 export type UserRole = "student" | "teacher" | "admin" | "super_admin" | "verification_admin";
 
@@ -195,7 +196,7 @@ export async function fetchUserLiveProfile(
       let studentRecord: any = null;
       const { data: studentById } = await supabase
         .from("students")
-        .select("id, user_id, full_name, whatsapp_num, district")
+        .select("*")
         .or(`id.eq.${userId},user_id.eq.${userId}`)
         .maybeSingle();
 
@@ -204,23 +205,39 @@ export async function fetchUserLiveProfile(
       if (!studentRecord && phone) {
         const cleanPhone = phone.replace(/\D/g, "");
         if (cleanPhone) {
-          const { data: studentByPhone } = await supabase
+          const { data: studentByPhone, error: phoneErr } = await supabase
             .from("students")
-            .select("id, user_id, full_name, whatsapp_num, district")
+            .select("*")
             .eq("whatsapp_num", cleanPhone)
             .order("created_at", { ascending: false })
             .limit(1)
             .maybeSingle();
-          studentRecord = studentByPhone;
+
+          if (!phoneErr && studentByPhone) {
+            studentRecord = studentByPhone;
+          } else {
+            const { data: studentByNumber } = await supabase
+              .from("students")
+              .select("*")
+              .eq("whatsapp_number", cleanPhone)
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (studentByNumber) studentRecord = studentByNumber;
+          }
         }
       }
 
       if (studentRecord) {
         if (studentRecord.full_name && studentRecord.full_name.trim()) {
           fullName = studentRecord.full_name.trim();
+        } else if (studentRecord.name && studentRecord.name.trim()) {
+          fullName = studentRecord.name.trim();
         }
         if (studentRecord.district) district = studentRecord.district;
+        else if (studentRecord.place) district = studentRecord.place;
         if (studentRecord.whatsapp_num) phone = studentRecord.whatsapp_num;
+        else if (studentRecord.whatsapp_number) phone = studentRecord.whatsapp_number;
       }
     } catch (err) {
       console.warn("Error fetching user live profile from Supabase:", err);
@@ -458,60 +475,25 @@ export async function loginStudentWithPhone(
   // 1. Supabase live database lookup (if configured)
   if (isSupabaseConfigured && supabase) {
     try {
-      // Look up student by phone number in 'students' table
-      const { data: existingStudent } = await supabase
-        .from("students")
-        .select(`
-          id,
-          user_id,
-          full_name,
-          whatsapp_num,
-          district,
-          created_at,
-          payments(*)
-        `)
-        .eq("whatsapp_num", cleanPhone)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      // Look up or register student in Supabase
+      const newName = fullName?.trim() || `Student ${cleanPhone.slice(-4)}`;
+      const newDistrict = district?.trim() || "Malappuram";
 
-      let studentRecord = existingStudent;
+      let studentRecord: any = await saveOrUpdateStudentInSupabase({
+        fullName: newName,
+        whatsappNum: cleanPhone,
+        district: newDistrict,
+      });
 
-      if (!studentRecord) {
-        // Automatically register new student
-        const newName = fullName?.trim() || `Student ${cleanPhone.slice(-4)}`;
-        const newDistrict = district?.trim() || "Malappuram";
+      if (studentRecord?.id) {
+        // Fetch student payments to check verification status
+        const { data: payList } = await supabase
+          .from("payments")
+          .select("*")
+          .eq("student_id", studentRecord.id)
+          .order("submitted_at", { ascending: false });
 
-        const { data: createdStudent, error: createError } = await supabase
-          .from("students")
-          .insert({
-            full_name: newName,
-            whatsapp_num: cleanPhone,
-            district: newDistrict,
-          })
-          .select()
-          .single();
-
-        if (createError) {
-          console.warn("Could not insert student into Supabase:", createError);
-        } else {
-          studentRecord = createdStudent;
-        }
-      } else if (fullName && fullName.trim() && studentRecord.full_name !== fullName.trim()) {
-        // Update existing student's name if a specific new name is provided
-        const { data: updatedStudent } = await supabase
-          .from("students")
-          .update({
-            full_name: fullName.trim(),
-            district: district?.trim() || studentRecord.district,
-          })
-          .eq("id", studentRecord.id)
-          .select(`id, user_id, full_name, whatsapp_num, district, created_at, payments(*)`)
-          .single();
-
-        if (updatedStudent) {
-          studentRecord = updatedStudent;
-        }
+        studentRecord.payments = payList || [];
       }
 
       // Check payment verification status for THIS student specifically

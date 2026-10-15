@@ -18,14 +18,36 @@ export async function fetchPayments(): Promise<DbPayment[]> {
       let rawPayments: any[] | null = null;
       let payFetchError: any = null;
 
-      // 1. Try relational query
-      const { data, error } = await supabase
+      // 1. Try relational query joining students table (e.g. students(full_name, whatsapp_number))
+      let { data, error } = await supabase
         .from("payments")
         .select(`
           *,
-          student:students(*)
+          students (
+            id,
+            full_name,
+            whatsapp_number,
+            whatsapp_num,
+            district,
+            place
+          )
         `)
         .order("submitted_at", { ascending: false });
+
+      if (error) {
+        // Fallback: Try with alias student:students(*)
+        const res2 = await supabase
+          .from("payments")
+          .select(`
+            *,
+            student:students(*)
+          `)
+          .order("submitted_at", { ascending: false });
+        if (!res2.error && res2.data) {
+          data = res2.data;
+          error = null;
+        }
+      }
 
       if (!error && data) {
         rawPayments = data;
@@ -67,7 +89,7 @@ export async function fetchPayments(): Promise<DbPayment[]> {
           for (const s of stdRes.data) {
             if (s.id) studentMap.set(s.id, s);
             if (s.user_id) studentMap.set(s.user_id, s);
-            const p = (s.whatsapp_num || "").replace(/\D/g, "");
+            const p = (s.whatsapp_number || s.whatsapp_num || s.phone || "").replace(/\D/g, "");
             if (p) studentMap.set(p.slice(-10), s);
           }
         }
@@ -77,24 +99,63 @@ export async function fetchPayments(): Promise<DbPayment[]> {
               studentMap.set(pr.id, {
                 id: pr.id,
                 full_name: pr.full_name || pr.email?.split("@")[0] || "Registered Student",
-                whatsapp_num: pr.whatsapp_num || "",
-                district: pr.district || "Kerala",
+                whatsapp_num: pr.whatsapp_num || pr.whatsapp_number || "",
+                district: pr.district || pr.place || "Kerala",
               });
             }
           }
         }
 
         const enriched: DbPayment[] = rawPayments.map((p) => {
-          let student = p.student;
-          if (!student || !student.full_name) {
-            student =
-              studentMap.get(p.student_id) ||
-              (p.whatsapp_num ? studentMap.get(p.whatsapp_num.replace(/\D/g, "").slice(-10)) : null) ||
-              null;
-          }
+          const rawStudent = (p as any).students
+            ? (Array.isArray((p as any).students) ? (p as any).students[0] : (p as any).students)
+            : p.student;
+
+          const payPhone = ((p as any).whatsapp_number || (p as any).whatsapp_num || (p as any).phone || "").replace(/\D/g, "");
+          const txDigits = (p.upi_txid || "").replace(/\D/g, "");
+
+          const lookupStudent =
+            (p.student_id ? studentMap.get(p.student_id) : null) ||
+            (payPhone ? studentMap.get(payPhone.slice(-10)) : null) ||
+            (txDigits.length >= 10 ? studentMap.get(txDigits.slice(-10)) : null) ||
+            null;
+
+          const resolvedName =
+            rawStudent?.full_name ||
+            rawStudent?.name ||
+            lookupStudent?.full_name ||
+            lookupStudent?.name ||
+            (p as any).student_name ||
+            (p as any).full_name ||
+            (p.upi_txid ? `Student (Tx: ${p.upi_txid.slice(0, 10)})` : "Registered Student");
+
+          const resolvedPhone =
+            rawStudent?.whatsapp_number ||
+            rawStudent?.whatsapp_num ||
+            rawStudent?.phone ||
+            lookupStudent?.whatsapp_number ||
+            lookupStudent?.whatsapp_num ||
+            lookupStudent?.phone ||
+            payPhone ||
+            "";
+
+          const resolvedDistrict =
+            rawStudent?.district ||
+            rawStudent?.place ||
+            lookupStudent?.district ||
+            lookupStudent?.place ||
+            (p as any).district ||
+            "Kerala";
+
           return {
             ...p,
-            student: student || null,
+            student: {
+              id: rawStudent?.id || lookupStudent?.id || p.student_id,
+              full_name: resolvedName,
+              whatsapp_num: resolvedPhone,
+              district: resolvedDistrict,
+              created_at: rawStudent?.created_at || lookupStudent?.created_at || p.submitted_at || new Date().toISOString(),
+            },
           };
         });
 

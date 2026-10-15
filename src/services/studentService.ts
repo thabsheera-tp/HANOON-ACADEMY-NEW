@@ -123,6 +123,214 @@ export async function registerStudentAndPayment(
   }
 }
 
+/**
+ * Resolves or inserts a student into Supabase `students` (and `profiles` if authenticated).
+ * Resiliently maps input fields to database columns:
+ * - full_name / name
+ * - whatsapp_num / whatsapp_number / phone
+ * - district / place
+ */
+export async function saveOrUpdateStudentInSupabase(params: {
+  fullName: string;
+  whatsappNum: string;
+  district?: string;
+  userId?: string;
+}): Promise<DbStudent | null> {
+  if (!isSupabaseConfigured || !supabase) return null;
+
+  const cleanPhone = (params.whatsappNum || "").replace(/\D/g, "");
+  const cleanName = (params.fullName || "").trim();
+  const cleanDistrict = (params.district || "Kerala").trim();
+  let userId = params.userId || null;
+
+  if (!cleanName && !cleanPhone) return null;
+
+  try {
+    if (!userId) {
+      try {
+        const { data: authData } = await supabase.auth.getUser();
+        if (authData?.user?.id) userId = authData.user.id;
+      } catch {}
+    }
+
+    // 1. Look up existing student by phone or userId
+    let existingStudent: any = null;
+
+    if (userId) {
+      const { data: byUser } = await supabase
+        .from("students")
+        .select("*")
+        .eq("user_id", userId)
+        .limit(1)
+        .maybeSingle();
+      if (byUser) existingStudent = byUser;
+    }
+
+    if (!existingStudent && cleanPhone) {
+      const { data: byNum, error: errNum } = await supabase
+        .from("students")
+        .select("*")
+        .eq("whatsapp_num", cleanPhone)
+        .limit(1)
+        .maybeSingle();
+
+      if (!errNum && byNum) {
+        existingStudent = byNum;
+      } else {
+        const { data: byNumber } = await supabase
+          .from("students")
+          .select("*")
+          .eq("whatsapp_number", cleanPhone)
+          .limit(1)
+          .maybeSingle();
+        if (byNumber) existingStudent = byNumber;
+      }
+    }
+
+    // 2. If student exists, update with latest details
+    if (existingStudent && existingStudent.id) {
+      const updateAttempts = [
+        {
+          full_name: cleanName,
+          whatsapp_num: cleanPhone,
+          whatsapp_number: cleanPhone,
+          district: cleanDistrict,
+          place: cleanDistrict,
+          ...(userId ? { user_id: userId } : {}),
+        },
+        {
+          full_name: cleanName,
+          whatsapp_num: cleanPhone,
+          district: cleanDistrict,
+          ...(userId ? { user_id: userId } : {}),
+        },
+        {
+          full_name: cleanName,
+          whatsapp_number: cleanPhone,
+          district: cleanDistrict,
+          place: cleanDistrict,
+          ...(userId ? { user_id: userId } : {}),
+        },
+        {
+          full_name: cleanName,
+          district: cleanDistrict,
+        },
+      ];
+
+      for (const payload of updateAttempts) {
+        const { data: updated, error: upErr } = await supabase
+          .from("students")
+          .update(payload)
+          .eq("id", existingStudent.id)
+          .select()
+          .maybeSingle();
+
+        if (!upErr && updated) {
+          existingStudent = updated;
+          break;
+        }
+      }
+
+      if (userId) {
+        try {
+          await supabase.from("profiles").upsert({
+            id: userId,
+            full_name: cleanName,
+            whatsapp_num: cleanPhone,
+            district: cleanDistrict,
+          });
+        } catch {}
+      }
+
+      return {
+        id: existingStudent.id,
+        user_id: existingStudent.user_id || userId || undefined,
+        full_name: existingStudent.full_name || cleanName,
+        whatsapp_num: existingStudent.whatsapp_num || existingStudent.whatsapp_number || cleanPhone,
+        district: existingStudent.district || existingStudent.place || cleanDistrict,
+        created_at: existingStudent.created_at || new Date().toISOString(),
+      };
+    }
+
+    // 3. Insert brand new student into Supabase
+    const insertAttempts = [
+      {
+        full_name: cleanName,
+        whatsapp_num: cleanPhone,
+        whatsapp_number: cleanPhone,
+        district: cleanDistrict,
+        place: cleanDistrict,
+        ...(userId ? { user_id: userId } : {}),
+      },
+      {
+        full_name: cleanName,
+        whatsapp_num: cleanPhone,
+        district: cleanDistrict,
+        ...(userId ? { user_id: userId } : {}),
+      },
+      {
+        full_name: cleanName,
+        whatsapp_number: cleanPhone,
+        district: cleanDistrict,
+        place: cleanDistrict,
+        ...(userId ? { user_id: userId } : {}),
+      },
+      {
+        full_name: cleanName,
+        whatsapp_number: cleanPhone,
+        district: cleanDistrict,
+        ...(userId ? { user_id: userId } : {}),
+      },
+      {
+        full_name: cleanName,
+        whatsapp_num: cleanPhone,
+        place: cleanDistrict,
+        ...(userId ? { user_id: userId } : {}),
+      },
+      {
+        full_name: cleanName,
+        whatsapp_num: cleanPhone,
+      },
+    ];
+
+    for (const payload of insertAttempts) {
+      const { data: inserted, error: inErr } = await supabase
+        .from("students")
+        .insert(payload as any)
+        .select()
+        .single();
+
+      if (!inErr && inserted) {
+        if (userId) {
+          try {
+            await supabase.from("profiles").upsert({
+              id: userId,
+              full_name: cleanName,
+              whatsapp_num: cleanPhone,
+              district: cleanDistrict,
+            });
+          } catch {}
+        }
+
+        return {
+          id: inserted.id,
+          user_id: inserted.user_id || userId || undefined,
+          full_name: inserted.full_name || cleanName,
+          whatsapp_num: inserted.whatsapp_num || inserted.whatsapp_number || cleanPhone,
+          district: inserted.district || inserted.place || cleanDistrict,
+          created_at: inserted.created_at || new Date().toISOString(),
+        };
+      }
+    }
+
+    console.warn("Could not insert student in any candidate schema variation.");
+  } catch (err) {
+    console.error("saveOrUpdateStudentInSupabase exception:", err);
+  }
+
+  return null;
+}
+
 async function executeRegisterStudentAndPayment(
   params: RegisterStudentAndPaymentParams
 ): Promise<RegistrationResult> {
@@ -138,64 +346,27 @@ async function executeRegisterStudentAndPayment(
     screenshotUrl = "",
   } = params;
 
+  const cleanPhone = (whatsappNum || "").replace(/\D/g, "");
+  const cleanName = (fullName || "").trim();
+  const cleanDistrict = (district || "Kerala").trim();
   const resolvedTxId = upiTxId.trim() || `PROOF_${Date.now().toString().slice(-6)}`;
+  const normalizedCourseId = courseId === "shamail-muhammadiyya" ? "shamail" : courseId;
 
-  // 1. If Supabase is configured, insert into live PostgreSQL tables
+  // 1. If Supabase is configured, resolve/insert student and payment into live PostgreSQL tables
   if (isSupabaseConfigured && supabase) {
     try {
-      const cleanPhone = whatsappNum.replace(/\D/g, "");
-      const normalizedCourseId =
-        courseId === "shamail-muhammadiyya" ? "shamail" : courseId;
-
-      // Step A: Check for existing student record by phone (or session cache)
-      let studentData: DbStudent | null = sessionRegisteredLeads.get(cleanPhone) || null;
-      if (!studentData) {
-        const { data: existingStudent } = await supabase
-          .from("students")
-          .select("*")
-          .eq("whatsapp_num", cleanPhone)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (existingStudent) {
-          // Update details
-          const { data: updatedStudent } = await supabase
-            .from("students")
-            .update({
-              full_name: fullName.trim(),
-              district: district.trim(),
-            })
-            .eq("id", existingStudent.id)
-            .select()
-            .single();
-
-          studentData = updatedStudent || existingStudent;
-        } else {
-          const { data: newStudent, error: studentError } = await supabase
-            .from("students")
-            .insert({
-              full_name: fullName.trim(),
-              whatsapp_num: cleanPhone,
-              district: district.trim(),
-            })
-            .select()
-            .single();
-
-          if (studentError || !newStudent) {
-            throw new Error(`Failed to create student in Supabase: ${studentError?.message}`);
-          }
-          studentData = newStudent;
-        }
-      }
-
-      if (studentData) {
-        sessionRegisteredLeads.set(cleanPhone, studentData);
-      }
+      // Step A: Always resolve or insert real student record in Supabase to get real database UUID
+      let studentData: DbStudent | null = await saveOrUpdateStudentInSupabase({
+        fullName: cleanName,
+        whatsappNum: cleanPhone,
+        district: cleanDistrict,
+      });
 
       if (!studentData) {
         throw new Error("Failed to resolve or create student record in Supabase.");
       }
+
+      sessionRegisteredLeads.set(cleanPhone, studentData);
 
       // Step B: Deduplicate pending payment for same student & course
       let paymentData: any = null;
@@ -205,7 +376,14 @@ async function executeRegisterStudentAndPayment(
         .from("payments")
         .select(`
           *,
-          student:students(*)
+          students (
+            id,
+            full_name,
+            whatsapp_number,
+            whatsapp_num,
+            district,
+            place
+          )
         `)
         .eq("student_id", studentData.id)
         .eq("course_id", normalizedCourseId)
@@ -221,7 +399,17 @@ async function executeRegisterStudentAndPayment(
             .from("payments")
             .update({ screenshot_url: screenshotUrl, upi_txid: resolvedTxId, amount })
             .eq("id", existingPendingPayment.id)
-            .select(`*, student:students(*)`)
+            .select(`
+              *,
+              students (
+                id,
+                full_name,
+                whatsapp_number,
+                whatsapp_num,
+                district,
+                place
+              )
+            `)
             .maybeSingle();
           paymentData = updatedPay || existingPendingPayment;
         } else {
@@ -240,36 +428,48 @@ async function executeRegisterStudentAndPayment(
           insertPayload.screenshot_url = screenshotUrl;
         }
 
-        const res = await supabase
+        let res = await supabase
           .from("payments")
           .insert(insertPayload)
           .select(`
             *,
-            student:students(*)
+            students (
+              id,
+              full_name,
+              whatsapp_number,
+              whatsapp_num,
+              district,
+              place
+            )
           `)
           .single();
 
-      if (res.error && res.error.message?.includes("screenshot_url")) {
-        // Retry without screenshot_url column if not present in schema
-        delete insertPayload.screenshot_url;
-        const retryRes = await supabase
-          .from("payments")
-          .insert(insertPayload)
-          .select(`
-            *,
-            student:students(*)
-          `)
-          .single();
-        paymentData = retryRes.data;
-        paymentError = retryRes.error;
-      } else {
+        if (res.error) {
+          // Fallback with student:students(*)
+          res = await supabase
+            .from("payments")
+            .insert(insertPayload)
+            .select(`*, student:students(*)`)
+            .single();
+        }
+
+        if (res.error && res.error.message?.includes("screenshot_url")) {
+          // Retry without screenshot_url column if not present in schema
+          delete insertPayload.screenshot_url;
+          res = await supabase
+            .from("payments")
+            .insert(insertPayload)
+            .select(`*, students(*)`)
+            .single();
+        }
+
         paymentData = res.data;
         paymentError = res.error;
       }
-    }
 
-      if (paymentData && screenshotUrl) {
-        paymentData.screenshot_url = screenshotUrl;
+      if (paymentData) {
+        if (screenshotUrl) paymentData.screenshot_url = screenshotUrl;
+        paymentData.student = studentData;
       }
 
       if (paymentError || !paymentData) {
@@ -486,9 +686,10 @@ export async function saveStudentLead(profile: {
     return inFlightLeadPromises.get(cleanPhone)!;
   }
 
-  // 2. If student lead already registered in this user session, reuse session record
-  if (sessionRegisteredLeads.has(cleanPhone)) {
-    return sessionRegisteredLeads.get(cleanPhone)!;
+  // 2. If student lead already registered with real database UUID, reuse session record
+  const sessionLead = sessionRegisteredLeads.get(cleanPhone);
+  if (sessionLead && !sessionLead.id.startsWith("stu-") && !sessionLead.id.startsWith("std_")) {
+    return sessionLead;
   }
 
   // 3. Check sessionStorage fallback
@@ -497,8 +698,10 @@ export async function saveStudentLead(profile: {
       const cached = sessionStorage.getItem(`hanoon_session_lead_${cleanPhone}`);
       if (cached) {
         const student: DbStudent = JSON.parse(cached);
-        sessionRegisteredLeads.set(cleanPhone, student);
-        return student;
+        if (!student.id.startsWith("stu-") && !student.id.startsWith("std_")) {
+          sessionRegisteredLeads.set(cleanPhone, student);
+          return student;
+        }
       }
     } catch {}
   }
@@ -531,51 +734,16 @@ async function executeSaveStudentLead(profile: {
   const cleanName = profile.fullName.trim();
   const cleanDistrict = profile.district.trim() || "Kerala";
 
-  let savedStudent: DbStudent | null = sessionRegisteredLeads.get(cleanPhone) || null;
+  let savedStudent: DbStudent | null = null;
 
-  if (!savedStudent && isSupabaseConfigured && supabase) {
+  // Insert or update in live Supabase database
+  if (isSupabaseConfigured && supabase) {
     try {
-      // Upsert by phone - check for existing student first
-      const { data: existing } = await supabase
-        .from("students")
-        .select("*")
-        .eq("whatsapp_num", cleanPhone)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (existing) {
-        const { data: updated } = await supabase
-          .from("students")
-          .update({
-            full_name: cleanName,
-            district: cleanDistrict,
-          })
-          .eq("id", existing.id)
-          .select()
-          .single();
-        savedStudent = updated || existing;
-      } else {
-        const { data: inserted, error } = await supabase
-          .from("students")
-          .insert({
-            full_name: cleanName,
-            whatsapp_num: cleanPhone,
-            district: cleanDistrict,
-          })
-          .select()
-          .single();
-
-        if (!error && inserted) {
-          savedStudent = inserted;
-        }
-      }
-
-      if (savedStudent) {
-        // NOTE: Do NOT auto-create a dummy PENDING payment here.
-        // Ghost pending entries confuse the admin dashboard.
-        // Only real payments submitted by the student should appear.
-      }
+      savedStudent = await saveOrUpdateStudentInSupabase({
+        fullName: cleanName,
+        whatsappNum: cleanPhone,
+        district: cleanDistrict,
+      });
     } catch (e) {
       console.warn("Supabase saveStudentLead error:", e);
     }
@@ -651,20 +819,45 @@ export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedR
       let rawPayments: any[] | null = null;
       let payFetchError: any = null;
 
-      const { data, error } = await supabase
+      // 1. Try relational query joining students table (e.g. students(full_name, whatsapp_number))
+      let joinRes = await supabase
         .from("payments")
         .select(`
           *,
-          student:students(*),
-          course:courses(*)
+          students (
+            id,
+            full_name,
+            whatsapp_number,
+            whatsapp_num,
+            district,
+            place
+          ),
+          courses (
+            id,
+            title_en,
+            title_ml,
+            fee_amount
+          )
         `)
         .order("submitted_at", { ascending: false });
 
-      if (!error && data) {
-        rawPayments = data;
+      if (joinRes.error) {
+        // Fallback: Try with student:students(*), course:courses(*)
+        joinRes = await supabase
+          .from("payments")
+          .select(`
+            *,
+            student:students(*),
+            course:courses(*)
+          `)
+          .order("submitted_at", { ascending: false });
+      }
+
+      if (!joinRes.error && joinRes.data) {
+        rawPayments = joinRes.data;
         fetchedPaymentsFromSupabase = true;
       } else {
-        if (error) payFetchError = error;
+        if (joinRes.error) payFetchError = joinRes.error;
         // Fallback: Query payments without relational join
         let plainPay = await supabase
           .from("payments")
@@ -782,7 +975,7 @@ export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedR
   for (const s of allStudents) {
     if (s.id) studentById.set(s.id, s);
     if (s.user_id) studentByUserId.set(s.user_id, s);
-    const pClean = (s.whatsapp_num || "").replace(/\D/g, "");
+    const pClean = (s.whatsapp_number || s.whatsapp_num || s.phone || "").replace(/\D/g, "");
     if (pClean && pClean.length >= 7) {
       studentByPhone.set(pClean.slice(-10), s);
     }
@@ -795,19 +988,19 @@ export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedR
         id: pr.id,
         user_id: pr.id,
         full_name: pr.full_name || pr.email?.split("@")[0] || "Registered Student",
-        whatsapp_num: pr.whatsapp_num || "",
-        district: pr.district || "Kerala",
+        whatsapp_num: pr.whatsapp_num || pr.whatsapp_number || "",
+        district: pr.district || pr.place || "Kerala",
         created_at: pr.created_at || new Date().toISOString(),
       });
     }
-    const prPhone = (pr.whatsapp_num || "").replace(/\D/g, "");
+    const prPhone = (pr.whatsapp_num || pr.whatsapp_number || "").replace(/\D/g, "");
     if (prPhone && prPhone.length >= 7 && !studentByPhone.has(prPhone.slice(-10))) {
       studentByPhone.set(prPhone.slice(-10), {
         id: pr.id,
         user_id: pr.id,
         full_name: pr.full_name || pr.email?.split("@")[0] || "Registered Student",
-        whatsapp_num: pr.whatsapp_num || "",
-        district: pr.district || "Kerala",
+        whatsapp_num: pr.whatsapp_num || pr.whatsapp_number || "",
+        district: pr.district || pr.place || "Kerala",
         created_at: pr.created_at || new Date().toISOString(),
       });
     }
@@ -821,31 +1014,47 @@ export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedR
     if (p.id && seenPaymentIds.has(p.id)) continue;
     if (p.id) seenPaymentIds.add(p.id);
 
-    // Resolve student reliably even if Supabase foreign key relation was null
+    // Resolve student reliably from join or in-memory map
     const txDigits = (p.upi_txid || "").replace(/\D/g, "");
-    const paymentPhone = (p as any).whatsapp_num || (p as any).phone || "";
-    const student =
-      p.student ||
+    const paymentPhone = ((p as any).whatsapp_number || (p as any).whatsapp_num || (p as any).phone || "").replace(/\D/g, "");
+
+    const joined = (p as any).students
+      ? (Array.isArray((p as any).students) ? (p as any).students[0] : (p as any).students)
+      : p.student;
+
+    const lookupStudent =
       (p.student_id ? studentById.get(p.student_id) : null) ||
       (p.student_id ? studentByUserId.get(p.student_id) : null) ||
-      (paymentPhone ? studentByPhone.get(paymentPhone.replace(/\D/g, "").slice(-10)) : null) ||
+      (paymentPhone ? studentByPhone.get(paymentPhone.slice(-10)) : null) ||
       (txDigits.length >= 10 ? studentByPhone.get(txDigits.slice(-10)) : null);
 
     const phone =
-      student?.whatsapp_num ||
+      joined?.whatsapp_number ||
+      joined?.whatsapp_num ||
+      joined?.phone ||
+      lookupStudent?.whatsapp_number ||
+      lookupStudent?.whatsapp_num ||
+      lookupStudent?.phone ||
       paymentPhone ||
       "";
 
     const resolvedName =
-      student?.full_name ||
+      joined?.full_name ||
+      joined?.name ||
+      lookupStudent?.full_name ||
+      lookupStudent?.name ||
       (p as any).student_name ||
       (p as any).full_name ||
       (p as any).name ||
       (p.upi_txid ? `Student (Tx: ${p.upi_txid.slice(0, 10)})` : `Student (${p.student_id ? p.student_id.slice(0, 8) : "Registered"})`);
 
     const district =
-      student?.district ||
+      joined?.district ||
+      joined?.place ||
+      lookupStudent?.district ||
+      lookupStudent?.place ||
       (p as any).district ||
+      (p as any).place ||
       "Kerala";
 
     // Normalize payment status: PENDING, APPROVED, REJECTED, or UNPAID
@@ -869,7 +1078,7 @@ export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedR
 
     result.push({
       id: p.id || `pay-${Math.random().toString(36).substring(2, 9)}`,
-      studentId: student?.id || p.student_id,
+      studentId: joined?.id || lookupStudent?.id || p.student_id,
       fullName: resolvedName,
       whatsappNum: phone,
       district,
@@ -879,7 +1088,7 @@ export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedR
       paymentStatus,
       amount: p.amount ?? 500,
       upiTxId: p.upi_txid || (p as any).transaction_id || "Pending Verification",
-      screenshotUrl: p.screenshot_url || (p as any).screenshotUrl || (student as any)?.screenshot_url || "",
+      screenshotUrl: p.screenshot_url || (p as any).screenshotUrl || (joined as any)?.screenshot_url || (lookupStudent as any)?.screenshot_url || "",
       paymentId: p.id,
       rejectionReason: p.rejection_reason || undefined,
     });
