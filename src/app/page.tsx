@@ -558,7 +558,15 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     if (profile) {
       await handleSaveProfile(profile);
     }
-    setCurrentScreen("courses");
+    setPaymentDetails((prev) => ({
+      ...prev,
+      upiTxId: "",
+      amount: selectedCourse.admissionFee || selectedCourse.fee,
+      submittedAt: "",
+      status: "unpaid",
+    }));
+    // Screen 4 (UPI Payment): Displayed only after Student Details form is submitted
+    setCurrentScreen("payment");
   };
 
   // Step 4 -> Step 5
@@ -594,7 +602,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
       localStorage.setItem("hanoon_pending_payment", JSON.stringify(pendingRecord));
     }
 
-    // Advance directly to Screen 5: Dedicated "Payment Under Review" state
+    // Advance directly to Screen 5: Dedicated "Payment Under Review" state (DO NOT kick out to homepage)
     setCurrentScreen("pending-verification");
   };
 
@@ -602,9 +610,9 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     if (currentScreen === "dashboard") setCurrentScreen("courses");
     else if (currentScreen === "pending-verification") setCurrentScreen("courses");
     else if (currentScreen === "payment") setCurrentScreen("course-details");
+    else if (currentScreen === "onboarding") setCurrentScreen("course-details");
     else if (currentScreen === "course-details") setCurrentScreen("courses");
-    else if (currentScreen === "courses") setCurrentScreen("onboarding");
-    else if (currentScreen === "onboarding") setCurrentScreen("splash");
+    else if (currentScreen === "courses") setCurrentScreen("splash");
   };
 
   const canGoBack = currentScreen !== "splash";
@@ -614,17 +622,6 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     (paymentDetails.status as string) === "ACTIVE";
   const hasPaymentSubmitted =
     paymentDetails.status === "pending_verification" || currentScreen === "pending-verification";
-
-  // Route Guard: Screen 3 (Courses / Course Details) and Screen 4 (Payment) REQUIRE Student Details (Screen 2)
-  useEffect(() => {
-    const hasStudentDetails = Boolean(userProfile.name?.trim() && userProfile.phone?.trim() && userProfile.place?.trim());
-    if (
-      (currentScreen === "courses" || currentScreen === "course-details" || currentScreen === "payment") &&
-      !hasStudentDetails
-    ) {
-      setCurrentScreen("onboarding");
-    }
-  }, [currentScreen, userProfile.name, userProfile.phone, userProfile.place]);
 
   // Route Guard: Restrict Dashboard access strictly to APPROVED / ACTIVE students
   useEffect(() => {
@@ -639,10 +636,12 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
   }, [currentScreen, isEnrolled, hasPaymentSubmitted, paymentDetails.status]);
 
   const handleSelectScreen = (screen: ScreenTab) => {
-    const hasStudentDetails = Boolean(userProfile.name?.trim() && userProfile.phone?.trim() && userProfile.place?.trim());
-    if ((screen === "courses" || screen === "course-details" || screen === "payment") && !hasStudentDetails) {
-      setCurrentScreen("onboarding");
-      return;
+    if (screen === "payment") {
+      const hasStudentDetails = Boolean(userProfile.name?.trim() && userProfile.phone?.trim());
+      if (!hasStudentDetails) {
+        setCurrentScreen("onboarding");
+        return;
+      }
     }
     if (screen === "dashboard" && !isEnrolled) {
       if (hasPaymentSubmitted) {
@@ -694,23 +693,24 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
 
         {/* Scrollable Viewport */}
         <div className="flex-1 overflow-y-auto flex flex-col relative z-10 bg-white">
-          {/* Screen 1: Welcome Screen (Logo & Get Started button) */}
+          {/* Screen 1: Welcome Screen (Logo & Explore Courses button) */}
           {currentScreen === "splash" && (
             <ScreenSplash
-              onGetStarted={() => {
-                setCurrentScreen("onboarding");
-              }}
+              onExploreCourses={handleExploreCourses}
+              onGetStarted={handleExploreCourses}
             />
           )}
 
-          {/* Screen 2: Student Onboarding (Student Details: Name, Phone, Place, Age) */}
+          {/* Screen 3: Student Onboarding / Details (Triggered ONLY on Enroll Now) */}
           {currentScreen === "onboarding" && (
             <ScreenOnboarding
               userProfile={userProfile}
               selectedCourse={selectedCourse}
               onSaveProfile={handleSaveProfile}
               onProceedToCourses={handleSaveProfileAndProceed}
-              onBackToHome={() => setCurrentScreen("splash")}
+              onProceedToPayment={handleSaveProfileAndProceed}
+              onBackToHome={() => setCurrentScreen("courses")}
+              onBackToCourse={() => setCurrentScreen("course-details")}
             />
           )}
 

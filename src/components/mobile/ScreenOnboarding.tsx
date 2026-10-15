@@ -137,10 +137,24 @@ export default function ScreenOnboarding({
     <div className="w-full max-w-md mx-auto px-4 sm:px-6 py-5 flex-1 flex flex-col justify-between select-none font-['Plus_Jakarta_Sans'] bg-white">
       <div className="space-y-4">
         {/* Header Title: Student Details */}
-        <div className="pt-1 pb-1">
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight leading-tight">
-            Student Details
-          </h1>
+        <div className="pt-1 pb-1 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight leading-tight">
+              Student Details
+            </h1>
+            <p className="text-xs text-slate-500 font-semibold mt-0.5">
+              Enrolling in: <strong className="text-purple-700 font-bold">{selectedCourse?.title || "Course"}</strong>
+            </p>
+          </div>
+          {(onBackToCourse || onBackToHome) && (
+            <button
+              type="button"
+              onClick={onBackToCourse || onBackToHome}
+              className="text-xs font-bold text-slate-400 hover:text-purple-700 px-2.5 py-1 rounded-xl hover:bg-purple-50 transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+          )}
         </div>
 
         {/* Validation Error Notice */}
@@ -244,7 +258,7 @@ export default function ScreenOnboarding({
                   <span>Saving details...</span>
                 </>
               ) : (
-                <span>Proceed to Enrollment →</span>
+                <span>Proceed to UPI Payment →</span>
               )}
             </button>
           </div>
@@ -263,14 +277,14 @@ export default function ScreenOnboarding({
             </button>
           </div>
 
-          {/* Link 2: ← Return to Home / Course Catalog */}
+          {/* Link 2: ← Return to Course Details / Catalog */}
           <div>
             <button
               type="button"
-              onClick={onBackToHome || (() => router.push("/"))}
+              onClick={onBackToCourse || onBackToHome || (() => router.push("/"))}
               className="text-xs font-bold text-purple-600 hover:text-purple-700 transition-colors inline-flex items-center gap-1 cursor-pointer py-1"
             >
-              <span>← Return to Home / Course Catalog</span>
+              <span>← Return to Course Details</span>
             </button>
           </div>
 
