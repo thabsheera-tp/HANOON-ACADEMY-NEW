@@ -693,11 +693,11 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
 
         {/* Scrollable Viewport */}
         <div className="flex-1 overflow-y-auto flex flex-col relative z-10 bg-white">
-          {/* Screen 1: Welcome Screen (Logo & Explore Courses button) */}
+          {/* Screen 1: Welcome Screen (Logo & Get Started button) */}
           {currentScreen === "splash" && (
             <ScreenSplash
-              onExploreCourses={handleExploreCourses}
-              onGetStarted={handleExploreCourses}
+              onExploreCourses={() => setIsRegisterModalOpen(true)}
+              onGetStarted={() => setIsRegisterModalOpen(true)}
             />
           )}
 
@@ -785,6 +785,11 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
         onSubmit={(profile, courseId) => {
           handleSaveProfile(profile);
           setIsRegisterModalOpen(false);
+
+          if (currentScreen === "splash") {
+            setCurrentScreen("courses");
+            return;
+          }
 
           const matchedCourse = SHOWCASE_COURSES.find(
             (c) => c.id === courseId || (courseId === "shamail" && c.id.includes("shamail"))
