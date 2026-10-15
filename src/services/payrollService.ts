@@ -13,30 +13,52 @@ export async function fetchPayroll(): Promise<DbPayroll[]> {
         .select("*")
         .order("created_at", { ascending: false });
 
-      if (!error && data && data.length > 0) {
+      if (!error && Array.isArray(data)) {
+        // Sync real Supabase payroll records to local storage and purge legacy dummy mock data
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.setItem(LOCAL_PAYROLL_KEY, JSON.stringify(data));
+          } catch {}
+        }
         return data as DbPayroll[];
+      }
+      if (error) {
+        console.warn("Supabase fetchPayroll error:", error.message || error);
       }
     } catch (err) {
       console.warn("Supabase fetchPayroll fallback to local:", err);
     }
   }
 
+  // Local storage fallback for offline / cache mode
   if (typeof window !== "undefined") {
     try {
       const stored = localStorage.getItem(LOCAL_PAYROLL_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+        if (Array.isArray(parsed)) {
+          // Strictly filter out any hardcoded legacy dummy records (e.g. pay-001, pay-002, or 52 classes / ₹31,700 / ₹7,500)
+          const clean = parsed.filter(
+            (p: any) =>
+              p &&
+              p.id !== "pay-001" &&
+              p.id !== "pay-002" &&
+              p.id !== "pay-003" &&
+              p.id !== "pay-004" &&
+              !(p.total_amount === 7500 && p.classes_taken === 10 && p.month_year === "March 2026")
+          );
+          if (clean.length !== parsed.length) {
+            localStorage.setItem(LOCAL_PAYROLL_KEY, JSON.stringify(clean));
+          }
+          return clean;
         }
       }
-      localStorage.setItem(LOCAL_PAYROLL_KEY, JSON.stringify(INITIAL_PAYROLL));
     } catch (e) {
       console.warn("Local storage payroll read error:", e);
     }
   }
 
-  return INITIAL_PAYROLL;
+  return [];
 }
 
 export async function markPayrollAsPaid(
@@ -91,7 +113,7 @@ export async function createPayrollRecord(entry: {
   rate_per_class: number;
 }): Promise<DbPayroll> {
   const total = entry.classes_taken * entry.rate_per_class;
-  const newRecord: DbPayroll = {
+  let recordToReturn: DbPayroll = {
     id: `pay-${Date.now()}`,
     teacher_id: entry.teacher_id,
     teacher_name: entry.teacher_name,
@@ -105,16 +127,36 @@ export async function createPayrollRecord(entry: {
 
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase.from("teacher_payroll").insert([newRecord]);
+      const { data, error } = await supabase
+        .from("teacher_payroll")
+        .insert([
+          {
+            teacher_id: entry.teacher_id,
+            teacher_name: entry.teacher_name,
+            month_year: entry.month_year,
+            classes_taken: entry.classes_taken,
+            rate_per_class: entry.rate_per_class,
+            total_amount: total,
+            status: "PENDING",
+          },
+        ])
+        .select()
+        .single();
+
+      if (!error && data) {
+        recordToReturn = data as DbPayroll;
+      } else if (error) {
+        console.warn("Supabase create payroll record error:", error);
+      }
     } catch (err) {
-      console.warn("Supabase create payroll record error:", err);
+      console.warn("Supabase create payroll record exception:", err);
     }
   }
 
   if (typeof window !== "undefined") {
     try {
       const current = await fetchPayroll();
-      const updated = [newRecord, ...current];
+      const updated = [recordToReturn, ...current.filter((p) => p.id !== recordToReturn.id)];
       localStorage.setItem(LOCAL_PAYROLL_KEY, JSON.stringify(updated));
       window.dispatchEvent(new CustomEvent("hanoon_payroll_updated", { detail: updated }));
     } catch (e) {
@@ -122,5 +164,5 @@ export async function createPayrollRecord(entry: {
     }
   }
 
-  return newRecord;
+  return recordToReturn;
 }

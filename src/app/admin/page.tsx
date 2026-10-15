@@ -644,12 +644,12 @@ export default function AdminDashboardPage() {
     <div className="min-h-screen bg-purple-50 text-slate-900 font-['Plus_Jakarta_Sans'] select-none w-full overflow-x-hidden">
       {/* Top Admin Navigation Header */}
       <header className="bg-white border-b border-purple-100 shadow-xs sticky top-0 z-40 w-full max-w-full overflow-x-hidden">
-        <div className="w-full max-w-md sm:max-w-6xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3.5 flex items-center justify-between gap-1.5 sm:gap-2 min-w-0 max-w-full">
+        <div className="w-full max-w-md sm:max-w-6xl mx-auto px-2.5 sm:px-6 py-2 sm:py-3.5 flex items-center justify-between gap-1.5 sm:gap-2 min-w-0 max-w-full">
           <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0 shrink">
             <HanoonLogo size="sm" compactMobile />
-            <div className="hidden sm:block h-4 w-px bg-purple-200 shrink-0" />
+            <div className="h-3.5 sm:h-4 w-px bg-purple-200 shrink-0" />
             <span
-              className={`text-[9px] sm:text-[11px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap ${
+              className={`text-[9px] sm:text-[10px] font-black uppercase tracking-wider px-1.5 sm:px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap ${
                 isSuperAdmin
                   ? "bg-purple-100 text-purple-800 border border-purple-200/60"
                   : "bg-emerald-100 text-emerald-800 border border-emerald-200/60"
@@ -1455,7 +1455,9 @@ export default function AdminDashboardPage() {
                   Total Live Classes Conducted
                 </span>
                 <h3 className="text-2xl font-black text-slate-900">
-                  {payroll.reduce((acc, p) => acc + (p.classes_taken || 0), 0)} Classes
+                  {payroll && payroll.length > 0
+                    ? `${payroll.reduce((acc, p) => acc + (p.classes_taken || 0), 0)} Classes`
+                    : "0 Classes"}
                 </h3>
                 <p className="text-[11px] text-purple-600 font-semibold">Tracked across faculty</p>
               </div>
@@ -1465,10 +1467,12 @@ export default function AdminDashboardPage() {
                   Disbursed Salary Compensation
                 </span>
                 <h3 className="text-2xl font-black text-emerald-700">
-                  ₹{payroll
-                    .filter((p) => p.status === "PAID")
-                    .reduce((acc, p) => acc + (p.total_amount || 0), 0)
-                    .toLocaleString("en-IN")}
+                  ₹{payroll && payroll.length > 0
+                    ? payroll
+                        .filter((p) => p.status === "PAID")
+                        .reduce((acc, p) => acc + (p.total_amount || 0), 0)
+                        .toLocaleString("en-IN")
+                    : "0"}
                 </h3>
                 <p className="text-[11px] text-slate-500 font-semibold">Verified bank & UPI payouts</p>
               </div>
@@ -1478,10 +1482,12 @@ export default function AdminDashboardPage() {
                   Pending Payout Due
                 </span>
                 <h3 className="text-2xl font-black text-amber-700">
-                  ₹{payroll
-                    .filter((p) => p.status === "PENDING")
-                    .reduce((acc, p) => acc + (p.total_amount || 0), 0)
-                    .toLocaleString("en-IN")}
+                  ₹{payroll && payroll.length > 0
+                    ? payroll
+                        .filter((p) => p.status === "PENDING")
+                        .reduce((acc, p) => acc + (p.total_amount || 0), 0)
+                        .toLocaleString("en-IN")
+                    : "0"}
                 </h3>
                 <p className="text-[11px] text-amber-600 font-semibold">Scheduled for disbursement</p>
               </div>

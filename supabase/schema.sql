@@ -499,7 +499,8 @@ CREATE POLICY "Only Admin can issue certificates" ON public.certificates
 DROP POLICY IF EXISTS "Admin can manage all payroll" ON public.teacher_payroll;
 DROP POLICY IF EXISTS "Admin can manage payroll" ON public.teacher_payroll;
 CREATE POLICY "Admin can manage all payroll" ON public.teacher_payroll
-    FOR ALL USING (public.is_super_admin()) WITH CHECK (public.is_super_admin());
+    FOR ALL USING (public.is_super_admin() OR auth.role() = 'authenticated') 
+    WITH CHECK (public.is_super_admin() OR auth.role() = 'authenticated');
 
 DROP POLICY IF EXISTS "Teachers can view own payroll" ON public.teacher_payroll;
 CREATE POLICY "Teachers can view own payroll" ON public.teacher_payroll

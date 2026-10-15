@@ -963,7 +963,13 @@ export default function AdminManagementPanel({
 
             {/* Payroll Records List */}
             <div className="space-y-3">
-              {payroll.map((item) => {
+              {payroll.length === 0 ? (
+                <div className="p-8 rounded-2xl bg-white border border-purple-100 text-center space-y-1">
+                  <p className="text-xs font-semibold text-slate-400">No payroll records found.</p>
+                  <p className="text-[11px] text-slate-400">Default: ₹0 • 0 Classes</p>
+                </div>
+              ) : (
+                payroll.map((item) => {
                 const isPaid = item.status === "PAID";
 
                 return (
@@ -1044,7 +1050,8 @@ export default function AdminManagementPanel({
                     )}
                   </div>
                 );
-              })}
+              })
+            )}
             </div>
           </div>
         )}

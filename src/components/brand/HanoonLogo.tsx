@@ -19,14 +19,14 @@ export default function HanoonLogo({
   compactMobile = false,
 }: HanoonLogoProps) {
   const sizeClasses = {
-    sm: { iconBox: "w-8 h-8 rounded-xl", icon: "w-4 h-4", title: "text-sm", sub: "text-[9px]" },
+    sm: { iconBox: "w-7 h-7 sm:w-8 sm:h-8 rounded-xl", icon: "w-3.5 h-3.5 sm:w-4 sm:h-4", title: "text-xs sm:text-sm", sub: "text-[9px]" },
     md: { iconBox: "w-11 h-11 rounded-2xl", icon: "w-6 h-6", title: "text-lg", sub: "text-[10px]" },
     lg: { iconBox: "w-14 h-14 rounded-2xl", icon: "w-8 h-8", title: "text-2xl", sub: "text-xs" },
     xl: { iconBox: "w-20 h-20 rounded-3xl", icon: "w-11 h-11", title: "text-3xl sm:text-4xl", sub: "text-xs sm:text-sm" },
   }[size];
 
   return (
-    <div className={`flex items-center ${compactMobile ? "gap-2 sm:gap-3" : "gap-3"} min-w-0 ${className}`}>
+    <div className={`flex items-center ${compactMobile ? "gap-1.5 sm:gap-2.5" : "gap-2.5 sm:gap-3"} min-w-0 ${className}`}>
       {/* Icon Emblem */}
       <div
         className={`${sizeClasses.iconBox} bg-purple-600 text-white flex items-center justify-center shadow-md shadow-purple-600/20 shrink-0 relative overflow-hidden`}
@@ -45,9 +45,7 @@ export default function HanoonLogo({
               Hanoon
             </span>
             <span
-              className={`${sizeClasses.title} font-extrabold tracking-tight text-purple-600 font-['Plus_Jakarta_Sans'] ${
-                compactMobile ? "hidden sm:inline" : ""
-              }`}
+              className={`${sizeClasses.title} font-extrabold tracking-tight text-purple-600 font-['Plus_Jakarta_Sans'] shrink-0 inline`}
             >
               Academy
             </span>
