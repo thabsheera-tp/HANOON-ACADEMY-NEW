@@ -9,8 +9,14 @@ export async function GET() {
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
   const keyToUse = serviceRoleKey || anonKey;
+  const isKeyValid = Boolean(
+    keyToUse &&
+    !keyToUse.includes("your-anon") &&
+    !keyToUse.includes("your-service") &&
+    keyToUse.length > 20
+  );
 
-  if (!supabaseUrl || !keyToUse) {
+  if (!supabaseUrl || !isKeyValid) {
     return NextResponse.json({ error: "Supabase credentials not configured" }, { status: 503 });
   }
 

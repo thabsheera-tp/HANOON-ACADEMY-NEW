@@ -886,8 +886,6 @@ export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedR
         }
       }
     } catch {}
-  } else {
-    errorMessages.push("Supabase connection not initialized. Please configure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
   }
 
   // Fallback to local storage ONLY if Supabase returned 0 items and had error or unconfigured
