@@ -279,26 +279,47 @@ export default function AdminDashboardPage() {
       if (verif) {
         // Restricted Verification Staff mode: Only load payments and students, hiding financials
         const [payData, stdData] = await Promise.all([
-          fetchPayments(),
-          fetchStudents(),
+          fetchPayments().catch((e) => {
+            console.warn("fetchPayments error:", e);
+            return [];
+          }),
+          fetchStudents().catch((e) => {
+            console.warn("fetchStudents error:", e);
+            return [];
+          }),
         ]);
-        setPayments(payData);
-        setStudents(stdData);
+        setPayments(payData || []);
+        setStudents(stdData || []);
       } else {
         // Full Super Admin mode: Load full administrative financials and settings
         const [payData, stdData, rollData, settingsData, auditData] = await Promise.all([
-          fetchPayments(),
-          fetchStudents(),
-          fetchPayroll(),
-          fetchAppSettings(),
-          fetchAuditLogs(),
+          fetchPayments().catch((e) => {
+            console.warn("fetchPayments error:", e);
+            return [];
+          }),
+          fetchStudents().catch((e) => {
+            console.warn("fetchStudents error:", e);
+            return [];
+          }),
+          fetchPayroll().catch((e) => {
+            console.warn("fetchPayroll error:", e);
+            return [];
+          }),
+          fetchAppSettings().catch((e) => {
+            console.warn("fetchAppSettings error:", e);
+            return getAppSettings();
+          }),
+          fetchAuditLogs().catch((e) => {
+            console.warn("fetchAuditLogs error:", e);
+            return [];
+          }),
         ]);
-        setPayments(payData);
-        setStudents(stdData);
-        setPayroll(rollData);
+        setPayments(payData || []);
+        setStudents(stdData || []);
+        setPayroll(rollData || []);
         setSettings(settingsData);
         setSettingsForm(settingsData);
-        setAuditLogs(auditData);
+        setAuditLogs(auditData || []);
         setTeacherClasses(getTeacherClasses());
       }
 

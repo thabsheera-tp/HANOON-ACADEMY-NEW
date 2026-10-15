@@ -374,17 +374,7 @@ async function executeRegisterStudentAndPayment(
 
       const { data: existingPendingPayment } = await supabase
         .from("payments")
-        .select(`
-          *,
-          students (
-            id,
-            full_name,
-            whatsapp_number,
-            whatsapp_num,
-            district,
-            place
-          )
-        `)
+        .select("*")
         .eq("student_id", studentData.id)
         .eq("course_id", normalizedCourseId)
         .eq("status", "PENDING")
@@ -399,17 +389,7 @@ async function executeRegisterStudentAndPayment(
             .from("payments")
             .update({ screenshot_url: screenshotUrl, upi_txid: resolvedTxId, amount })
             .eq("id", existingPendingPayment.id)
-            .select(`
-              *,
-              students (
-                id,
-                full_name,
-                whatsapp_number,
-                whatsapp_num,
-                district,
-                place
-              )
-            `)
+            .select("*")
             .maybeSingle();
           paymentData = updatedPay || existingPendingPayment;
         } else {
@@ -431,27 +411,8 @@ async function executeRegisterStudentAndPayment(
         let res = await supabase
           .from("payments")
           .insert(insertPayload)
-          .select(`
-            *,
-            students (
-              id,
-              full_name,
-              whatsapp_number,
-              whatsapp_num,
-              district,
-              place
-            )
-          `)
+          .select("*")
           .single();
-
-        if (res.error) {
-          // Fallback with student:students(*)
-          res = await supabase
-            .from("payments")
-            .insert(insertPayload)
-            .select(`*, student:students(*)`)
-            .single();
-        }
 
         if (res.error && res.error.message?.includes("screenshot_url")) {
           // Retry without screenshot_url column if not present in schema
@@ -459,7 +420,7 @@ async function executeRegisterStudentAndPayment(
           res = await supabase
             .from("payments")
             .insert(insertPayload)
-            .select(`*, students(*)`)
+            .select("*")
             .single();
         }
 
@@ -813,69 +774,57 @@ export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedR
   let fetchedPaymentsFromSupabase = false;
   let fetchedStudentsFromSupabase = false;
 
-  if (isSupabaseConfigured && supabase) {
-    // A. Query Payments (Try join first, fallback to plain query if relationship is missing in schema)
+  // 1. Try server-side admin data route (bypasses RLS with service role key if available, zero PGRST125)
+  if (typeof window !== "undefined") {
+    try {
+      const apiRes = await fetch("/api/admin/data");
+      if (apiRes.ok) {
+        const json = await apiRes.json();
+        if (json && Array.isArray(json.payments)) {
+          payments = json.payments;
+          fetchedPaymentsFromSupabase = true;
+          if (Array.isArray(json.students)) {
+            allStudents = json.students;
+            fetchedStudentsFromSupabase = true;
+          }
+          if (Array.isArray(json.profiles)) {
+            allProfiles = json.profiles;
+          }
+          if (Array.isArray(json.courses)) {
+            for (const c of json.courses) {
+              if (c.id && c.title_en) courseMap.set(c.id, c.title_en);
+            }
+          }
+        }
+      }
+    } catch {
+      // Fall through to direct Supabase client
+    }
+  }
+
+  // 2. Direct Supabase Client: Clean separate queries (never nested relational joins to prevent PGRST125)
+  if (isSupabaseConfigured && supabase && !fetchedPaymentsFromSupabase) {
+    // A. Query Payments (Plain select without relation embeddings)
     try {
       let rawPayments: any[] | null = null;
       let payFetchError: any = null;
 
-      // 1. Try relational query joining students table (e.g. students(full_name, whatsapp_number))
-      let joinRes = await supabase
+      let plainPay = await supabase
         .from("payments")
-        .select(`
-          *,
-          students (
-            id,
-            full_name,
-            whatsapp_number,
-            whatsapp_num,
-            district,
-            place
-          ),
-          courses (
-            id,
-            title_en,
-            title_ml,
-            fee_amount
-          )
-        `)
+        .select("*")
         .order("submitted_at", { ascending: false });
 
-      if (joinRes.error) {
-        // Fallback: Try with student:students(*), course:courses(*)
-        joinRes = await supabase
-          .from("payments")
-          .select(`
-            *,
-            student:students(*),
-            course:courses(*)
-          `)
-          .order("submitted_at", { ascending: false });
+      if (plainPay.error) {
+        // Fallback without ordering in case submitted_at column is not indexed
+        plainPay = await supabase.from("payments").select("*");
       }
 
-      if (!joinRes.error && joinRes.data) {
-        rawPayments = joinRes.data;
+      if (!plainPay.error && Array.isArray(plainPay.data)) {
+        rawPayments = plainPay.data;
         fetchedPaymentsFromSupabase = true;
-      } else {
-        if (joinRes.error) payFetchError = joinRes.error;
-        // Fallback: Query payments without relational join
-        let plainPay = await supabase
-          .from("payments")
-          .select("*")
-          .order("submitted_at", { ascending: false });
-
-        if (plainPay.error) {
-          // If ordering failed (e.g. submitted_at column missing), query without order
-          plainPay = await supabase.from("payments").select("*");
-        }
-
-        if (!plainPay.error && plainPay.data) {
-          rawPayments = plainPay.data;
-          fetchedPaymentsFromSupabase = true;
-          payFetchError = null; // Plain query succeeded
-        } else if (plainPay.error) {
-          payFetchError = plainPay.error;
-        }
+        payFetchError = null;
+      } else if (plainPay.error) {
+        payFetchError = plainPay.error;
       }
 
       if (payFetchError) {

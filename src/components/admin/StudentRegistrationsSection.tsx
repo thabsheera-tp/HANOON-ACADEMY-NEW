@@ -314,11 +314,11 @@ export default function StudentRegistrationsSection({
       // 2. Search Query (name or phone)
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const nameMatch = item.fullName.toLowerCase().includes(q);
-        const phoneMatch = item.whatsappNum.toLowerCase().includes(q);
-        const districtMatch = item.district.toLowerCase().includes(q);
-        const courseMatch = item.courseChoice.toLowerCase().includes(q);
-        const utrMatch = item.upiTxId.toLowerCase().includes(q);
+        const nameMatch = (item.fullName || "Unknown User").toLowerCase().includes(q);
+        const phoneMatch = (item.whatsappNum || "").toLowerCase().includes(q);
+        const districtMatch = (item.district || "").toLowerCase().includes(q);
+        const courseMatch = (item.courseChoice || "").toLowerCase().includes(q);
+        const utrMatch = (item.upiTxId || "").toLowerCase().includes(q);
         return nameMatch || phoneMatch || districtMatch || courseMatch || utrMatch;
       }
 
@@ -895,11 +895,11 @@ export default function StudentRegistrationsSection({
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-2.5">
                           <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 text-white font-extrabold text-xs flex items-center justify-center shadow-2xs shrink-0">
-                            {item.fullName.charAt(0).toUpperCase()}
+                            {(item.fullName || "Unknown User").charAt(0).toUpperCase()}
                           </div>
                           <div>
                             <span className="font-extrabold text-slate-900 block leading-tight">
-                              {item.fullName}
+                              {item.fullName || "Unknown User"}
                             </span>
                             <div className="flex items-center gap-2 mt-0.5">
                               <span className="text-[10px] text-purple-700 font-bold">
@@ -1165,11 +1165,11 @@ export default function StudentRegistrationsSection({
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white font-extrabold text-xs flex items-center justify-center shrink-0 shadow-2xs">
-                        {item.fullName.charAt(0).toUpperCase()}
+                        {(item.fullName || "Unknown User").charAt(0).toUpperCase()}
                       </div>
                       <div className="min-w-0">
                         <h4 className="text-sm font-black text-slate-900 leading-tight truncate">
-                          {item.fullName}
+                          {item.fullName || "Unknown User"}
                         </h4>
                         <p className="text-[10px] text-slate-500 font-medium">
                           {new Date(item.registrationDate).toLocaleDateString("en-IN", {
@@ -1372,11 +1372,11 @@ export default function StudentRegistrationsSection({
             <div className="p-4 sm:p-5 border-b border-purple-100 flex items-center justify-between gap-3 bg-purple-50/40">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-10 h-10 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center font-black text-sm shrink-0">
-                  {screenshotModalItem.fullName.charAt(0).toUpperCase()}
+                  {(screenshotModalItem.fullName || "Unknown User").charAt(0).toUpperCase()}
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-sm sm:text-base font-black text-slate-900 truncate">
-                    {screenshotModalItem.fullName} — Payment Proof
+                    {screenshotModalItem.fullName || "Unknown User"} — Payment Proof
                   </h3>
                   <p className="text-[11px] text-slate-500 font-medium truncate">
                     Course: <strong className="text-slate-800">{screenshotModalItem.courseChoice}</strong> • Amount: <strong className="text-purple-700">₹{screenshotModalItem.amount?.toLocaleString("en-IN") || "1,500"}</strong>

@@ -364,13 +364,16 @@ ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- 1. Profiles
+DROP POLICY IF EXISTS "Allow read profiles" ON public.profiles;
 DROP POLICY IF EXISTS "Users can read own profile" ON public.profiles;
-CREATE POLICY "Users can read own profile" ON public.profiles
-    FOR SELECT USING (auth.uid() = id OR public.is_verification_admin());
+CREATE POLICY "Allow read profiles" ON public.profiles
+    FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Allow update profiles" ON public.profiles;
 DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
-CREATE POLICY "Users can update own profile" ON public.profiles
-    FOR UPDATE USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
+CREATE POLICY "Allow update profiles" ON public.profiles
+    FOR ALL USING (auth.uid() = id OR public.is_super_admin() OR auth.role() = 'authenticated') 
+    WITH CHECK (auth.uid() = id OR public.is_super_admin() OR auth.role() = 'authenticated');
 
 -- 2. Courses & Subjects (Super Admin only for management)
 DROP POLICY IF EXISTS "Public courses read access" ON public.courses;

@@ -13,63 +13,114 @@ export function getLastPaymentFetchError(): string | null {
 export async function fetchPayments(): Promise<DbPayment[]> {
   lastPaymentFetchError = null;
 
+  // 1. Try server-side admin data route (bypasses RLS with service role key if available, zero PGRST125)
+  if (typeof window !== "undefined") {
+    try {
+      const apiRes = await fetch("/api/admin/data");
+      if (apiRes.ok) {
+        const json = await apiRes.json();
+        if (json && Array.isArray(json.payments)) {
+          const studentMap = new Map<string, any>();
+          if (Array.isArray(json.students)) {
+            for (const s of json.students) {
+              if (s.id) studentMap.set(s.id, s);
+              if (s.user_id) studentMap.set(s.user_id, s);
+              const p = (s.whatsapp_number || s.whatsapp_num || s.phone || "").replace(/\D/g, "");
+              if (p) studentMap.set(p.slice(-10), s);
+            }
+          }
+          if (Array.isArray(json.profiles)) {
+            for (const pr of json.profiles) {
+              if (pr.id && !studentMap.has(pr.id)) {
+                studentMap.set(pr.id, {
+                  id: pr.id,
+                  full_name: pr.full_name || pr.email?.split("@")[0] || "Unknown User",
+                  whatsapp_num: pr.whatsapp_num || pr.whatsapp_number || "",
+                  district: pr.district || pr.place || "Kerala",
+                });
+              }
+            }
+          }
+
+          const enriched: DbPayment[] = json.payments.map((p: any) => {
+            const payPhone = (p.whatsapp_number || p.whatsapp_num || p.phone || "").replace(/\D/g, "");
+            const txDigits = (p.upi_txid || "").replace(/\D/g, "");
+
+            const lookupStudent =
+              (p.student_id ? studentMap.get(p.student_id) : null) ||
+              (payPhone ? studentMap.get(payPhone.slice(-10)) : null) ||
+              (txDigits.length >= 10 ? studentMap.get(txDigits.slice(-10)) : null) ||
+              null;
+
+            const resolvedName =
+              lookupStudent?.full_name ||
+              lookupStudent?.name ||
+              p.student_name ||
+              p.full_name ||
+              (p.upi_txid ? `Student (Tx: ${p.upi_txid.slice(0, 10)})` : "Unknown User");
+
+            const resolvedPhone =
+              lookupStudent?.whatsapp_number ||
+              lookupStudent?.whatsapp_num ||
+              lookupStudent?.phone ||
+              payPhone ||
+              "";
+
+            const resolvedDistrict =
+              lookupStudent?.district ||
+              lookupStudent?.place ||
+              p.district ||
+              "Kerala";
+
+            const stdObj = {
+              id: lookupStudent?.id || p.student_id || "unknown",
+              full_name: resolvedName,
+              whatsapp_num: resolvedPhone,
+              district: resolvedDistrict,
+              created_at: lookupStudent?.created_at || p.submitted_at || new Date().toISOString(),
+            };
+
+            return {
+              ...p,
+              student: stdObj,
+              students: [stdObj],
+            };
+          });
+
+          try {
+            localStorage.setItem(LOCAL_PAYMENTS_KEY, JSON.stringify(enriched));
+          } catch {}
+
+          return enriched;
+        }
+      }
+    } catch {
+      // Fall through to direct Supabase client
+    }
+  }
+
+  // 2. Direct Supabase Client: Clean separate queries (never nested relational joins to prevent PGRST125)
   if (isSupabaseConfigured && supabase) {
     try {
       let rawPayments: any[] | null = null;
       let payFetchError: any = null;
 
-      // 1. Try relational query joining students table (e.g. students(full_name, whatsapp_number))
-      let { data, error } = await supabase
+      // Plain query on payments table
+      let payRes = await supabase
         .from("payments")
-        .select(`
-          *,
-          students (
-            id,
-            full_name,
-            whatsapp_number,
-            whatsapp_num,
-            district,
-            place
-          )
-        `)
+        .select("*")
         .order("submitted_at", { ascending: false });
 
-      if (error) {
-        // Fallback: Try with alias student:students(*)
-        const res2 = await supabase
-          .from("payments")
-          .select(`
-            *,
-            student:students(*)
-          `)
-          .order("submitted_at", { ascending: false });
-        if (!res2.error && res2.data) {
-          data = res2.data;
-          error = null;
-        }
+      if (payRes.error) {
+        // Fallback without ordering in case submitted_at is not indexed
+        payRes = await supabase.from("payments").select("*");
       }
 
-      if (!error && data) {
-        rawPayments = data;
-      } else {
-        if (error) payFetchError = error;
-        // Fallback: Fetch plain payments if relation is missing in schema cache
-        let fallbackRes = await supabase
-          .from("payments")
-          .select("*")
-          .order("submitted_at", { ascending: false });
-
-        if (fallbackRes.error) {
-          // Retry without ordering in case submitted_at column is missing
-          fallbackRes = await supabase.from("payments").select("*");
-        }
-
-        if (!fallbackRes.error && fallbackRes.data) {
-          rawPayments = fallbackRes.data;
-          payFetchError = null; // Plain query succeeded
-        } else if (fallbackRes.error) {
-          payFetchError = fallbackRes.error;
-        }
+      if (!payRes.error && Array.isArray(payRes.data)) {
+        rawPayments = payRes.data;
+        payFetchError = null;
+      } else if (payRes.error) {
+        payFetchError = payRes.error;
       }
 
       if (payFetchError) {
@@ -77,32 +128,37 @@ export async function fetchPayments(): Promise<DbPayment[]> {
         console.warn("Supabase payments fetch error:", payFetchError);
       }
 
-      if (rawPayments && rawPayments.length > 0) {
-        // Fetch students and profiles concurrently to resolve student names reliably
-        const [stdRes, profRes] = await Promise.all([
-          supabase.from("students").select("*"),
-          supabase.from("profiles").select("*"),
-        ]);
+      if (rawPayments) {
+        // Concurrently fetch students and profiles with try/catch to avoid UI crashes
+        let stdList: any[] = [];
+        let profList: any[] = [];
+
+        try {
+          const [stdRes, profRes] = await Promise.all([
+            supabase.from("students").select("*"),
+            supabase.from("profiles").select("*"),
+          ]);
+          if (stdRes.data) stdList = stdRes.data;
+          if (profRes.data) profList = profRes.data;
+        } catch (subErr) {
+          console.warn("Notice: Fetching supplementary students/profiles data had an issue:", subErr);
+        }
 
         const studentMap = new Map<string, any>();
-        if (stdRes.data) {
-          for (const s of stdRes.data) {
-            if (s.id) studentMap.set(s.id, s);
-            if (s.user_id) studentMap.set(s.user_id, s);
-            const p = (s.whatsapp_number || s.whatsapp_num || s.phone || "").replace(/\D/g, "");
-            if (p) studentMap.set(p.slice(-10), s);
-          }
+        for (const s of stdList) {
+          if (s.id) studentMap.set(s.id, s);
+          if (s.user_id) studentMap.set(s.user_id, s);
+          const p = (s.whatsapp_number || s.whatsapp_num || s.phone || "").replace(/\D/g, "");
+          if (p) studentMap.set(p.slice(-10), s);
         }
-        if (profRes.data) {
-          for (const pr of profRes.data) {
-            if (pr.id && !studentMap.has(pr.id)) {
-              studentMap.set(pr.id, {
-                id: pr.id,
-                full_name: pr.full_name || pr.email?.split("@")[0] || "Registered Student",
-                whatsapp_num: pr.whatsapp_num || pr.whatsapp_number || "",
-                district: pr.district || pr.place || "Kerala",
-              });
-            }
+        for (const pr of profList) {
+          if (pr.id && !studentMap.has(pr.id)) {
+            studentMap.set(pr.id, {
+              id: pr.id,
+              full_name: pr.full_name || pr.email?.split("@")[0] || "Unknown User",
+              whatsapp_num: pr.whatsapp_num || pr.whatsapp_number || "",
+              district: pr.district || pr.place || "Kerala",
+            });
           }
         }
 
@@ -127,7 +183,7 @@ export async function fetchPayments(): Promise<DbPayment[]> {
             lookupStudent?.name ||
             (p as any).student_name ||
             (p as any).full_name ||
-            (p.upi_txid ? `Student (Tx: ${p.upi_txid.slice(0, 10)})` : "Registered Student");
+            (p.upi_txid ? `Student (Tx: ${p.upi_txid.slice(0, 10)})` : "Unknown User");
 
           const resolvedPhone =
             rawStudent?.whatsapp_number ||
@@ -147,21 +203,26 @@ export async function fetchPayments(): Promise<DbPayment[]> {
             (p as any).district ||
             "Kerala";
 
+          const stdObj = {
+            id: rawStudent?.id || lookupStudent?.id || p.student_id || "unknown",
+            full_name: resolvedName,
+            whatsapp_num: resolvedPhone,
+            district: resolvedDistrict,
+            created_at: rawStudent?.created_at || lookupStudent?.created_at || p.submitted_at || new Date().toISOString(),
+          };
+
           return {
             ...p,
-            student: {
-              id: rawStudent?.id || lookupStudent?.id || p.student_id,
-              full_name: resolvedName,
-              whatsapp_num: resolvedPhone,
-              district: resolvedDistrict,
-              created_at: rawStudent?.created_at || lookupStudent?.created_at || p.submitted_at || new Date().toISOString(),
-            },
+            student: stdObj,
+            students: [stdObj],
           };
         });
 
+        try {
+          localStorage.setItem(LOCAL_PAYMENTS_KEY, JSON.stringify(enriched));
+        } catch {}
+
         return enriched;
-      } else if (rawPayments && rawPayments.length === 0) {
-        return [];
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
