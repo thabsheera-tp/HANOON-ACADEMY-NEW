@@ -41,11 +41,31 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
       const params = new URLSearchParams(window.location.search);
       const targetScreen = params.get("screen") as ScreenTab;
       if (targetScreen) {
+        if (targetScreen === "dashboard") return "dashboard";
         if (targetScreen === "pending-verification") return "pending-verification";
         if (targetScreen === "payment") return "payment";
-        if (targetScreen === "courses" || targetScreen === "course-details") {
+        if (targetScreen === "courses" || targetScreen === "course-details" || targetScreen === "onboarding") {
           return targetScreen;
         }
+      }
+      // If student is verified and enrolled in local storage, route directly to dashboard
+      const isEnrolled = localStorage.getItem("hanoon_student_enrolled") === "true";
+      if (isEnrolled) {
+        return "dashboard";
+      }
+      // If student has a pending payment submitted, show pending-verification screen
+      const pendingRaw = localStorage.getItem("hanoon_pending_payment");
+      if (pendingRaw) {
+        try {
+          const p = JSON.parse(pendingRaw);
+          if (
+            p &&
+            ((p.status || "").toUpperCase() === "PENDING" ||
+              p.status === "pending_verification")
+          ) {
+            return "pending-verification";
+          }
+        } catch {}
       }
     }
     // Screen 1 (Welcome Landing Page): Visitors strictly land on Welcome Splash Screen
@@ -133,12 +153,22 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
   const [paymentDetails, setPaymentDetails] = useState<PaymentDetails>(() => {
     if (typeof window !== "undefined") {
       try {
+        const isEnrolled = localStorage.getItem("hanoon_student_enrolled") === "true";
+        if (isEnrolled) {
+          return {
+            upiTxId: "VERIFIED",
+            amount: SHOWCASE_COURSES[0].fee,
+            submittedAt: "",
+            status: "verified",
+          };
+        }
         const pendingRaw = localStorage.getItem("hanoon_pending_payment");
         if (pendingRaw) {
           const p = JSON.parse(pendingRaw);
           if (
             p &&
-            (p.status === "PENDING" || p.status === "pending_verification") &&
+            ((p.status || "").toUpperCase() === "PENDING" ||
+              p.status === "pending_verification") &&
             p.txId &&
             p.txId !== "Pending Verification"
           ) {
@@ -206,38 +236,66 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     };
   }, [initialUser, router]);
 
-  // Dynamic State Fetching: Fetch the current authenticated student's profile (ignoring staff/admins)
+  // Dynamic State Fetching: Fetch current authenticated student's profile or verified enrollment from Supabase
   useEffect(() => {
-    const session = getCurrentSession();
-    const activeUser = initialUser || session?.user;
+    let isMounted = true;
 
-    const isStaffOrOfficer = (u: any) => {
-      if (!u) return false;
-      if (u.role && u.role !== "student") return true;
-      const lower = (u.full_name || "").toLowerCase();
-      return (
-        lower.includes("officer") ||
-        lower.includes("staff") ||
-        lower.includes("admin") ||
-        lower.includes("verifier")
-      );
-    };
+    const verifyAndRoute = async () => {
+      const session = getCurrentSession();
+      const activeUser = initialUser || session?.user;
 
-    // If active user is staff/admin/verifier, do NOT treat them as a student profile on the student portal
-    if (activeUser && isStaffOrOfficer(activeUser)) {
-      return;
-    }
+      const isStaffOrOfficer = (u: any) => {
+        if (!u) return false;
+        if (u.role && u.role !== "student") return true;
+        const lower = (u.full_name || "").toLowerCase();
+        return (
+          lower.includes("officer") ||
+          lower.includes("staff") ||
+          lower.includes("admin") ||
+          lower.includes("verifier")
+        );
+      };
 
-    if (activeUser && activeUser.role === "student") {
-      // Set active user state immediately
-      setUserProfile({
-        name: activeUser.full_name || "",
-        phone: activeUser.whatsapp_num || "",
-        place: activeUser.district || "",
-      });
+      // If active user is staff/admin/verifier, do NOT treat them as a student profile on the student portal
+      if (activeUser && isStaffOrOfficer(activeUser)) {
+        return;
+      }
 
-      const verifyAndRoute = async () => {
-        // 1. Dynamically fetch latest profile from Supabase using user.id to guarantee fresh state
+      // Collect student identification from Auth session, local state, or cached enrollment
+      let studentPhone = activeUser?.whatsapp_num || userProfile.phone || "";
+      let studentName = activeUser?.full_name || userProfile.name || "";
+      let txId = paymentDetails.upiTxId || "";
+      let pendingPaymentId = "";
+
+      if (typeof window !== "undefined") {
+        try {
+          const savedProf = localStorage.getItem("hanoon_student_profile");
+          if (savedProf) {
+            const sp = JSON.parse(savedProf);
+            if (!studentPhone && sp.phone) studentPhone = sp.phone;
+            if (!studentName && sp.name && !isStaffOrOfficer(sp.name)) studentName = sp.name;
+          }
+          const pendingRaw = localStorage.getItem("hanoon_pending_payment");
+          if (pendingRaw) {
+            const p = JSON.parse(pendingRaw);
+            if (!studentPhone && p.studentPhone) studentPhone = p.studentPhone;
+            if (!studentName && p.studentName && !isStaffOrOfficer(p.studentName)) studentName = p.studentName;
+            if (!txId && p.txId && p.txId !== "Pending Verification") txId = p.txId;
+            if (p.paymentId) pendingPaymentId = p.paymentId;
+          }
+        } catch {}
+      }
+
+      const cleanPhone = (studentPhone || "").replace(/\D/g, "");
+      const cleanTxId = (txId || "").trim();
+
+      // If no student phone or txId or paymentId, no verification query needed
+      if (!cleanPhone && !cleanTxId && !pendingPaymentId && !activeUser) {
+        return;
+      }
+
+      // If active user is authenticated student, update profile name
+      if (activeUser && activeUser.role === "student") {
         try {
           const liveProfile = await fetchUserLiveProfile(
             activeUser.id,
@@ -254,157 +312,163 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
         } catch (e) {
           console.warn("Could not dynamically fetch live user profile:", e);
         }
+      }
 
-        let isVerified = false;
-        let activePayment: any = null;
-        const cleanPhone = activeUser.whatsapp_num
-          ? activeUser.whatsapp_num.replace(/\D/g, "")
-          : "";
+      let isVerified = false;
+      let isPending = false;
+      let activePayment: any = null;
 
-        // 2. Strict Live Payment Verification via Supabase for THIS user
-        if (cleanPhone) {
-          try {
-            const { supabase, isSupabaseConfigured } = await import("@/lib/supabaseClient");
-            if (isSupabaseConfigured && supabase) {
-              const { data: studentRecord } = await supabase
-                .from("students")
-                .select("id, full_name, payments(*)")
-                .eq("whatsapp_num", cleanPhone)
-                .order("created_at", { ascending: false })
-                .limit(1)
-                .maybeSingle();
+      try {
+        const { supabase, isSupabaseConfigured } = await import("@/lib/supabaseClient");
+        if (isSupabaseConfigured && supabase) {
+          // 1. Check by student phone number in students table
+          if (cleanPhone) {
+            const { data: studentRecord } = await supabase
+              .from("students")
+              .select("id, full_name, payments(*)")
+              .eq("whatsapp_num", cleanPhone)
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
 
-              if (studentRecord) {
-                if (studentRecord.full_name && studentRecord.full_name.trim()) {
-                  setUserProfile((prev) => ({
-                    ...prev,
-                    name: studentRecord.full_name.trim(),
-                  }));
-                }
+            if (studentRecord) {
+              if (studentRecord.full_name && !isStaffOrOfficer(studentRecord.full_name)) {
+                studentName = studentRecord.full_name.trim();
+                setUserProfile((prev) => ({ ...prev, name: studentName }));
+              }
 
-                if (studentRecord.payments && Array.isArray(studentRecord.payments)) {
-                  const approved = studentRecord.payments.find(
-                    (p: any) =>
-                      p.status === "APPROVED" ||
-                      p.status === "verified" ||
-                      p.status === "ACTIVE"
-                  );
-                  if (approved) {
-                    isVerified = true;
-                    activePayment = approved;
-                    localStorage.setItem(
-                      "hanoon_local_payments",
-                      JSON.stringify(studentRecord.payments)
-                    );
-                  } else if (studentRecord.payments.length > 0) {
+              if (studentRecord.payments && Array.isArray(studentRecord.payments) && studentRecord.payments.length > 0) {
+                const approved = studentRecord.payments.find((p: any) => {
+                  const s = (p.status || "").toUpperCase();
+                  return s === "APPROVED" || s === "VERIFIED" || s === "ACTIVE";
+                });
+
+                if (approved) {
+                  isVerified = true;
+                  activePayment = approved;
+                  localStorage.setItem("hanoon_local_payments", JSON.stringify(studentRecord.payments));
+                } else {
+                  const pendingPay = studentRecord.payments.find((p: any) => {
+                    const s = (p.status || "").toUpperCase();
+                    return s === "PENDING" || s === "PENDING_VERIFICATION";
+                  });
+                  if (pendingPay) {
+                    isPending = true;
+                    activePayment = pendingPay;
+                  } else {
                     activePayment = studentRecord.payments[0];
                   }
                 }
               }
             }
-          } catch (e) {
-            console.warn("Supabase persistence check warning:", e);
+          }
+
+          // 2. Also check payments table directly by transaction ID or payment ID
+          if (!isVerified && (cleanTxId || pendingPaymentId)) {
+            const queryTarget = cleanTxId || pendingPaymentId;
+            const { data: payRecords } = await supabase
+              .from("payments")
+              .select("id, status, amount, course_id, submitted_at, upi_txid, rejection_reason")
+              .or(`upi_txid.eq.${queryTarget},id.eq.${queryTarget}`)
+              .order("created_at", { ascending: false })
+              .limit(1);
+
+            if (payRecords && payRecords.length > 0) {
+              const pay = payRecords[0];
+              const s = (pay.status || "").toUpperCase();
+              if (s === "APPROVED" || s === "VERIFIED" || s === "ACTIVE") {
+                isVerified = true;
+                activePayment = pay;
+              } else if (s === "PENDING" || s === "PENDING_VERIFICATION") {
+                isPending = true;
+                activePayment = pay;
+              }
+            }
           }
         }
+      } catch (err) {
+        console.warn("Supabase verification check warning:", err);
+      }
 
-        // 3. Check local storage cache ONLY if matching this student
-        if (!isVerified) {
-          try {
-            const savedPaymentsRaw = localStorage.getItem("hanoon_local_payments");
-            if (savedPaymentsRaw) {
-              const payments = JSON.parse(savedPaymentsRaw);
-              if (Array.isArray(payments) && payments.length > 0) {
-                const userMatch = payments.find(
-                  (p: any) =>
-                    p.student_id === activeUser.id ||
-                    p.student?.id === activeUser.id ||
-                    (cleanPhone && p.student?.whatsapp_num === cleanPhone)
+      // 3. Fallback: Check local storage cache if network or Supabase query had issues
+      if (!isVerified && !isPending && typeof window !== "undefined") {
+        try {
+          const savedPaymentsRaw = localStorage.getItem("hanoon_local_payments");
+          if (savedPaymentsRaw) {
+            const payments = JSON.parse(savedPaymentsRaw);
+            if (Array.isArray(payments) && payments.length > 0) {
+              const userMatch = payments.find((p: any) => {
+                const matchPhone = (p.student?.whatsapp_num || "").replace(/\D/g, "");
+                return (
+                  (cleanPhone && matchPhone === cleanPhone) ||
+                  (cleanTxId && (p.upi_txid === cleanTxId || p.id === cleanTxId))
                 );
-                if (userMatch) {
-                  if (
-                    userMatch.status === "APPROVED" ||
-                    userMatch.status === "verified" ||
-                    userMatch.status === "ACTIVE"
-                  ) {
-                    isVerified = true;
-                  }
+              });
+              if (userMatch) {
+                const s = (userMatch.status || "").toUpperCase();
+                if (s === "APPROVED" || s === "VERIFIED" || s === "ACTIVE") {
+                  isVerified = true;
+                  activePayment = userMatch;
+                } else if (s === "PENDING" || s === "PENDING_VERIFICATION") {
+                  isPending = true;
                   activePayment = userMatch;
                 }
               }
             }
-          } catch (e) {
-            console.warn("Could not read local payment session:", e);
           }
-        }
+        } catch {}
+      }
 
-        // Also check hanoon_pending_payment if activePayment is not resolved yet
-        if (!activePayment && typeof window !== "undefined") {
-          try {
-            const pendingRaw = localStorage.getItem("hanoon_pending_payment");
-            if (pendingRaw) {
-              const pendingData = JSON.parse(pendingRaw);
-              if (
-                pendingData &&
-                (pendingData.status === "PENDING" || pendingData.status === "pending_verification")
-              ) {
-                activePayment = {
-                  id: pendingData.paymentId,
-                  upi_txid: pendingData.txId,
-                  amount: pendingData.amount,
-                  status: "PENDING",
-                  course_id: pendingData.courseId,
-                  submitted_at: pendingData.submittedAt,
-                };
-              }
-            }
-          } catch (e) {
-            console.warn("Could not read pending payment cache:", e);
-          }
-        }
+      if (!isMounted) return;
 
-        // 4. Resolve Enrolled Course dynamically from user's payment record
-        if (activePayment && activePayment.course_id) {
-          const matchedCourse = SHOWCASE_COURSES.find(
-            (c) =>
-              c.id === activePayment.course_id ||
-              (activePayment.course_id === "shamail" && c.id.includes("shamail"))
-          );
-          if (matchedCourse) {
-            setSelectedCourse(matchedCourse);
-          }
+      // 4. Resolve Enrolled Course dynamically from user's payment record
+      if (activePayment && activePayment.course_id) {
+        const matchedCourse = SHOWCASE_COURSES.find(
+          (c) =>
+            c.id === activePayment.course_id ||
+            c.id.toLowerCase() === (activePayment.course_id || "").toLowerCase() ||
+            (activePayment.course_id === "shamail" && c.id.includes("shamail")) ||
+            (activePayment.course_id.includes("shamail") && c.id.includes("shamail"))
+        );
+        if (matchedCourse) {
+          setSelectedCourse(matchedCourse);
         }
+      }
 
-        // 5. Update student payment status in state without overriding root Landing Page
-        if (isVerified && activePayment) {
-          setPaymentDetails({
-            upiTxId: activePayment.upi_txid,
-            amount: typeof activePayment.amount === "number" ? `₹${activePayment.amount}` : activePayment.amount || "₹3000",
-            submittedAt: activePayment.submitted_at || new Date().toLocaleTimeString(),
-            status: "verified",
-          });
-          if (typeof window !== "undefined") {
-            localStorage.removeItem("hanoon_pending_payment");
-            localStorage.setItem("hanoon_student_enrolled", "true");
-          }
-        } else if (
-          activePayment &&
-          (activePayment.status === "PENDING" ||
-            activePayment.status === "pending_verification")
-        ) {
-          setPaymentDetails({
-            upiTxId: activePayment.upi_txid,
-            amount: typeof activePayment.amount === "number" ? `₹${activePayment.amount}` : activePayment.amount || SHOWCASE_COURSES[0].fee,
-            submittedAt: activePayment.submitted_at || new Date().toLocaleTimeString(),
-            status: "pending_verification",
-          });
+      // 5. Update student payment status in state
+      if (isVerified && activePayment) {
+        setPaymentDetails({
+          upiTxId: activePayment.upi_txid || cleanTxId || "VERIFIED",
+          amount: typeof activePayment.amount === "number" ? `₹${activePayment.amount}` : activePayment.amount || "₹3000",
+          submittedAt: activePayment.submitted_at || new Date().toLocaleTimeString(),
+          status: "verified",
+        });
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("hanoon_pending_payment");
+          localStorage.setItem("hanoon_student_enrolled", "true");
         }
-        // PREVENT AUTO-REDIRECT TO COURSES:
-        // Root route ("/") must strictly remain on the Public Landing Page ("splash")
-        // Users navigate to Course Catalog only when clicking "Get Started" or "Explore Courses"
-      };
+        // IF the status is 'APPROVED' or 'VERIFIED': transition out of Pending screen and into active Dashboard
+        setCurrentScreen((prev) => (prev === "pending-verification" ? "dashboard" : prev));
+      } else if (isPending && activePayment) {
+        setPaymentDetails({
+          upiTxId: activePayment.upi_txid || cleanTxId,
+          amount: typeof activePayment.amount === "number" ? `₹${activePayment.amount}` : activePayment.amount || SHOWCASE_COURSES[0].fee,
+          submittedAt: activePayment.submitted_at || new Date().toLocaleTimeString(),
+          status: "pending_verification",
+        });
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("hanoon_student_enrolled");
+        }
+        // IF the status is 'PENDING': redirect to the Pending Verification screen
+        setCurrentScreen((prev) => (prev === "dashboard" ? "pending-verification" : prev));
+      }
+    };
 
-      verifyAndRoute();
-    }
+    verifyAndRoute();
+
+    return () => {
+      isMounted = false;
+    };
   }, [initialUser]);
 
   // Purge global React state upon user logout
@@ -447,16 +511,30 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
             },
             (payload) => {
               const updated = payload.new as any;
+              const newSt = (updated?.status || "").toUpperCase();
               if (
                 updated &&
-                (updated.status === "APPROVED" || updated.status === "verified")
+                (newSt === "APPROVED" || newSt === "VERIFIED" || newSt === "ACTIVE")
               ) {
                 if (typeof window !== "undefined") {
                   localStorage.removeItem("hanoon_pending_payment");
                   localStorage.setItem("hanoon_student_enrolled", "true");
                 }
+                if (updated.course_id) {
+                  const matchedCourse = SHOWCASE_COURSES.find(
+                    (c) =>
+                      c.id === updated.course_id ||
+                      c.id.toLowerCase() === (updated.course_id || "").toLowerCase() ||
+                      (updated.course_id === "shamail" && c.id.includes("shamail")) ||
+                      (updated.course_id.includes("shamail") && c.id.includes("shamail"))
+                  );
+                  if (matchedCourse) {
+                    setSelectedCourse(matchedCourse);
+                  }
+                }
                 setPaymentDetails((prev) => ({
                   ...prev,
+                  upiTxId: updated.upi_txid || prev.upiTxId || "VERIFIED",
                   status: "verified",
                 }));
                 setCurrentScreen("dashboard");
@@ -472,14 +550,28 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     const handleLocalPayment = (e: Event) => {
       const customEvt = e as CustomEvent;
       if (customEvt.detail) {
-        const { status } = customEvt.detail;
-        if (status === "APPROVED" || status === "verified") {
+        const { status, upi_txid, course_id } = customEvt.detail;
+        const st = (status || "").toUpperCase();
+        if (st === "APPROVED" || st === "VERIFIED" || st === "ACTIVE") {
           if (typeof window !== "undefined") {
             localStorage.removeItem("hanoon_pending_payment");
             localStorage.setItem("hanoon_student_enrolled", "true");
           }
+          if (course_id) {
+            const matchedCourse = SHOWCASE_COURSES.find(
+              (c) =>
+                c.id === course_id ||
+                c.id.toLowerCase() === (course_id || "").toLowerCase() ||
+                (course_id === "shamail" && c.id.includes("shamail")) ||
+                (course_id.includes("shamail") && c.id.includes("shamail"))
+            );
+            if (matchedCourse) {
+              setSelectedCourse(matchedCourse);
+            }
+          }
           setPaymentDetails((prev) => ({
             ...prev,
+            upiTxId: upi_txid || prev.upiTxId || "VERIFIED",
             status: "verified",
           }));
           setCurrentScreen("dashboard");
@@ -610,11 +702,16 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
 
   const canGoBack = currentScreen !== "splash";
   const isEnrolled =
-    paymentDetails.status === "verified" ||
-    (paymentDetails.status as string) === "APPROVED" ||
-    (paymentDetails.status as string) === "ACTIVE";
+    (paymentDetails.status || "").toUpperCase() === "APPROVED" ||
+    (paymentDetails.status || "").toUpperCase() === "VERIFIED" ||
+    (paymentDetails.status || "").toUpperCase() === "ACTIVE" ||
+    paymentDetails.status === "verified";
   const hasPaymentSubmitted =
-    paymentDetails.status === "pending_verification" || currentScreen === "pending-verification";
+    !isEnrolled &&
+    ((paymentDetails.status || "").toUpperCase() === "PENDING" ||
+      paymentDetails.status === "pending_verification" ||
+      currentScreen === "pending-verification" ||
+      Boolean(paymentDetails.upiTxId && paymentDetails.upiTxId !== "VERIFIED"));
 
   // Route Guard: Restrict Dashboard access strictly to APPROVED / ACTIVE students
   useEffect(() => {
@@ -625,6 +722,10 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
         setAccessNotice("Please complete enrollment to access your dashboard.");
         setCurrentScreen("course-details");
       }
+    } else if (currentScreen === "pending-verification" && isEnrolled) {
+      // IF the status is 'APPROVED' or 'VERIFIED': Completely hide the verification screen.
+      // Render the actual Student Dashboard showing their selected/enrolled course.
+      setCurrentScreen("dashboard");
     }
   }, [currentScreen, isEnrolled, hasPaymentSubmitted, paymentDetails.status]);
 

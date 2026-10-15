@@ -390,7 +390,7 @@ export function subscribeToPaymentStatus(
  */
 export async function checkPaymentStatusByIdOrTx(
   paymentIdOrTx: string
-): Promise<{ status: PaymentStatus; rejectionReason?: string | null } | null> {
+): Promise<{ status: PaymentStatus; rejectionReason?: string | null; course_id?: string } | null> {
   const cleanId = paymentIdOrTx.trim();
   if (!cleanId) return null;
 
@@ -398,7 +398,7 @@ export async function checkPaymentStatusByIdOrTx(
     try {
       const { data, error } = await supabase
         .from("payments")
-        .select("id, status, rejection_reason, upi_txid")
+        .select("id, status, rejection_reason, upi_txid, course_id")
         .or(`id.eq.${cleanId},upi_txid.eq.${cleanId}`)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -408,6 +408,7 @@ export async function checkPaymentStatusByIdOrTx(
         return {
           status: data.status as PaymentStatus,
           rejectionReason: data.rejection_reason,
+          course_id: data.course_id,
         };
       }
     } catch (e) {
@@ -428,6 +429,7 @@ export async function checkPaymentStatusByIdOrTx(
         return {
           status: match.status,
           rejectionReason: match.rejection_reason,
+          course_id: match.course_id,
         };
       }
     } catch {}

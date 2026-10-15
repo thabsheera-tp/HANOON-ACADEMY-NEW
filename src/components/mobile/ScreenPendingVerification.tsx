@@ -51,6 +51,86 @@ export default function ScreenPendingVerification({
     return () => unsubscribe();
   }, []);
 
+  // Real-time Supabase & event subscription: Instantly transition to Dashboard when Admin approves
+  useEffect(() => {
+    let realtimeChannel: any = null;
+    const listenToApproval = async () => {
+      const { supabase, isSupabaseConfigured } = await import("@/lib/supabaseClient");
+      if (isSupabaseConfigured && supabase) {
+        realtimeChannel = supabase
+          .channel(`pending_screen_approval_${paymentDetails.upiTxId || "all"}`)
+          .on(
+            "postgres_changes",
+            { event: "UPDATE", schema: "public", table: "payments" },
+            (payload) => {
+              const updated = payload.new as any;
+              const newSt = (updated?.status || "").toUpperCase();
+              if (
+                updated &&
+                (newSt === "APPROVED" || newSt === "VERIFIED" || newSt === "ACTIVE")
+              ) {
+                if (
+                  !paymentDetails.upiTxId ||
+                  updated.upi_txid === paymentDetails.upiTxId ||
+                  updated.id === paymentDetails.upiTxId
+                ) {
+                  if (typeof window !== "undefined") {
+                    localStorage.removeItem("hanoon_pending_payment");
+                    localStorage.setItem("hanoon_student_enrolled", "true");
+                  }
+                  window.dispatchEvent(
+                    new CustomEvent("hanoon_payment_event", {
+                      detail: {
+                        status: "APPROVED",
+                        upi_txid: updated.upi_txid,
+                        course_id: updated.course_id,
+                      },
+                    })
+                  );
+                  setStatusFeedback({
+                    message: "🎉 Payment Approved! Your course and dashboard are now unlocked.",
+                    type: "success",
+                  });
+                  setTimeout(() => {
+                    onGoToDashboard();
+                  }, 600);
+                }
+              }
+            }
+          )
+          .subscribe();
+      }
+    };
+    listenToApproval();
+
+    const handleLocalApproval = (e: Event) => {
+      const customEvt = e as CustomEvent;
+      if (customEvt.detail) {
+        const st = (customEvt.detail.status || "").toUpperCase();
+        if (st === "APPROVED" || st === "VERIFIED" || st === "ACTIVE") {
+          setStatusFeedback({
+            message: "🎉 Payment Approved! Your course and dashboard are now unlocked.",
+            type: "success",
+          });
+          setTimeout(() => {
+            onGoToDashboard();
+          }, 600);
+        }
+      }
+    };
+
+    window.addEventListener("hanoon_payment_event", handleLocalApproval);
+
+    return () => {
+      if (realtimeChannel) {
+        import("@/lib/supabaseClient").then(({ supabase }) => {
+          if (supabase) supabase.removeChannel(realtimeChannel);
+        });
+      }
+      window.removeEventListener("hanoon_payment_event", handleLocalApproval);
+    };
+  }, [paymentDetails.upiTxId, onGoToDashboard]);
+
   const studentName = userProfile?.name || "Student";
   const courseTitle = selectedCourse.title || "Course Enrollment";
   const amount = paymentDetails.amount || selectedCourse.admissionFee || selectedCourse.fee;
@@ -73,15 +153,29 @@ export default function ScreenPendingVerification({
     try {
       const res = await checkPaymentStatusByIdOrTx(txId);
       if (res) {
-        if (res.status === "APPROVED" || (res.status as string) === "verified") {
+        const resSt = (res.status || "").toUpperCase();
+        if (resSt === "APPROVED" || resSt === "VERIFIED" || resSt === "ACTIVE") {
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("hanoon_pending_payment");
+            localStorage.setItem("hanoon_student_enrolled", "true");
+          }
+          window.dispatchEvent(
+            new CustomEvent("hanoon_payment_event", {
+              detail: {
+                status: "APPROVED",
+                upi_txid: txId,
+                course_id: res.course_id,
+              },
+            })
+          );
           setStatusFeedback({
             message: "🎉 Payment Approved! Your course and dashboard are now unlocked.",
             type: "success",
           });
           setTimeout(() => {
             onGoToDashboard();
-          }, 1000);
-        } else if (res.status === "REJECTED") {
+          }, 800);
+        } else if (resSt === "REJECTED") {
           setStatusFeedback({
             message: res.rejectionReason || "Payment was rejected. Please re-upload your payment proof.",
             type: "error",

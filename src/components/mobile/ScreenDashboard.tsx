@@ -66,8 +66,139 @@ export default function ScreenDashboard({
   const [selectedSpecialClass, setSelectedSpecialClass] = useState<SpecialClass | null>(null);
   const [showSpecialModal, setShowSpecialModal] = useState(false);
 
-  // Adaviyya Subjects (Seerah, Haddad, Fiqh, Hadith)
-  const [subjects] = useState<AdaviyyaSubject[]>(() => getAdaviyyaSubjects());
+  // Dynamic Subjects based on Enrolled Course (Adaviyya, Fashion Designing, Home Tuition, Shamail)
+  const subjects: AdaviyyaSubject[] = React.useMemo(() => {
+    const courseId = (selectedCourse.id || "").toLowerCase();
+    if (courseId === "fashion-designing") {
+      return [
+        {
+          id: "seerah" as any,
+          name: "Pattern Drafting",
+          subtitle: "Precision Garment Geometry & Blocks",
+          instructor: "Lead Design Faculty",
+          badgeGradient: "bg-gradient-to-tr from-purple-500 to-indigo-500 text-white shadow-lg",
+          iconType: "sparkles",
+          liveClassUrl: "https://zoom.us/j/hanoon-fashion-drafting",
+          scheduleTime: "Tuesdays & Thursdays • 04:00 PM IST",
+          description: "Master measurement, pattern drafting, basic block creation, and modest apparel ergonomics.",
+          chapters: [
+            { id: "fd-1", title: "Chapter 1: Anthropometrics & Standard Sizing", duration: "45 mins", pdfTitle: "Pattern Drafting Measurement Guide.pdf", pdfSize: "3.8 MB" },
+            { id: "fd-2", title: "Chapter 2: Bodice & Abaya Block Construction", duration: "50 mins", pdfTitle: "Abaya & Tunic Sloper Handbook.pdf", pdfSize: "4.5 MB" },
+            { id: "fd-3", title: "Chapter 3: Dart Manipulation & Contouring", duration: "40 mins", pdfTitle: "Contouring Modest Silhouettes.pdf", pdfSize: "3.2 MB" },
+          ],
+        },
+        {
+          id: "haddad" as any,
+          name: "Fabric & Textiles",
+          subtitle: "Material Sciences, Weaves & Drapes",
+          instructor: "Lead Design Faculty",
+          badgeGradient: "bg-gradient-to-tr from-rose-500 to-pink-500 text-white shadow-lg",
+          iconType: "book",
+          liveClassUrl: "https://zoom.us/j/hanoon-fashion-textiles",
+          scheduleTime: "Mondays & Wednesdays • 04:00 PM IST",
+          description: "Understanding natural & synthetic fibers, breathable weaves, seasonal textiles, and drape behavior.",
+          chapters: [
+            { id: "tx-1", title: "Chapter 1: Natural vs Synthetic Fiber Science", duration: "40 mins", pdfTitle: "Textile Fibers Classification.pdf", pdfSize: "3.1 MB" },
+            { id: "tx-2", title: "Chapter 2: Fabric Grainlines & Cutting Rules", duration: "45 mins", pdfTitle: "Grainline Alignment & Bias Cutting.pdf", pdfSize: "3.6 MB" },
+          ],
+        },
+        {
+          id: "fiqh" as any,
+          name: "Stitching & Assembly",
+          subtitle: "Industrial Sewing, Seams & Finishes",
+          instructor: "Lead Design Faculty",
+          badgeGradient: "bg-gradient-to-tr from-emerald-500 to-teal-500 text-white shadow-lg",
+          iconType: "scale",
+          liveClassUrl: "https://zoom.us/j/hanoon-fashion-stitching",
+          scheduleTime: "Fridays & Saturdays • 03:30 PM IST",
+          description: "Sewing machine operation, stitch regulation, french seams, bias binding, and clean garment assembly.",
+          chapters: [
+            { id: "st-1", title: "Chapter 1: Machine Maintenance & Tension Control", duration: "35 mins", pdfTitle: "Sewing Machine Operation Manual.pdf", pdfSize: "2.9 MB" },
+            { id: "st-2", title: "Chapter 2: Seam Finishes, Zippers & Plackets", duration: "55 mins", pdfTitle: "Flawless Zipper & Placket Guide.pdf", pdfSize: "4.9 MB" },
+          ],
+        },
+        {
+          id: "hadith" as any,
+          name: "Embellishment Art",
+          subtitle: "Surface Ornamentation, Embroidery & Beads",
+          instructor: "Lead Design Faculty",
+          badgeGradient: "bg-gradient-to-tr from-amber-500 to-orange-500 text-white shadow-lg",
+          iconType: "scroll",
+          liveClassUrl: "https://zoom.us/j/hanoon-fashion-embroidery",
+          scheduleTime: "Sundays • 10:00 AM IST",
+          description: "Traditional and contemporary needlework, beadwork, embroidery, and luxury cuff detailing.",
+          chapters: [
+            { id: "em-1", title: "Chapter 1: Hand Embroidery Stitches & Motifs", duration: "45 mins", pdfTitle: "Embroidery Stitches Chart.pdf", pdfSize: "4.1 MB" },
+            { id: "em-2", title: "Chapter 2: Luxury Beading & Sequins Application", duration: "50 mins", pdfTitle: "Cuff & Neckline Ornamentation.pdf", pdfSize: "5.0 MB" },
+          ],
+        },
+      ];
+    } else if (courseId === "home-tuition") {
+      return [
+        {
+          id: "seerah" as any,
+          name: "Mathematics Core",
+          subtitle: "Conceptual Clarity & Problem Solving",
+          instructor: "Senior Tuition Faculty",
+          badgeGradient: "bg-gradient-to-tr from-blue-600 to-cyan-500 text-white shadow-lg",
+          iconType: "book",
+          liveClassUrl: "https://zoom.us/j/hanoon-tuition-maths",
+          scheduleTime: "Daily • 06:00 PM IST",
+          description: "Algebra, Geometry, Trigonometry, and Arithmetic problem-solving with step-by-step guidance.",
+          chapters: [
+            { id: "mt-1", title: "Chapter 1: Fundamental Algebra & Equations", duration: "45 mins", pdfTitle: "Algebra Formula Sheet & Exercises.pdf", pdfSize: "3.4 MB" },
+            { id: "mt-2", title: "Chapter 2: Geometry Theorems & Proofs", duration: "50 mins", pdfTitle: "Geometry Theorems Explained.pdf", pdfSize: "4.2 MB" },
+          ],
+        },
+        {
+          id: "haddad" as any,
+          name: "Science Core",
+          subtitle: "Physics, Chemistry & Biology Basics",
+          instructor: "Senior Tuition Faculty",
+          badgeGradient: "bg-gradient-to-tr from-emerald-500 to-teal-500 text-white shadow-lg",
+          iconType: "sparkles",
+          liveClassUrl: "https://zoom.us/j/hanoon-tuition-science",
+          scheduleTime: "Daily • 07:00 PM IST",
+          description: "Core physical sciences, laboratory concepts, chemical reactions, and living systems explained simply.",
+          chapters: [
+            { id: "sc-1", title: "Chapter 1: Motion, Forces & Energy", duration: "45 mins", pdfTitle: "Physics Motion & Laws Notes.pdf", pdfSize: "3.7 MB" },
+            { id: "sc-2", title: "Chapter 2: Chemical Reactions & Periodic Trends", duration: "48 mins", pdfTitle: "Chemistry Core Reactions.pdf", pdfSize: "4.0 MB" },
+          ],
+        },
+        {
+          id: "fiqh" as any,
+          name: "Doubt Resolution",
+          subtitle: "1-on-1 Personalized Mentoring Hub",
+          instructor: "Academic Mentor",
+          badgeGradient: "bg-gradient-to-tr from-amber-500 to-rose-500 text-white shadow-lg",
+          iconType: "scale",
+          liveClassUrl: "https://zoom.us/j/hanoon-tuition-doubts",
+          scheduleTime: "Flexible • On Demand",
+          description: "Live interactive clearing of homework questions, textbook exercises, and tricky exam problems.",
+          chapters: [
+            { id: "db-1", title: "Weekly Doubt Clearing Vault & Solutions", duration: "60 mins", pdfTitle: "Solved Exemplar Questions.pdf", pdfSize: "5.1 MB" },
+          ],
+        },
+        {
+          id: "hadith" as any,
+          name: "Mock Tests & Prep",
+          subtitle: "Chapter Tests, Model Papers & Revision",
+          instructor: "Evaluation Lead",
+          badgeGradient: "bg-gradient-to-tr from-purple-600 to-indigo-600 text-white shadow-lg",
+          iconType: "scroll",
+          liveClassUrl: "https://zoom.us/j/hanoon-tuition-mocktests",
+          scheduleTime: "Saturdays • 05:00 PM IST",
+          description: "Timed chapter tests, sample question papers, time-management strategies, and detailed answer reviews.",
+          chapters: [
+            { id: "mk-1", title: "Term 1 Comprehensive Mock Exam Paper", duration: "90 mins", pdfTitle: "Term 1 Mock Exam & Answer Key.pdf", pdfSize: "4.8 MB" },
+          ],
+        },
+      ];
+    }
+    // Default: Adaviyya (Seerah, Haddad, Fiqh, Hadith)
+    return getAdaviyyaSubjects();
+  }, [selectedCourse.id]);
+
   const [activeSubject, setActiveSubject] = useState<AdaviyyaSubject | null>(null);
 
   // Student Certificates
@@ -154,13 +285,15 @@ export default function ScreenDashboard({
             },
             (payload) => {
               const updated = payload.new as any;
+              const newSt = (updated?.status || "").toUpperCase();
               if (
                 updated &&
-                (updated.status === "APPROVED" || updated.status === "verified")
+                (newSt === "APPROVED" || newSt === "VERIFIED" || newSt === "ACTIVE")
               ) {
                 if (
                   !paymentDetails.upiTxId ||
-                  updated.upi_txid === paymentDetails.upiTxId
+                  updated.upi_txid === paymentDetails.upiTxId ||
+                  updated.id === paymentDetails.upiTxId
                 ) {
                   setLivePaymentStatus("verified");
                 }
@@ -176,7 +309,8 @@ export default function ScreenDashboard({
       const customEvt = e as CustomEvent;
       if (customEvt.detail) {
         const { id, upi_txid, status } = customEvt.detail;
-        if (status === "APPROVED" || status === "verified") {
+        const st = (status || "").toUpperCase();
+        if (st === "APPROVED" || st === "VERIFIED" || st === "ACTIVE") {
           if (
             !paymentDetails.upiTxId ||
             id === paymentDetails.upiTxId ||
@@ -204,17 +338,21 @@ export default function ScreenDashboard({
   const avatarLetter = studentName.charAt(0).toUpperCase() || "S";
 
   const isApproved =
+    (livePaymentStatus || "").toUpperCase() === "APPROVED" ||
+    (livePaymentStatus || "").toUpperCase() === "VERIFIED" ||
+    (livePaymentStatus || "").toUpperCase() === "ACTIVE" ||
     livePaymentStatus === "verified" ||
-    livePaymentStatus === "APPROVED" ||
-    paymentDetails.status === "verified" ||
-    (paymentDetails.status as string) === "APPROVED";
+    (paymentDetails.status || "").toUpperCase() === "APPROVED" ||
+    (paymentDetails.status || "").toUpperCase() === "VERIFIED" ||
+    (paymentDetails.status || "").toUpperCase() === "ACTIVE" ||
+    paymentDetails.status === "verified";
   const isPending =
     !isApproved &&
-    (livePaymentStatus === "pending_verification" ||
-      livePaymentStatus === "PENDING" ||
+    ((livePaymentStatus || "").toUpperCase() === "PENDING" ||
+      livePaymentStatus === "pending_verification" ||
+      (paymentDetails.status || "").toUpperCase() === "PENDING" ||
       paymentDetails.status === "pending_verification" ||
-      (paymentDetails.status as string) === "PENDING" ||
-      Boolean(paymentDetails.upiTxId));
+      Boolean(paymentDetails.upiTxId && paymentDetails.upiTxId !== "VERIFIED"));
 
   const burdahClass =
     specialClasses.find(
@@ -506,13 +644,13 @@ export default function ScreenDashboard({
         </div>
       </div>
 
-      {/* 4. ACADEMIC QUICK ACCESS SERVICES: 2x2 GRID */}
+      {/* 4. ACADEMIC QUICK ACCESS SERVICES: 2x2 GRID (Live Classes, Study Materials, Notifications) */}
       <div className="space-y-2">
         <div className="flex items-center justify-between px-1">
           <div className="flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-purple-600" />
             <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-              Quick Services
+              Quick Access Grid
             </h3>
           </div>
           <span className="text-[10px] font-bold text-slate-400">
@@ -521,10 +659,16 @@ export default function ScreenDashboard({
         </div>
 
         <div className="grid grid-cols-2 gap-2.5">
-          {/* Tile 1: Live Classroom */}
+          {/* Tile 1: Live Classes */}
           <button
             type="button"
-            onClick={() => setShowLiveModal(true)}
+            onClick={() => {
+              if (isApproved) {
+                setShowLiveModal(true);
+              } else {
+                setLockedNoticeSubject("Live Classroom");
+              }
+            }}
             className="p-3 rounded-2xl bg-white hover:bg-purple-50/40 border border-purple-100 hover:border-purple-300 shadow-xs hover:shadow-sm transition-all text-left flex flex-col justify-between min-h-[92px] cursor-pointer group active:scale-[0.98]"
           >
             <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center group-hover:bg-rose-600 group-hover:text-white transition-all shadow-xs">
@@ -532,18 +676,24 @@ export default function ScreenDashboard({
             </div>
             <div className="mt-2">
               <p className="text-xs font-bold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
-                Live Class Room
+                Live Classes
               </p>
               <span className="text-[10px] text-rose-600 font-semibold block mt-0.5">
-                Join Stream
+                Join Active Stream
               </span>
             </div>
           </button>
 
-          {/* Tile 2: Course Notes & PDFs */}
+          {/* Tile 2: Study Materials */}
           <button
             type="button"
-            onClick={() => setShowMaterialsModal(true)}
+            onClick={() => {
+              if (isApproved) {
+                setShowMaterialsModal(true);
+              } else {
+                setLockedNoticeSubject("Course Materials");
+              }
+            }}
             className="p-3 rounded-2xl bg-white hover:bg-purple-50/40 border border-purple-100 hover:border-purple-300 shadow-xs hover:shadow-sm transition-all text-left flex flex-col justify-between min-h-[92px] cursor-pointer group active:scale-[0.98]"
           >
             <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-all shadow-xs">
@@ -551,48 +701,56 @@ export default function ScreenDashboard({
             </div>
             <div className="mt-2">
               <p className="text-xs font-bold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
-                Course Materials
+                Study Materials
               </p>
               <span className="text-[10px] text-slate-500 font-semibold block mt-0.5">
-                PDFs & Handbooks
+                PDFs, Notes & Books
               </span>
             </div>
           </button>
 
-          {/* Tile 3: Timetable */}
+          {/* Tile 3: Notifications */}
+          <button
+            type="button"
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent("hanoon_open_notifications_drawer"));
+              setShowNotificationToast((prev) => !prev);
+            }}
+            className="p-3 rounded-2xl bg-white hover:bg-purple-50/40 border border-purple-100 hover:border-purple-300 shadow-xs hover:shadow-sm transition-all text-left flex flex-col justify-between min-h-[92px] cursor-pointer group active:scale-[0.98]"
+          >
+            <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-all shadow-xs relative">
+              <Bell className="w-4 h-4" />
+              {unreadNotifs > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[15px] h-3.5 px-0.5 rounded-full bg-rose-600 text-white font-black text-[8px] flex items-center justify-center">
+                  {unreadNotifs}
+                </span>
+              )}
+            </div>
+            <div className="mt-2">
+              <p className="text-xs font-bold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
+                Notifications
+              </p>
+              <span className="text-[10px] text-slate-500 font-semibold block mt-0.5">
+                Class Alerts & Notices
+              </span>
+            </div>
+          </button>
+
+          {/* Tile 4: Timetable & Student ID Pass */}
           <button
             type="button"
             onClick={() => setShowTimetableModal(true)}
             className="p-3 rounded-2xl bg-white hover:bg-purple-50/40 border border-purple-100 hover:border-purple-300 shadow-xs hover:shadow-sm transition-all text-left flex flex-col justify-between min-h-[92px] cursor-pointer group active:scale-[0.98]"
           >
-            <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-all shadow-xs">
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-xs">
               <Calendar className="w-4 h-4" />
             </div>
             <div className="mt-2">
               <p className="text-xs font-bold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
-                Timetable
+                Timetable & Pass
               </p>
               <span className="text-[10px] text-slate-500 font-semibold block mt-0.5">
-                Weekly Schedule
-              </span>
-            </div>
-          </button>
-
-          {/* Tile 4: Student ID Pass */}
-          <button
-            type="button"
-            onClick={() => setShowStudentIDModal(true)}
-            className="p-3 rounded-2xl bg-white hover:bg-purple-50/40 border border-purple-100 hover:border-purple-300 shadow-xs hover:shadow-sm transition-all text-left flex flex-col justify-between min-h-[92px] cursor-pointer group active:scale-[0.98]"
-          >
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-xs">
-              <Award className="w-4 h-4" />
-            </div>
-            <div className="mt-2">
-              <p className="text-xs font-bold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
-                Student ID Pass
-              </p>
-              <span className="text-[10px] text-slate-500 font-semibold block mt-0.5">
-                Digital Pass & QR
+                Weekly Schedule & QR
               </span>
             </div>
           </button>
