@@ -218,11 +218,18 @@ export async function fetchPayments(): Promise<DbPayment[]> {
           };
         });
 
+        // Strictly filter out any dummy test student records
+        const isDummyName = (n?: string) => {
+          const clean = (n || "").trim().toLowerCase();
+          return clean === "dummy" || clean === "test" || clean === "test student" || clean === "demo" || clean === "sample";
+        };
+        const filteredEnriched = enriched.filter((p) => !isDummyName(p.student?.full_name));
+
         try {
-          localStorage.setItem(LOCAL_PAYMENTS_KEY, JSON.stringify(enriched));
+          localStorage.setItem(LOCAL_PAYMENTS_KEY, JSON.stringify(filteredEnriched));
         } catch {}
 
-        return enriched;
+        return filteredEnriched;
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -231,8 +238,8 @@ export async function fetchPayments(): Promise<DbPayment[]> {
     }
   }
 
-  // Fallback to local storage
-  if (typeof window !== "undefined") {
+  // Fallback to local storage ONLY if Supabase is unconfigured
+  if (!isSupabaseConfigured && typeof window !== "undefined") {
     try {
       const stored = localStorage.getItem(LOCAL_PAYMENTS_KEY);
       if (stored) {

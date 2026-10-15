@@ -862,16 +862,16 @@ export default function StudentRegistrationsSection({
 
         {/* 4. Table (Desktop / Tablet) */}
         <div className="hidden sm:block overflow-x-auto rounded-2xl border border-purple-100">
-          <table className="w-full text-left text-xs min-w-[820px]">
+          <table className="w-full text-left text-xs min-w-[850px]">
             <thead className="bg-purple-50/70 text-slate-600 uppercase text-[10px] font-black tracking-wider border-b border-purple-100">
               <tr>
                 <th className="py-3.5 px-4">Student Name</th>
-                <th className="py-3.5 px-4">Mobile / WhatsApp</th>
+                <th className="py-3.5 px-4">Mobile / WhatsApp Number</th>
                 <th className="py-3.5 px-4">Course Choice</th>
-                <th className="py-3.5 px-4">Payment Proof</th>
                 <th className="py-3.5 px-4">District / Place</th>
-                <th className="py-3.5 px-4">Registration Date</th>
                 <th className="py-3.5 px-4">Payment Status</th>
+                <th className="py-3.5 px-4">Payment Proof</th>
+                <th className="py-3.5 px-4">Date</th>
                 <th className="py-3.5 px-4 text-right">Quick Action</th>
               </tr>
             </thead>
@@ -988,7 +988,35 @@ export default function StudentRegistrationsSection({
                         </span>
                       </td>
 
-                      {/* Column 4: Payment Screenshot Thumbnail (Replaced text TxID) */}
+                      {/* Column 4: District / Place */}
+                      <td className="py-3.5 px-4 text-slate-700 font-semibold">
+                        {item.district || "Kerala"}
+                      </td>
+
+                      {/* Column 5: Payment Status Badges (Yellow Pending, Green Verified, Red Rejected) */}
+                      <td className="py-3.5 px-4">
+                        {item.paymentStatus === "APPROVED" ? (
+                          /* 🟢 "Verified" (Green Badge) */
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 font-black text-[11px] border border-emerald-300">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span>Verified</span>
+                          </span>
+                        ) : item.paymentStatus === "REJECTED" ? (
+                          /* 🔴 "Rejected" (Red Badge) */
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-800 font-black text-[11px] border border-rose-300">
+                            <XCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                            <span>Rejected</span>
+                          </span>
+                        ) : (
+                          /* 🟡 "Pending" (Yellow/Orange Badge) */
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-800 font-black text-[11px] border border-amber-300 animate-pulse">
+                            <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                            <span>Pending</span>
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Column 6: Payment Screenshot Thumbnail (Payment Proof) */}
                       <td className="py-3.5 px-4">
                         {item.screenshotUrl ? (
                           <button
@@ -1044,12 +1072,7 @@ export default function StudentRegistrationsSection({
                         )}
                       </td>
 
-                      {/* Column 5: District / Place */}
-                      <td className="py-3.5 px-4 text-slate-600 font-medium">
-                        {item.district || "Kerala"}
-                      </td>
-
-                      {/* Column 6: Registration Date */}
+                      {/* Column 7: Registration Date */}
                       <td className="py-3.5 px-4 text-slate-500 text-[11px] whitespace-nowrap">
                         {new Date(item.registrationDate).toLocaleDateString("en-IN", {
                           day: "numeric",
@@ -1058,47 +1081,29 @@ export default function StudentRegistrationsSection({
                         })}
                       </td>
 
-                      {/* Column 7: Payment Status Badges (Yellow Pending, Green Verified, Red Rejected) */}
-                      <td className="py-3.5 px-4">
-                        {item.paymentStatus === "APPROVED" ? (
-                          /* 🟢 "Verified" (Green Badge) */
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 font-black text-[11px] border border-emerald-300">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                            <span>Verified</span>
-                          </span>
-                        ) : item.paymentStatus === "REJECTED" ? (
-                          /* 🔴 "Rejected" (Red Badge) */
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-rose-800 font-black text-[11px] border border-rose-300">
-                            <XCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                            <span>Rejected</span>
-                          </span>
-                        ) : (
-                          /* 🟡 "Pending Verification" (Yellow/Orange Badge) */
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-800 font-black text-[11px] border border-amber-300 animate-pulse">
-                            <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                            <span>Pending Verification</span>
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Column 8: Quick Action Buttons (Verify / Mark as Paid & Reject) */}
+                      {/* Column 8: Quick Action Buttons (Mark as Verified / Approve & Reject) */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                          {/* Green Button: "Verify / Mark as Paid" */}
-                          {item.paymentStatus !== "APPROVED" && (
+                          {/* Quick Action Button: "Mark as Verified" / "Approve" */}
+                          {item.paymentStatus !== "APPROVED" ? (
                             <button
                               type="button"
                               onClick={() => handleVerifyStatus(item)}
                               disabled={isProcessing}
-                              className="py-1.5 px-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs inline-flex items-center gap-1 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
-                              title="Verify / Mark as Paid in Supabase"
+                              className="py-1.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs inline-flex items-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                              title="Approve registration and mark status as Verified in Supabase"
                             >
                               <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>Verify / Mark as Paid</span>
+                              <span>{isProcessing ? "Updating..." : "Mark as Verified"}</span>
                             </button>
+                          ) : (
+                            <span className="py-1.5 px-2.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 font-extrabold text-[11px] inline-flex items-center gap-1">
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Approved</span>
+                            </span>
                           )}
 
-                          {/* Red Button: "Reject" */}
+                          {/* Quick Action Button: "Reject" */}
                           {item.paymentStatus !== "REJECTED" && (
                             <button
                               type="button"
@@ -1165,7 +1170,7 @@ export default function StudentRegistrationsSection({
                   ? "Database Records Unavailable"
                   : searchQuery
                   ? "No Students Found"
-                  : "No Registrations Yet"}
+                  : "No student registrations found"}
               </h4>
               <div className="text-xs text-slate-500 mt-1 max-w-xs mx-auto leading-relaxed">
                 {fetchError ? (
@@ -1362,7 +1367,7 @@ export default function StudentRegistrationsSection({
                         title="Verify / Mark as Paid in Supabase"
                       >
                         <CheckCircle2 className="w-4 h-4 shrink-0" />
-                        <span className="truncate">{isProcessing ? "Processing..." : isVerified ? "Verified (Paid) ✓" : "Verify / Mark as Paid"}</span>
+                        <span className="truncate">{isProcessing ? "Updating..." : isVerified ? "Verified ✓" : "Mark as Verified"}</span>
                       </button>
 
                       <button

@@ -593,13 +593,18 @@ export async function fetchStudents(): Promise<DbStudent[]> {
         }
       }
 
-      if (mergedStudents.length > 0) return mergedStudents;
+      const cleanMerged = mergedStudents.filter((s) => {
+        const clean = (s.full_name || "").trim().toLowerCase();
+        return clean !== "dummy" && clean !== "test" && clean !== "test student" && clean !== "demo" && clean !== "sample";
+      });
+      return cleanMerged;
     } catch (e) {
       console.warn("Supabase students fetch failed, checking local storage:", e);
     }
   }
 
-  if (typeof window !== "undefined") {
+  // Fallback to local storage ONLY if Supabase is unconfigured
+  if (!isSupabaseConfigured && typeof window !== "undefined") {
     try {
       const local = localStorage.getItem(LOCAL_STUDENTS_KEY);
       if (local) {
@@ -611,7 +616,7 @@ export async function fetchStudents(): Promise<DbStudent[]> {
     }
   }
 
-  return mergedStudents;
+  return [];
 }
 
 export interface UnifiedStudentRegistration {
@@ -793,10 +798,10 @@ export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedR
         const json = await apiRes.json();
         if (json && Array.isArray(json.payments)) {
           payments = json.payments;
-          fetchedPaymentsFromSupabase = true;
+          if (payments.length > 0) fetchedPaymentsFromSupabase = true;
           if (Array.isArray(json.students)) {
             allStudents = json.students;
-            fetchedStudentsFromSupabase = true;
+            if (allStudents.length > 0) fetchedStudentsFromSupabase = true;
           }
           if (Array.isArray(json.profiles)) {
             allProfiles = json.profiles;
@@ -813,29 +818,37 @@ export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedR
     }
   }
 
-  // 2. Direct Supabase Client: Clean separate queries (never nested relational joins to prevent PGRST125)
-  if (isSupabaseConfigured && supabase && !fetchedPaymentsFromSupabase) {
-    // A. Query Payments (Plain select without relation embeddings)
+  // 2. Direct Supabase Client: Query with relational join or fallback to clean separate queries
+  if (isSupabaseConfigured && supabase && (!fetchedPaymentsFromSupabase || (payments.length === 0 && allStudents.length === 0))) {
+    // A. Query Payments with relational join or plain select
     try {
       let rawPayments: any[] | null = null;
       let payFetchError: any = null;
 
-      let plainPay = await supabase
+      const relPay = await supabase
         .from("payments")
-        .select("*")
+        .select("*, students(*), courses(*)")
         .order("submitted_at", { ascending: false });
 
-      if (plainPay.error) {
-        // Fallback without ordering in case submitted_at column is not indexed
-        plainPay = await supabase.from("payments").select("*");
-      }
-
-      if (!plainPay.error && Array.isArray(plainPay.data)) {
-        rawPayments = plainPay.data;
+      if (!relPay.error && Array.isArray(relPay.data) && relPay.data.length > 0) {
+        rawPayments = relPay.data;
         fetchedPaymentsFromSupabase = true;
-        payFetchError = null;
-      } else if (plainPay.error) {
-        payFetchError = plainPay.error;
+      } else {
+        let plainPay = await supabase
+          .from("payments")
+          .select("*")
+          .order("submitted_at", { ascending: false });
+
+        if (plainPay.error) {
+          plainPay = await supabase.from("payments").select("*");
+        }
+
+        if (!plainPay.error && Array.isArray(plainPay.data)) {
+          rawPayments = plainPay.data;
+          fetchedPaymentsFromSupabase = true;
+        } else if (plainPay.error) {
+          payFetchError = plainPay.error;
+        }
       }
 
       if (payFetchError) {
@@ -859,11 +872,10 @@ export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedR
         .order("created_at", { ascending: false });
 
       if (stuRes.error) {
-        // Fallback without order
         stuRes = await supabase.from("students").select("*");
       }
 
-      if (!stuRes.error && stuRes.data) {
+      if (!stuRes.error && Array.isArray(stuRes.data)) {
         allStudents = stuRes.data;
         fetchedStudentsFromSupabase = true;
       } else if (stuRes.error) {
@@ -899,8 +911,8 @@ export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedR
     } catch {}
   }
 
-  // Fallback to local storage ONLY if Supabase returned 0 items and had error or unconfigured
-  if (!fetchedPaymentsFromSupabase && typeof window !== "undefined") {
+  // Fallback to local storage ONLY if Supabase is completely unconfigured (offline demo mode)
+  if (!isSupabaseConfigured && typeof window !== "undefined") {
     try {
       const local = localStorage.getItem(LOCAL_PAYMENTS_KEY);
       if (local) {
@@ -910,9 +922,7 @@ export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedR
     } catch (e) {
       console.warn("Local payments read error:", e);
     }
-  }
 
-  if (!fetchedStudentsFromSupabase && typeof window !== "undefined") {
     try {
       const local = localStorage.getItem(LOCAL_STUDENTS_KEY);
       if (local) {
@@ -931,36 +941,45 @@ export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedR
 
   // 1. Populate from students table
   for (const s of allStudents) {
-    if (s.id) studentById.set(s.id, s);
-    if (s.user_id) studentByUserId.set(s.user_id, s);
+    if (s.id) {
+      studentById.set(s.id, s);
+      studentById.set(String(s.id).toLowerCase(), s);
+    }
+    if (s.user_id) {
+      studentByUserId.set(s.user_id, s);
+      studentByUserId.set(String(s.user_id).toLowerCase(), s);
+    }
     const pClean = (s.whatsapp_number || s.whatsapp_num || s.phone || "").replace(/\D/g, "");
     if (pClean && pClean.length >= 7) {
       studentByPhone.set(pClean.slice(-10), s);
+      studentByPhone.set(pClean, s);
     }
   }
 
   // 2. Augment from profiles table
   for (const pr of allProfiles) {
-    if (pr.id && !studentById.has(pr.id)) {
-      studentById.set(pr.id, {
-        id: pr.id,
-        user_id: pr.id,
-        full_name: pr.full_name || pr.email?.split("@")[0] || "Registered Student",
-        whatsapp_num: pr.whatsapp_num || pr.whatsapp_number || "",
-        district: pr.district || pr.place || "Kerala",
-        created_at: pr.created_at || new Date().toISOString(),
-      });
+    const profObj = {
+      id: pr.id,
+      user_id: pr.id,
+      full_name: pr.full_name || pr.name || pr.email?.split("@")[0] || "Registered Student",
+      whatsapp_num: pr.whatsapp_num || pr.whatsapp_number || pr.phone || "",
+      district: pr.district || pr.place || "Kerala",
+      created_at: pr.created_at || new Date().toISOString(),
+    };
+    if (pr.id) {
+      if (!studentById.has(pr.id)) {
+        studentById.set(pr.id, profObj);
+        studentById.set(String(pr.id).toLowerCase(), profObj);
+      }
+      if (!studentByUserId.has(pr.id)) {
+        studentByUserId.set(pr.id, profObj);
+        studentByUserId.set(String(pr.id).toLowerCase(), profObj);
+      }
     }
-    const prPhone = (pr.whatsapp_num || pr.whatsapp_number || "").replace(/\D/g, "");
+    const prPhone = (pr.whatsapp_num || pr.whatsapp_number || pr.phone || "").replace(/\D/g, "");
     if (prPhone && prPhone.length >= 7 && !studentByPhone.has(prPhone.slice(-10))) {
-      studentByPhone.set(prPhone.slice(-10), {
-        id: pr.id,
-        user_id: pr.id,
-        full_name: pr.full_name || pr.email?.split("@")[0] || "Registered Student",
-        whatsapp_num: pr.whatsapp_num || pr.whatsapp_number || "",
-        district: pr.district || pr.place || "Kerala",
-        created_at: pr.created_at || new Date().toISOString(),
-      });
+      studentByPhone.set(prPhone.slice(-10), profObj);
+      studentByPhone.set(prPhone, profObj);
     }
   }
 
@@ -968,7 +987,6 @@ export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedR
   const seenPaymentIds = new Set<string>();
 
   for (const p of payments) {
-    // Only skip exact duplicate payment IDs (if multiple queries returned the exact same row)
     if (p.id && seenPaymentIds.has(p.id)) continue;
     if (p.id) seenPaymentIds.add(p.id);
 
@@ -980,10 +998,11 @@ export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedR
       ? (Array.isArray((p as any).students) ? (p as any).students[0] : (p as any).students)
       : p.student;
 
+    const studentKey = p.student_id ? String(p.student_id).trim() : "";
     const lookupStudent =
-      (p.student_id ? studentById.get(p.student_id) : null) ||
-      (p.student_id ? studentByUserId.get(p.student_id) : null) ||
-      (paymentPhone ? studentByPhone.get(paymentPhone.slice(-10)) : null) ||
+      (studentKey ? studentById.get(studentKey) || studentById.get(studentKey.toLowerCase()) : null) ||
+      (studentKey ? studentByUserId.get(studentKey) || studentByUserId.get(studentKey.toLowerCase()) : null) ||
+      (paymentPhone ? studentByPhone.get(paymentPhone.slice(-10)) || studentByPhone.get(paymentPhone) : null) ||
       (txDigits.length >= 10 ? studentByPhone.get(txDigits.slice(-10)) : null);
 
     const phone =
@@ -1004,7 +1023,7 @@ export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedR
       (p as any).student_name ||
       (p as any).full_name ||
       (p as any).name ||
-      (p.upi_txid ? `Student (Tx: ${p.upi_txid.slice(0, 10)})` : `Student (${p.student_id ? p.student_id.slice(0, 8) : "Registered"})`);
+      (p.upi_txid ? `Student (${p.upi_txid.slice(0, 10)})` : "Registered Student");
 
     const district =
       joined?.district ||
@@ -1062,15 +1081,15 @@ export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedR
 
   // Add students from students table
   for (const s of allStudents) {
-    const cleanP = (s.whatsapp_num || "").replace(/\D/g, "").slice(-10);
+    const cleanP = (s.whatsapp_num || s.whatsapp_number || "").replace(/\D/g, "").slice(-10);
     if (existingStudentIds.has(s.id) || (cleanP && existingPhones.has(cleanP))) continue;
 
     result.push({
       id: `reg-${s.id}`,
       studentId: s.id,
       fullName: s.full_name || "Enrolled Student",
-      whatsappNum: s.whatsapp_num || "",
-      district: s.district || "Kerala",
+      whatsappNum: s.whatsapp_num || s.whatsapp_number || "",
+      district: s.district || s.place || "Kerala",
       courseChoice: "Adaviyya (General Admission)",
       courseId: "adaviyya",
       registrationDate: s.created_at || new Date().toISOString(),
@@ -1086,15 +1105,15 @@ export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedR
   // Add registered student accounts from profiles table
   for (const prof of allProfiles) {
     if (prof.role && prof.role !== "student") continue; // Exclude admins/teachers
-    const cleanP = (prof.whatsapp_num || "").replace(/\D/g, "").slice(-10);
+    const cleanP = (prof.whatsapp_num || prof.whatsapp_number || "").replace(/\D/g, "").slice(-10);
     if (existingStudentIds.has(prof.id) || (cleanP && existingPhones.has(cleanP))) continue;
 
     result.push({
       id: `prof-${prof.id}`,
       studentId: prof.id,
       fullName: prof.full_name || prof.email?.split("@")[0] || "Registered Student",
-      whatsappNum: prof.whatsapp_num || "",
-      district: prof.district || "Kerala",
+      whatsappNum: prof.whatsapp_num || prof.whatsapp_number || "",
+      district: prof.district || prof.place || "Kerala",
       courseChoice: "Adaviyya (General Admission)",
       courseId: "adaviyya",
       registrationDate: prof.created_at || new Date().toISOString(),
@@ -1107,14 +1126,42 @@ export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedR
     if (cleanP) existingPhones.add(cleanP);
   }
 
+  // Strictly filter out any dummy / test student entries so no dummy data appears in /admin
+  const isDummyStudent = (name?: string, phone?: string) => {
+    const n = (name || "").trim().toLowerCase();
+    const p = (phone || "").replace(/\D/g, "");
+    return (
+      !n ||
+      n === "test" ||
+      n === "test student" ||
+      n === "demo" ||
+      n === "demo student" ||
+      n === "dummy" ||
+      n === "dummy student" ||
+      n === "sample" ||
+      n === "sample student" ||
+      n === "undefined" ||
+      n === "null" ||
+      n.startsWith("dummy ") ||
+      p === "1234567890" ||
+      p === "0000000000" ||
+      p === "9999999999" ||
+      p === "1111111111"
+    );
+  };
+
+  const cleanResult = result.filter(
+    (item) => !isDummyStudent(item.fullName, item.whatsappNum)
+  );
+
   // Sort newest first
-  result.sort((a, b) => new Date(b.registrationDate).getTime() - new Date(a.registrationDate).getTime());
+  cleanResult.sort((a, b) => new Date(b.registrationDate).getTime() - new Date(a.registrationDate).getTime());
 
   const finalError = errorMessages.length > 0 ? errorMessages.join(" | ") : null;
   lastUnifiedFetchError = finalError;
 
   return {
-    data: result,
+    data: cleanResult,
     error: finalError,
   };
 }
@@ -1150,11 +1197,11 @@ export async function updateStudentPaymentStatusDirect(params: {
 
   const now = new Date().toISOString();
 
-  // 1. If paymentId exists, update the existing payment
+  // 1. If paymentId exists, update the existing payment in Supabase instantly
   if (paymentId) {
     if (isSupabaseConfigured && supabase) {
       try {
-        await supabase
+        const { error: upErr } = await supabase
           .from("payments")
           .update({
             status: newStatus,
@@ -1162,6 +1209,10 @@ export async function updateStudentPaymentStatusDirect(params: {
             updated_at: now,
           })
           .eq("id", paymentId);
+
+        if (upErr) {
+          console.error("Supabase payment update error:", upErr.message);
+        }
       } catch (e) {
         console.warn("Supabase payment update error:", e);
       }
@@ -1197,13 +1248,12 @@ export async function updateStudentPaymentStatusDirect(params: {
   }
 
   // 2. If student had NO payment record and is marked APPROVED, insert new payment record
-  const generatedPayId = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `pay-${Date.now()}`;
+  const generatedPayId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : undefined;
   const upiTx = `ADMIN_${Date.now().toString().slice(-8)}`;
 
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase.from("payments").insert({
-        id: generatedPayId,
+      const insertPayload: any = {
         student_id: studentId,
         course_id: courseId,
         upi_txid: upiTx,
@@ -1212,7 +1262,14 @@ export async function updateStudentPaymentStatusDirect(params: {
         rejection_reason: rejectionReason || null,
         submitted_at: now,
         updated_at: now,
-      });
+      };
+      if (generatedPayId) {
+        insertPayload.id = generatedPayId;
+      }
+      const { error: insErr } = await supabase.from("payments").insert(insertPayload);
+      if (insErr) {
+        console.warn("Supabase new payment insert error:", insErr.message);
+      }
     } catch (e) {
       console.warn("Supabase new payment insert error:", e);
     }
@@ -1224,7 +1281,7 @@ export async function updateStudentPaymentStatusDirect(params: {
         localStorage.getItem(LOCAL_PAYMENTS_KEY) || "[]"
       );
       const newPay: DbPayment = {
-        id: generatedPayId,
+        id: generatedPayId || `pay-${Date.now()}`,
         student_id: studentId,
         course_id: courseId,
         upi_txid: upiTx,
