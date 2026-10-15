@@ -143,7 +143,7 @@ export default function ScreenOnboarding({
               Student Details
             </h1>
             <p className="text-xs text-slate-500 font-semibold mt-0.5">
-              Enrolling in: <strong className="text-purple-700 font-bold">{selectedCourse?.title || "Course"}</strong>
+              Please enter your details to explore courses
             </p>
           </div>
           {(onBackToCourse || onBackToHome) && (
@@ -258,7 +258,7 @@ export default function ScreenOnboarding({
                   <span>Saving details...</span>
                 </>
               ) : (
-                <span>Proceed to UPI Payment →</span>
+                <span>Explore Courses →</span>
               )}
             </button>
           </div>
@@ -277,14 +277,14 @@ export default function ScreenOnboarding({
             </button>
           </div>
 
-          {/* Link 2: ← Return to Course Details / Catalog */}
+          {/* Link 2: ← Return to Home */}
           <div>
             <button
               type="button"
               onClick={onBackToCourse || onBackToHome || (() => router.push("/"))}
               className="text-xs font-bold text-purple-600 hover:text-purple-700 transition-colors inline-flex items-center gap-1 cursor-pointer py-1"
             >
-              <span>← Return to Course Details</span>
+              <span>← Return to Home</span>
             </button>
           </div>
 

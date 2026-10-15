@@ -100,6 +100,15 @@ export default function StudentRegisterModal({
       setError("Please enter your Student Full Name.");
       return;
     }
+    if (!age.trim()) {
+      setError("Please enter your Age.");
+      return;
+    }
+    const ageNum = parseInt(age.trim(), 10);
+    if (isNaN(ageNum) || ageNum < 3 || ageNum > 100) {
+      setError("Please enter a valid age between 3 and 100.");
+      return;
+    }
     const cleanDigits = phone.replace(/\D/g, "");
     if (!cleanDigits || cleanDigits.length < 10) {
       setError("Please enter a valid 10-digit WhatsApp or mobile number.");
@@ -108,13 +117,6 @@ export default function StudentRegisterModal({
     if (!place.trim()) {
       setError("Please enter your Place & District.");
       return;
-    }
-    if (age.trim()) {
-      const ageNum = parseInt(age.trim(), 10);
-      if (isNaN(ageNum) || ageNum < 3 || ageNum > 100) {
-        setError("Please enter a valid age between 3 and 100.");
-        return;
-      }
     }
 
     setError(null);
@@ -148,10 +150,10 @@ export default function StudentRegisterModal({
         {/* Modal Header */}
         <div className="mb-5 pr-8">
           <h2 className="text-2xl font-black text-slate-900 tracking-tight leading-tight">
-            Student Registration
+            Student Details
           </h2>
           <p className="text-xs text-slate-500 font-medium mt-1">
-            Please enter your details to get started.
+            Please enter your details to explore courses.
           </p>
         </div>
 
@@ -180,7 +182,28 @@ export default function StudentRegisterModal({
             </div>
           </div>
 
-          {/* Field 2: WhatsApp / Mobile Number * */}
+          {/* Field 2: Age * */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-700 block">
+              Age <span className="text-rose-500">*</span>
+            </label>
+            <div className="relative w-44">
+              <Calendar className="w-4 h-4 text-purple-600 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="number"
+                inputMode="numeric"
+                required
+                min="3"
+                max="100"
+                placeholder="e.g. 18"
+                value={age}
+                onChange={(e) => setAge(e.target.value)}
+                className="w-full pl-11 pr-3 py-3 min-h-[46px] rounded-2xl bg-white border border-purple-200/90 focus:border-purple-600 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-medium focus:ring-3 focus:ring-purple-500/10"
+              />
+            </div>
+          </div>
+
+          {/* Field 3: WhatsApp / Mobile Number * */}
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-slate-700 block">
               WhatsApp / Mobile Number <span className="text-rose-500">*</span>
@@ -199,7 +222,7 @@ export default function StudentRegisterModal({
             </div>
           </div>
 
-          {/* Field 3: Place & District * */}
+          {/* Field 4: Place & District * */}
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-slate-700 block">
               Place & District <span className="text-rose-500">*</span>
@@ -213,26 +236,6 @@ export default function StudentRegisterModal({
                 value={place}
                 onChange={(e) => setPlace(e.target.value)}
                 className="w-full pl-11 pr-4 py-3 min-h-[46px] rounded-2xl bg-white border border-purple-200/90 focus:border-purple-600 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-medium focus:ring-3 focus:ring-purple-500/10"
-              />
-            </div>
-          </div>
-
-          {/* Field 4: Age (Optional) */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-700 block">
-              Age <span className="text-slate-400 font-medium">(Optional)</span>
-            </label>
-            <div className="relative w-44">
-              <Calendar className="w-4 h-4 text-purple-600 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="number"
-                inputMode="numeric"
-                min="3"
-                max="100"
-                placeholder="e.g. 18"
-                value={age}
-                onChange={(e) => setAge(e.target.value)}
-                className="w-full pl-11 pr-3 py-3 min-h-[46px] rounded-2xl bg-white border border-purple-200/90 focus:border-purple-600 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-medium focus:ring-3 focus:ring-purple-500/10"
               />
             </div>
           </div>

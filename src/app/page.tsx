@@ -558,15 +558,8 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     if (profile) {
       await handleSaveProfile(profile);
     }
-    setPaymentDetails((prev) => ({
-      ...prev,
-      upiTxId: "",
-      amount: selectedCourse.admissionFee || selectedCourse.fee,
-      submittedAt: "",
-      status: "unpaid",
-    }));
-    // Screen 4 (UPI Payment): Displayed only after Student Details form is submitted
-    setCurrentScreen("payment");
+    // Screen 2 (Student Details): After submitting the form, route user directly to the Course Catalog (Screen 3)
+    setCurrentScreen("courses");
   };
 
   // Step 4 -> Step 5
@@ -693,24 +686,22 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
 
         {/* Scrollable Viewport */}
         <div className="flex-1 overflow-y-auto flex flex-col relative z-10 bg-white">
-          {/* Screen 1: Welcome Screen (Logo & Get Started button) */}
+          {/* Screen 1 (Landing Page): Clicking "Get Started" MUST open the Student Details form */}
           {currentScreen === "splash" && (
             <ScreenSplash
-              onExploreCourses={() => setIsRegisterModalOpen(true)}
-              onGetStarted={() => setIsRegisterModalOpen(true)}
+              onExploreCourses={() => setCurrentScreen("onboarding")}
+              onGetStarted={() => setCurrentScreen("onboarding")}
             />
           )}
 
-          {/* Screen 3: Student Onboarding / Details (Triggered ONLY on Enroll Now) */}
+          {/* Screen 2 (Student Details): After submitting form, route directly to Course Catalog */}
           {currentScreen === "onboarding" && (
             <ScreenOnboarding
               userProfile={userProfile}
               selectedCourse={selectedCourse}
               onSaveProfile={handleSaveProfile}
               onProceedToCourses={handleSaveProfileAndProceed}
-              onProceedToPayment={handleSaveProfileAndProceed}
-              onBackToHome={() => setCurrentScreen("courses")}
-              onBackToCourse={() => setCurrentScreen("course-details")}
+              onBackToHome={() => setCurrentScreen("splash")}
             />
           )}
 
