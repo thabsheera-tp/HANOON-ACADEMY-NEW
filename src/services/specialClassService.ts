@@ -1,3 +1,5 @@
+import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
+
 export interface SpecialClass {
   id: string;
   title: string;
@@ -17,44 +19,8 @@ export interface SpecialClass {
   registeredCount?: number;
 }
 
-export const DEFAULT_SPECIAL_CLASSES: SpecialClass[] = [
-  {
-    id: "spc-tajweed",
-    title: "Tajweed Special Class",
-    subtitle: "Quran Recitation Rules & Phonetics",
-    instructor: "Qari Usthad Abdul Rahman Al-Hafiz",
-    category: "Recitation",
-    badgeGradient: "bg-gradient-to-tr from-violet-600 via-indigo-600 to-purple-500 text-white shadow-lg shadow-purple-500/25",
-    iconType: "mic",
-    scheduleTime: "Every Sunday • 08:00 AM IST",
-    status: "UPCOMING",
-    liveUrl: "https://zoom.us/j/hanoon-tajweed-live",
-    description: "Master the authentic science of Quranic phonetics, Makharij al-Huroof, Sifat, and precision articulation under certified Qira'at masters.",
-    recordingDuration: "54 mins",
-    recordingUrl: "https://youtube.com/live/hanoon-tajweed-rec",
-    pdfTitle: "Tajweed Rules & Phonetic Articulation Guide.pdf",
-    pdfSize: "6.4 MB",
-    registeredCount: 0,
-  },
-  {
-    id: "spc-burdah",
-    title: "Burdah Live",
-    subtitle: "Live Qasida Burdah Recitation & Spiritual Gathering",
-    instructor: "Hanoon Academy Munshid Collective",
-    category: "Gathering",
-    badgeGradient: "bg-gradient-to-tr from-rose-500 via-pink-600 to-amber-500 text-white shadow-lg shadow-pink-500/25",
-    iconType: "sparkles",
-    scheduleTime: "Thursday Evenings • 09:00 PM IST",
-    status: "UPCOMING",
-    liveUrl: "https://zoom.us/j/hanoon-burdah-live",
-    description: "Weekly blessed gathering of Qasida al-Burdah by Imam al-Busiri, devotional hymns, and Salawat on the Prophet Muhammad ﷺ.",
-    recordingDuration: "68 mins",
-    recordingUrl: "https://youtube.com/live/hanoon-burdah-rec",
-    pdfTitle: "Qasida al-Burdah Arabic Text with Translation.pdf",
-    pdfSize: "8.2 MB",
-    registeredCount: 0,
-  },
-];
+// Purged: No hardcoded demo video links or scheduled class placeholders
+export const DEFAULT_SPECIAL_CLASSES: SpecialClass[] = [];
 
 const LOCAL_STORAGE_KEY = "hanoon_special_classes_v2";
 
@@ -64,7 +30,7 @@ export function getSpecialClasses(): SpecialClass[] {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed;
       }
     }
@@ -84,6 +50,46 @@ export function saveSpecialClasses(classes: SpecialClass[]): void {
   }
 }
 
+/**
+ * Dynamically fetches special classes from Supabase `special_classes` table.
+ */
+export async function fetchSpecialClassesFromSupabase(): Promise<SpecialClass[]> {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase
+        .from("special_classes")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        const mapped: SpecialClass[] = data.map((row: any) => ({
+          id: row.id,
+          title: row.title,
+          subtitle: row.subtitle || "",
+          instructor: row.instructor,
+          category: (row.category as any) || "Gathering",
+          badgeGradient: "bg-gradient-to-tr from-rose-500 via-pink-600 to-amber-500 text-white shadow-lg",
+          iconType: "sparkles",
+          scheduleTime: row.schedule_time,
+          status: (row.status || "UPCOMING") as "UPCOMING" | "LIVE_NOW" | "COMPLETED",
+          liveUrl: row.live_url || "",
+          description: row.description || "",
+          recordingDuration: row.recording_url ? "Recorded" : undefined,
+          recordingUrl: row.recording_url || undefined,
+          pdfTitle: row.pdf_title || undefined,
+          pdfSize: row.pdf_size || undefined,
+          registeredCount: row.registered_count || 0,
+        }));
+        saveSpecialClasses(mapped);
+        return mapped;
+      }
+    } catch (err) {
+      console.warn("Supabase fetchSpecialClasses error:", err);
+    }
+  }
+  return getSpecialClasses();
+}
+
 export function addSpecialClass(item: Omit<SpecialClass, "id">): SpecialClass {
   const current = getSpecialClasses();
   const newClass: SpecialClass = {
@@ -92,8 +98,32 @@ export function addSpecialClass(item: Omit<SpecialClass, "id">): SpecialClass {
   };
   const updated = [newClass, ...current];
   saveSpecialClasses(updated);
+
+  if (isSupabaseConfigured && supabase) {
+    try {
+      Promise.resolve(
+        supabase.from("special_classes").insert({
+          id: newClass.id,
+          title: newClass.title,
+          subtitle: newClass.subtitle,
+          instructor: newClass.instructor,
+          category: newClass.category,
+          schedule_time: newClass.scheduleTime,
+          status: newClass.status,
+          live_url: newClass.liveUrl,
+          description: newClass.description,
+          recording_url: newClass.recordingUrl,
+          pdf_title: newClass.pdfTitle,
+          pdf_size: newClass.pdfSize,
+          registered_count: newClass.registeredCount || 0,
+        })
+      ).catch(() => {});
+    } catch {}
+  }
+
   return newClass;
 }
+
 
 export function updateSpecialClass(id: string, updates: Partial<SpecialClass>): void {
   const current = getSpecialClasses();

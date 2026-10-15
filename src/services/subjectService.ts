@@ -1,3 +1,5 @@
+import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
+
 export interface SubjectChapter {
   id: string;
   title: string;
@@ -23,6 +25,7 @@ export interface AdaviyyaSubject {
   chapters: SubjectChapter[];
 }
 
+// Clean initial structure without dummy PDF entries or demo zoom links
 export const DEFAULT_ADAVIYYA_SUBJECTS: AdaviyyaSubject[] = [
   {
     id: "seerah",
@@ -31,32 +34,10 @@ export const DEFAULT_ADAVIYYA_SUBJECTS: AdaviyyaSubject[] = [
     instructor: "Faculty Instructor",
     badgeGradient: "bg-gradient-to-tr from-rose-500 to-amber-400 text-white shadow-lg shadow-rose-500/25",
     iconType: "book",
-    liveClassUrl: "https://zoom.us/j/hanoon-seerah",
+    liveClassUrl: "",
     scheduleTime: "Mondays & Wednesdays • 07:30 PM IST",
     description: "Chronological exploration of the blessed life, sublime moral qualities, and pivotal historic events of Prophet Muhammad ﷺ.",
-    chapters: [
-      {
-        id: "see-1",
-        title: "Chapter 1: Pre-Islamic Arabia & Lineage of the Prophet ﷺ",
-        duration: "45 mins",
-        pdfTitle: "Seerah Chapter 1 Notes & Timeline Map.pdf",
-        pdfSize: "4.2 MB",
-      },
-      {
-        id: "see-2",
-        title: "Chapter 2: The First Revelation in Cave Hira & Early Dawah",
-        duration: "52 mins",
-        pdfTitle: "Seerah Chapter 2 Revelation & Da'wah Analysis.pdf",
-        pdfSize: "5.1 MB",
-      },
-      {
-        id: "see-3",
-        title: "Chapter 3: The Great Hijrah to Madinah & Commonwealth",
-        duration: "48 mins",
-        pdfTitle: "Seerah Chapter 3 Hijrah & Strategic Milestones.pdf",
-        pdfSize: "4.8 MB",
-      },
-    ],
+    chapters: [],
   },
   {
     id: "haddad",
@@ -65,32 +46,10 @@ export const DEFAULT_ADAVIYYA_SUBJECTS: AdaviyyaSubject[] = [
     instructor: "Faculty Instructor",
     badgeGradient: "bg-gradient-to-tr from-emerald-500 to-teal-400 text-white shadow-lg shadow-emerald-500/25",
     iconType: "sparkles",
-    liveClassUrl: "https://zoom.us/j/hanoon-haddad",
+    liveClassUrl: "",
     scheduleTime: "Tuesdays & Fridays • 06:30 PM IST",
     description: "Comprehensive commentary, word-by-word tajweed, and spiritual contemplation of the renowned Ratib al-Haddad.",
-    chapters: [
-      {
-        id: "had-1",
-        title: "Chapter 1: Origins, Sanad & Significance of Ratib al-Haddad",
-        duration: "40 mins",
-        pdfTitle: "Ratib al-Haddad Arabic Text with English Meaning.pdf",
-        pdfSize: "3.6 MB",
-      },
-      {
-        id: "had-2",
-        title: "Chapter 2: Morning & Evening Litany Breakdown",
-        duration: "46 mins",
-        pdfTitle: "Spiritual Benefits & Transliteration Guide.pdf",
-        pdfSize: "4.0 MB",
-      },
-      {
-        id: "had-3",
-        title: "Chapter 3: Heart Purifications & Tazkiyah Practices",
-        duration: "50 mins",
-        pdfTitle: "Tazkiyah Daily Routine & Self-Audit Sheet.pdf",
-        pdfSize: "3.2 MB",
-      },
-    ],
+    chapters: [],
   },
   {
     id: "fiqh",
@@ -99,32 +58,10 @@ export const DEFAULT_ADAVIYYA_SUBJECTS: AdaviyyaSubject[] = [
     instructor: "Faculty Instructor",
     badgeGradient: "bg-gradient-to-tr from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/25",
     iconType: "scale",
-    liveClassUrl: "https://zoom.us/j/hanoon-fiqh",
+    liveClassUrl: "",
     scheduleTime: "Thursdays & Saturdays • 08:00 PM IST",
     description: "Applied rulings of Taharah (Purity), Salah (Prayer), Sawm (Fasting), and contemporary Islamic lifestyle ethics.",
-    chapters: [
-      {
-        id: "fiq-1",
-        title: "Chapter 1: Conditions & Nullifiers of Purification (Taharah)",
-        duration: "55 mins",
-        pdfTitle: "Fiqh of Taharah Illustrated Workbook.pdf",
-        pdfSize: "5.8 MB",
-      },
-      {
-        id: "fiq-2",
-        title: "Chapter 2: Arkan & Sunan of Salah with Practical Demos",
-        duration: "60 mins",
-        pdfTitle: "Complete Prayer Manual with Mistake Rectifications.pdf",
-        pdfSize: "6.4 MB",
-      },
-      {
-        id: "fiq-3",
-        title: "Chapter 3: Zakat Calculations & Fasting Invalidation Rules",
-        duration: "48 mins",
-        pdfTitle: "Zakat Worksheet & Modern Asset Rulings.pdf",
-        pdfSize: "4.5 MB",
-      },
-    ],
+    chapters: [],
   },
   {
     id: "hadith",
@@ -133,36 +70,50 @@ export const DEFAULT_ADAVIYYA_SUBJECTS: AdaviyyaSubject[] = [
     instructor: "Faculty Instructor",
     badgeGradient: "bg-gradient-to-tr from-violet-500 to-purple-600 text-white shadow-lg shadow-violet-500/25",
     iconType: "scroll",
-    liveClassUrl: "https://zoom.us/j/hanoon-hadith",
+    liveClassUrl: "",
     scheduleTime: "Thursdays & Sundays • 07:30 PM IST",
     description: "In-depth study of the blessed narrations, chains of transmission (Isnad), and practical ethical teachings of Prophet Muhammad ﷺ.",
-    chapters: [
-      {
-        id: "had-ch1",
-        title: "Chapter 1: Science of Hadith Terminology & Mustalah",
-        duration: "48 mins",
-        pdfTitle: "Hadith Terminology & Classification Chart.pdf",
-        pdfSize: "4.6 MB",
-      },
-      {
-        id: "had-ch2",
-        title: "Chapter 2: Selected 40 Hadiths on Sincerity & Character",
-        duration: "55 mins",
-        pdfTitle: "Nawawi 40 Hadiths Arabic & English Commentary.pdf",
-        pdfSize: "6.1 MB",
-      },
-      {
-        id: "had-ch3",
-        title: "Chapter 3: Sunan & Adab of Daily Conduct",
-        duration: "50 mins",
-        pdfTitle: "Prophetic Ethics for Modern Society.pdf",
-        pdfSize: "5.2 MB",
-      },
-    ],
+    chapters: [],
   },
 ];
 
 const LOCAL_STORAGE_KEY = "hanoon_adaviyya_subjects_v2";
+
+/**
+ * Dynamically fetches course subjects from Supabase `course_subjects` table.
+ */
+export async function fetchAdaviyyaSubjectsFromSupabase(): Promise<AdaviyyaSubject[]> {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase
+        .from("course_subjects")
+        .select("*")
+        .order("order_num", { ascending: true });
+
+      if (!error && data && data.length > 0) {
+        const mapped: AdaviyyaSubject[] = data.map((row: any) => ({
+          id: (row.id || "seerah") as any,
+          name: row.name,
+          subtitle: row.subtitle,
+          instructor: row.instructor || "Faculty Instructor",
+          teacher_id: row.teacher_id,
+          badgeGradient: "bg-gradient-to-tr from-purple-500 to-indigo-500 text-white shadow-lg",
+          iconType: (row.id === "fiqh" ? "scale" : row.id === "haddad" ? "sparkles" : row.id === "hadith" ? "scroll" : "book") as any,
+          liveClassUrl: row.live_url || "",
+          scheduleTime: row.schedule_time || "Scheduled via Portal",
+          description: row.description || "",
+          chapters: Array.isArray(row.chapters) ? row.chapters : [],
+        }));
+        saveAdaviyyaSubjects(mapped);
+        return mapped;
+      }
+    } catch (err) {
+      console.warn("Supabase fetchAdaviyyaSubjects error:", err);
+    }
+  }
+  return getAdaviyyaSubjects();
+}
+
 
 export function getAdaviyyaSubjects(): AdaviyyaSubject[] {
   if (typeof window === "undefined") return DEFAULT_ADAVIYYA_SUBJECTS;

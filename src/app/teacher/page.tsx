@@ -26,8 +26,12 @@ import {
   Phone,
   Check,
   ShieldCheck,
+  Sparkles,
+  Edit3,
+  GraduationCap,
 } from "lucide-react";
 import { getCurrentSession, logoutUser, setAuthSession, UserProfileRecord } from "@/services/authService";
+import { addSpecialClass } from "@/services/specialClassService";
 import HanoonLogo from "@/components/brand/HanoonLogo";
 import TeacherEngagementDonut from "@/components/charts/TeacherEngagementDonut";
 import {
@@ -88,6 +92,16 @@ export default function TeacherDashboardPage() {
     duration: "60 mins",
     meetingLink: "https://zoom.us/j/hanoon-faculty-live",
     platform: "Zoom" as "Zoom" | "Google Meet",
+    teacherName: "",
+    isCustomTeacher: false,
+    customTeacherName: "",
+    isCustomCourse: false,
+    customCourseName: "",
+    isCustomSubject: false,
+    customSubjectName: "",
+    isSpecialClass: false,
+    specialClassTitle: "",
+    specialClassLiveUrl: "",
   });
 
   // State for Course Content / Uploads
@@ -226,15 +240,25 @@ export default function TeacherDashboardPage() {
     setTimeout(() => setBroadcastAlertToast(null), 4000);
   };
 
-  // Schedule New Class (RBAC Enforced: Teacher can only schedule into assigned courses)
+  // Schedule New Class (RBAC Enforced: Teacher can schedule into assigned or custom tracks)
   const handleScheduleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newScheduleForm.title.trim()) return;
 
-    if (!canTeacherAccessCourse(newScheduleForm.courseId, currentUser)) {
-      setScheduleSuccessMsg("Access Denied: You can only schedule classes for your assigned tracks.");
-      setTimeout(() => setScheduleSuccessMsg(null), 4000);
-      return;
+    let finalTitle = newScheduleForm.title.trim();
+    if (newScheduleForm.isSpecialClass && newScheduleForm.specialClassTitle.trim()) {
+      finalTitle = newScheduleForm.specialClassTitle.trim();
+    } else if (newScheduleForm.isCustomSubject && newScheduleForm.customSubjectName.trim()) {
+      finalTitle = `${newScheduleForm.customSubjectName.trim()}: ${finalTitle}`;
+    }
+
+    if (!finalTitle) return;
+
+    if (!newScheduleForm.isCustomCourse && !newScheduleForm.isSpecialClass) {
+      if (!canTeacherAccessCourse(newScheduleForm.courseId, currentUser)) {
+        setScheduleSuccessMsg("Access Denied: You can only schedule classes for your assigned tracks.");
+        setTimeout(() => setScheduleSuccessMsg(null), 4000);
+        return;
+      }
     }
 
     const courseMap: Record<string, string> = {
@@ -246,23 +270,66 @@ export default function TeacherDashboardPage() {
       burdah: "Burdah Live Gathering",
     };
 
+    const finalTeacherName = newScheduleForm.isCustomTeacher && newScheduleForm.customTeacherName.trim()
+      ? newScheduleForm.customTeacherName.trim()
+      : (newScheduleForm.teacherName.trim() || currentUser?.full_name || "Faculty");
+
+    const finalCourseName = newScheduleForm.isCustomCourse && newScheduleForm.customCourseName.trim()
+      ? newScheduleForm.customCourseName.trim()
+      : (courseMap[newScheduleForm.courseId] || "Adaviyya");
+
+    const finalCourseId = newScheduleForm.isCustomCourse && newScheduleForm.customCourseName.trim()
+      ? (newScheduleForm.customCourseName.toLowerCase().replace(/[^a-z0-9]/g, "-") || "custom-track")
+      : newScheduleForm.courseId;
+
+    const finalLiveUrl = (newScheduleForm.isSpecialClass && newScheduleForm.specialClassLiveUrl.trim())
+      ? newScheduleForm.specialClassLiveUrl.trim()
+      : (newScheduleForm.meetingLink.trim() || "https://zoom.us/j/hanoon-faculty-live");
+
     const teacherId = resolveTeacherId(currentUser);
     const created = scheduleNewClass({
-      title: newScheduleForm.title.trim(),
-      courseId: newScheduleForm.courseId,
-      courseName: courseMap[newScheduleForm.courseId] || "Adaviyya",
+      title: finalTitle,
+      courseId: finalCourseId,
+      courseName: finalCourseName,
       date: newScheduleForm.date,
       time: newScheduleForm.time,
-      duration: newScheduleForm.duration,
-      meetingLink: newScheduleForm.meetingLink.trim() || "https://zoom.us/j/hanoon-faculty-live",
+      duration: newScheduleForm.duration.trim() || "60 mins",
+      meetingLink: finalLiveUrl,
       platform: newScheduleForm.platform,
       teacher_id: teacherId,
-      teacherName: currentUser?.full_name || "Faculty",
+      teacherName: finalTeacherName,
+      isSpecialClass: newScheduleForm.isSpecialClass,
+      specialClassTitle: newScheduleForm.isSpecialClass ? finalTitle : undefined,
+      isCustomCourse: newScheduleForm.isCustomCourse,
+      subjectName: newScheduleForm.isCustomSubject ? newScheduleForm.customSubjectName.trim() : undefined,
     });
+
+    if (newScheduleForm.isSpecialClass) {
+      try {
+        addSpecialClass({
+          title: finalTitle,
+          subtitle: `Live Broadcast with ${finalTeacherName}`,
+          instructor: finalTeacherName,
+          category: "Gathering",
+          badgeGradient: "bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 text-white shadow-lg",
+          iconType: "sparkles",
+          scheduleTime: `${newScheduleForm.date} • ${newScheduleForm.time} IST`,
+          status: "UPCOMING",
+          liveUrl: finalLiveUrl,
+          description: `Live interactive session: ${finalTitle}. Conducted by ${finalTeacherName}.`,
+        });
+      } catch (specialErr) {
+        console.warn("Could not sync to specialClassService:", specialErr);
+      }
+    }
 
     setClasses(getTeacherClasses());
     setIsScheduleModalOpen(false);
-    setScheduleSuccessMsg(`"${created.title}" scheduled for ${created.date} at ${created.time} IST!`);
+    setScheduleSuccessMsg(
+      newScheduleForm.isSpecialClass
+        ? `⭐ Special Class "${created.title}" scheduled for ${created.date} at ${created.time} IST!`
+        : `"${created.title}" scheduled for ${created.date} at ${created.time} IST!`
+    );
     setNewScheduleForm({
       title: "",
       courseId: availableTracks[0]?.id || "adaviyya",
@@ -272,6 +339,16 @@ export default function TeacherDashboardPage() {
       duration: "60 mins",
       meetingLink: "https://zoom.us/j/hanoon-faculty-live",
       platform: "Zoom",
+      teacherName: "",
+      isCustomTeacher: false,
+      customTeacherName: "",
+      isCustomCourse: false,
+      customCourseName: "",
+      isCustomSubject: false,
+      customSubjectName: "",
+      isSpecialClass: false,
+      specialClassTitle: "",
+      specialClassLiveUrl: "",
     });
     setTimeout(() => setScheduleSuccessMsg(null), 4000);
   };
@@ -1601,16 +1678,21 @@ export default function TeacherDashboardPage() {
         )}
       </main>
 
-      {/* SCHEDULE NEW CLASS MODAL */}
+      {/* SCHEDULE NEW CLASS MODAL (DYNAMIC FACULTY, CUSTOM TRACKS, SPECIAL CLASSES) */}
       {isScheduleModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white max-w-md w-full rounded-2xl shadow-xl border border-purple-100 p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white max-w-lg w-full rounded-2xl shadow-2xl border border-purple-100 p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-purple-50">
               <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-purple-600" />
-                <h3 className="text-sm font-extrabold text-slate-900">
-                  Schedule New Live Class
-                </h3>
+                <Calendar className="w-5 h-5 text-purple-600" />
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-900">
+                    Schedule New Live Class
+                  </h3>
+                  <span className="text-[10px] text-slate-400 font-semibold block">
+                    Full privileges for Teachers & Verification Staff
+                  </span>
+                </div>
               </div>
               <button
                 type="button"
@@ -1621,42 +1703,278 @@ export default function TeacherDashboardPage() {
               </button>
             </div>
 
-            <form onSubmit={handleScheduleSubmit} className="space-y-3 text-xs">
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Class Topic / Title *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Seerah: The Treaty of Hudaybiyyah"
-                  value={newScheduleForm.title}
-                  onChange={(e) =>
-                    setNewScheduleForm({ ...newScheduleForm, title: e.target.value })
-                  }
-                  className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none focus:border-purple-400"
-                />
+            <form onSubmit={handleScheduleSubmit} className="space-y-3.5 text-xs">
+              {/* 1. Custom Teacher Input */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-slate-700 block">
+                    Conducting Teacher / Faculty *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setNewScheduleForm({
+                        ...newScheduleForm,
+                        isCustomTeacher: !newScheduleForm.isCustomTeacher,
+                      })
+                    }
+                    className={`text-[10.5px] font-bold px-2 py-0.5 rounded-lg border cursor-pointer transition-all flex items-center gap-1 ${
+                      newScheduleForm.isCustomTeacher
+                        ? "bg-purple-600 text-white border-purple-600"
+                        : "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
+                    }`}
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>{newScheduleForm.isCustomTeacher ? "Use My Profile" : "+ Custom Teacher"}</span>
+                  </button>
+                </div>
+
+                {newScheduleForm.isCustomTeacher ? (
+                  <div className="relative animate-fade-in">
+                    <GraduationCap className="w-4 h-4 text-purple-600 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      required
+                      value={newScheduleForm.customTeacherName}
+                      onChange={(e) =>
+                        setNewScheduleForm({
+                          ...newScheduleForm,
+                          customTeacherName: e.target.value,
+                          teacherName: e.target.value,
+                        })
+                      }
+                      placeholder="Type real teacher's full name (e.g. Usthad Dr. Faisal Hudawi)"
+                      className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-purple-50/50 border border-purple-300 text-slate-900 font-medium outline-none placeholder:text-slate-400"
+                    />
+                  </div>
+                ) : (
+                  <div className="p-2.5 rounded-xl bg-purple-50/40 border border-purple-100 flex items-center justify-between">
+                    <span className="font-bold text-slate-800">
+                      {currentUser?.full_name || "Faculty Instructor"}
+                    </span>
+                    <span className="text-[10px] uppercase font-extrabold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-md">
+                      Current User
+                    </span>
+                  </div>
+                )}
               </div>
 
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Academic Track *
-                </label>
-                <select
-                  value={newScheduleForm.courseId}
-                  onChange={(e) =>
-                    setNewScheduleForm({ ...newScheduleForm, courseId: e.target.value })
-                  }
-                  className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none focus:border-purple-400"
-                >
-                  {availableTracks.map((trk) => (
-                    <option key={trk.id} value={trk.id}>
-                      {trk.name}
-                    </option>
-                  ))}
-                </select>
+              {/* 2. Target Course & Subject Track */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-slate-700 block">
+                    Academic Course Track *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setNewScheduleForm({
+                        ...newScheduleForm,
+                        isCustomCourse: !newScheduleForm.isCustomCourse,
+                      })
+                    }
+                    className={`text-[10.5px] font-bold px-2 py-0.5 rounded-lg border cursor-pointer transition-all flex items-center gap-1 ${
+                      newScheduleForm.isCustomCourse
+                        ? "bg-purple-600 text-white border-purple-600"
+                        : "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
+                    }`}
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>{newScheduleForm.isCustomCourse ? "Standard Tracks" : "Custom / Extra Course"}</span>
+                  </button>
+                </div>
+
+                {newScheduleForm.isCustomCourse ? (
+                  <input
+                    type="text"
+                    required
+                    value={newScheduleForm.customCourseName}
+                    onChange={(e) =>
+                      setNewScheduleForm({
+                        ...newScheduleForm,
+                        customCourseName: e.target.value,
+                        courseName: e.target.value,
+                      })
+                    }
+                    placeholder="Enter Custom Course (e.g. Burdah Live Gathering, Quran Tajweed Diploma)"
+                    className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-300 text-slate-900 font-medium outline-none placeholder:text-slate-400"
+                  />
+                ) : (
+                  <select
+                    value={newScheduleForm.courseId}
+                    onChange={(e) =>
+                      setNewScheduleForm({ ...newScheduleForm, courseId: e.target.value })
+                    }
+                    className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none focus:border-purple-400"
+                  >
+                    {availableTracks.map((trk) => (
+                      <option key={trk.id} value={trk.id}>
+                        {trk.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
+              {/* Optional Custom Subject Input */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-slate-700 block">
+                    Subject / Module
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setNewScheduleForm({
+                        ...newScheduleForm,
+                        isCustomSubject: !newScheduleForm.isCustomSubject,
+                      })
+                    }
+                    className={`text-[10.5px] font-bold px-2 py-0.5 rounded-lg border cursor-pointer transition-all flex items-center gap-1 ${
+                      newScheduleForm.isCustomSubject
+                        ? "bg-purple-600 text-white border-purple-600"
+                        : "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
+                    }`}
+                  >
+                    <Edit3 className="w-3 h-3" />
+                    <span>{newScheduleForm.isCustomSubject ? "Clear Custom Subject" : "Custom / Extra Subject"}</span>
+                  </button>
+                </div>
+                {newScheduleForm.isCustomSubject && (
+                  <input
+                    type="text"
+                    value={newScheduleForm.customSubjectName}
+                    onChange={(e) =>
+                      setNewScheduleForm({
+                        ...newScheduleForm,
+                        customSubjectName: e.target.value,
+                      })
+                    }
+                    placeholder="Enter custom subject (e.g. Qasida Burdah Recitation & Tafsir)"
+                    className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-300 text-slate-900 font-medium outline-none"
+                  />
+                )}
+              </div>
+
+              {/* 3. Special Class Toggle & Link */}
+              <div className={`p-3 rounded-xl border transition-all ${
+                newScheduleForm.isSpecialClass
+                  ? "bg-amber-50/70 border-amber-300 ring-1 ring-amber-300/40"
+                  : "bg-slate-50 border-slate-200"
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className={`w-4 h-4 ${newScheduleForm.isSpecialClass ? "text-amber-600" : "text-slate-400"}`} />
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 block">
+                        Is this a Special Class?
+                      </span>
+                      <span className="text-[10px] text-slate-500 block">
+                        Highlight on student app (e.g. Burdah Live, Dua Majlis)
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {!newScheduleForm.isSpecialClass && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setNewScheduleForm({
+                            ...newScheduleForm,
+                            isSpecialClass: true,
+                            specialClassTitle: "Burdah Live Gathering",
+                            specialClassLiveUrl: "https://zoom.us/j/hanoon-burdah-live",
+                          })
+                        }
+                        className="text-[10px] font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 px-2 py-0.5 rounded cursor-pointer"
+                      >
+                        + Burdah Preset
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNewScheduleForm({
+                          ...newScheduleForm,
+                          isSpecialClass: !newScheduleForm.isSpecialClass,
+                        })
+                      }
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer ${
+                        newScheduleForm.isSpecialClass ? "bg-amber-500" : "bg-slate-300"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                          newScheduleForm.isSpecialClass ? "translate-x-4" : "translate-x-1"
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                {newScheduleForm.isSpecialClass && (
+                  <div className="mt-2.5 pt-2.5 border-t border-amber-200/60 space-y-2 animate-fade-in">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-amber-900 block">
+                        Special Class Title *
+                      </label>
+                      <input
+                        type="text"
+                        required={newScheduleForm.isSpecialClass}
+                        value={newScheduleForm.specialClassTitle}
+                        onChange={(e) =>
+                          setNewScheduleForm({
+                            ...newScheduleForm,
+                            specialClassTitle: e.target.value,
+                          })
+                        }
+                        placeholder="e.g. Burdah Live Gathering"
+                        className="w-full p-2 rounded-lg bg-white border border-amber-300 text-xs text-slate-900 outline-none font-bold"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-amber-900 block">
+                        Dedicated Live Link URL *
+                      </label>
+                      <input
+                        type="url"
+                        required={newScheduleForm.isSpecialClass}
+                        value={newScheduleForm.specialClassLiveUrl}
+                        onChange={(e) =>
+                          setNewScheduleForm({
+                            ...newScheduleForm,
+                            specialClassLiveUrl: e.target.value,
+                          })
+                        }
+                        placeholder="https://zoom.us/j/hanoon-burdah-live"
+                        className="w-full p-2 rounded-lg bg-white border border-amber-300 text-xs text-slate-900 outline-none font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 4. Session Title (General Class) */}
+              {!newScheduleForm.isSpecialClass && (
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Class Topic / Title *
+                  </label>
+                  <input
+                    type="text"
+                    required={!newScheduleForm.isSpecialClass}
+                    placeholder="e.g. Seerah: The Treaty of Hudaybiyyah"
+                    value={newScheduleForm.title}
+                    onChange={(e) =>
+                      setNewScheduleForm({ ...newScheduleForm, title: e.target.value })
+                    }
+                    className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none focus:border-purple-400"
+                  />
+                </div>
+              )}
+
+              {/* 5. Date & Time */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">Date *</label>
@@ -1667,7 +1985,7 @@ export default function TeacherDashboardPage() {
                     onChange={(e) =>
                       setNewScheduleForm({ ...newScheduleForm, date: e.target.value })
                     }
-                    className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none"
+                    className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none cursor-pointer"
                   />
                 </div>
                 <div>
@@ -1679,54 +1997,96 @@ export default function TeacherDashboardPage() {
                     onChange={(e) =>
                       setNewScheduleForm({ ...newScheduleForm, time: e.target.value })
                     }
-                    className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none"
+                    className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none cursor-pointer"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Duration</label>
-                  <input
-                    type="text"
-                    value={newScheduleForm.duration}
-                    onChange={(e) =>
-                      setNewScheduleForm({ ...newScheduleForm, duration: e.target.value })
-                    }
-                    className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none"
-                  />
+              {/* 6. Flexible Session Duration */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-slate-700 block">
+                    Duration *
+                  </label>
+                  <span className="text-[10.5px] text-purple-600 font-semibold">Flexible custom input</span>
                 </div>
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Platform</label>
-                  <select
-                    value={newScheduleForm.platform}
-                    onChange={(e) =>
-                      setNewScheduleForm({
-                        ...newScheduleForm,
-                        platform: e.target.value as "Zoom" | "Google Meet",
-                      })
-                    }
-                    className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none"
-                  >
-                    <option value="Zoom">Zoom</option>
-                    <option value="Google Meet">Google Meet</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Meeting URL
-                </label>
                 <input
-                  type="url"
-                  value={newScheduleForm.meetingLink}
+                  type="text"
+                  required
+                  value={newScheduleForm.duration}
                   onChange={(e) =>
-                    setNewScheduleForm({ ...newScheduleForm, meetingLink: e.target.value })
+                    setNewScheduleForm({ ...newScheduleForm, duration: e.target.value })
                   }
-                  className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none focus:border-purple-400"
+                  placeholder="e.g. 45 mins, 1.5 hours, 90 mins"
+                  className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none"
                 />
+                <div className="flex items-center gap-1.5 pt-0.5 flex-wrap">
+                  <span className="text-[10px] text-slate-400 font-bold">Presets:</span>
+                  {["45 mins", "60 mins", "1.5 hours", "2 hours"].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setNewScheduleForm({ ...newScheduleForm, duration: preset })}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md border cursor-pointer ${
+                        newScheduleForm.duration === preset
+                          ? "bg-purple-600 text-white border-purple-600"
+                          : "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
               </div>
+
+              {/* 7. Platform & Meeting Link (if not special class) */}
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700 block">Platform</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setNewScheduleForm({ ...newScheduleForm, platform: "Google Meet" })}
+                    className={`py-2 px-3 rounded-xl border flex items-center justify-center gap-2 cursor-pointer text-xs font-bold ${
+                      newScheduleForm.platform === "Google Meet"
+                        ? "bg-emerald-50 border-emerald-500 text-emerald-800"
+                        : "bg-slate-50 border-slate-200 text-slate-600"
+                    }`}
+                  >
+                    <Video className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Google Meet</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewScheduleForm({ ...newScheduleForm, platform: "Zoom" })}
+                    className={`py-2 px-3 rounded-xl border flex items-center justify-center gap-2 cursor-pointer text-xs font-bold ${
+                      newScheduleForm.platform === "Zoom"
+                        ? "bg-blue-50 border-blue-500 text-blue-800"
+                        : "bg-slate-50 border-slate-200 text-slate-600"
+                    }`}
+                  >
+                    <Video className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Zoom</span>
+                  </button>
+                </div>
+              </div>
+
+              {!newScheduleForm.isSpecialClass && (
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Meeting URL *
+                  </label>
+                  <input
+                    type="url"
+                    required={!newScheduleForm.isSpecialClass}
+                    value={newScheduleForm.meetingLink}
+                    onChange={(e) =>
+                      setNewScheduleForm({ ...newScheduleForm, meetingLink: e.target.value })
+                    }
+                    placeholder="https://zoom.us/j/hanoon-faculty-live"
+                    className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none focus:border-purple-400 font-mono"
+                  />
+                </div>
+              )}
 
               <div className="pt-2 flex items-center justify-end gap-2">
                 <button
@@ -1738,9 +2098,10 @@ export default function TeacherDashboardPage() {
                 </button>
                 <button
                   type="submit"
-                  className="py-2.5 px-5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-sm cursor-pointer"
+                  className="py-2.5 px-5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-sm cursor-pointer flex items-center gap-1.5"
                 >
-                  Save & Notify Students
+                  <Calendar className="w-4 h-4" />
+                  <span>Save & Notify Students</span>
                 </button>
               </div>
             </form>

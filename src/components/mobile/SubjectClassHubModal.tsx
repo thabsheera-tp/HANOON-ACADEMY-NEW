@@ -199,18 +199,24 @@ export default function SubjectClassHubModal({
             </div>
 
             <p className="text-xs text-purple-100 font-medium">
-              Join the bi-weekly interactive lecture, ask live questions, and participate in discussion.
+              Join the interactive lecture, ask live questions, and participate in discussion.
             </p>
 
-            <a
-              href={subject.liveClassUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full py-2.5 px-3 rounded-xl bg-white text-purple-700 hover:bg-purple-50 font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
-            >
-              <Radio className="w-3.5 h-3.5 animate-pulse text-purple-600" />
-              <span>Join Live Class</span>
-            </a>
+            {subject.liveClassUrl ? (
+              <a
+                href={subject.liveClassUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-2.5 px-3 rounded-xl bg-white text-purple-700 hover:bg-purple-50 font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+              >
+                <Radio className="w-3.5 h-3.5 animate-pulse text-purple-600" />
+                <span>Join Live Class</span>
+              </a>
+            ) : (
+              <div className="w-full py-2 px-3 rounded-xl bg-purple-700/60 text-purple-100 text-xs font-semibold text-center">
+                Class will be broadcast at scheduled time
+              </div>
+            )}
           </div>
         )}
 
@@ -231,34 +237,45 @@ export default function SubjectClassHubModal({
             </span>
           </div>
 
-          <div className="space-y-2">
-            {subject.chapters.map((chapter) => {
-              const isPlaying = activePlayingId === chapter.id;
-              const isDownloaded = downloadedChapters[chapter.id];
-              const isDownloading = downloadingId === chapter.id;
+          {subject.chapters.length === 0 ? (
+            <div className="py-8 px-4 rounded-2xl bg-purple-50/40 border border-purple-100 text-center space-y-2">
+              <div className="w-10 h-10 rounded-2xl bg-purple-100/80 text-purple-600 flex items-center justify-center mx-auto">
+                <FileText className="w-5 h-5 text-purple-600" />
+              </div>
+              <h4 className="text-xs font-bold text-slate-800">No study materials available</h4>
+              <p className="text-[11px] text-slate-500 max-w-xs mx-auto leading-relaxed">
+                Curriculum notes, worksheets, and lecture recordings for {subject.name} will appear here once uploaded by your faculty instructor.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {subject.chapters.map((chapter) => {
+                const isPlaying = activePlayingId === chapter.id;
+                const isDownloaded = downloadedChapters[chapter.id];
+                const isDownloading = downloadingId === chapter.id;
 
-              return (
-                <div
-                  key={chapter.id}
-                  className="p-3 rounded-2xl bg-purple-50/40 border border-purple-100 space-y-2.5"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="space-y-0.5">
-                      <p className="text-xs font-bold text-slate-900 leading-snug">
-                        {chapter.title}
-                      </p>
-                      <div className="flex items-center gap-2 text-[10px] text-slate-500">
-                        <span className="flex items-center gap-1">
-                          <Video className="w-3 h-3 text-purple-500" />
-                          {chapter.duration}
-                        </span>
-                        <span>•</span>
-                        <span className="flex items-center gap-1">
-                          <FileText className="w-3 h-3 text-purple-500" />
-                          {chapter.pdfSize}
-                        </span>
+                return (
+                  <div
+                    key={chapter.id}
+                    className="p-3 rounded-2xl bg-purple-50/40 border border-purple-100 space-y-2.5"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-0.5">
+                        <p className="text-xs font-bold text-slate-900 leading-snug">
+                          {chapter.title}
+                        </p>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                          <span className="flex items-center gap-1">
+                            <Video className="w-3 h-3 text-purple-500" />
+                            {chapter.duration}
+                          </span>
+                          <span>•</span>
+                          <span className="flex items-center gap-1">
+                            <FileText className="w-3 h-3 text-purple-500" />
+                            {chapter.pdfSize}
+                          </span>
+                        </div>
                       </div>
-                    </div>
 
                     <button
                       type="button"
@@ -344,7 +361,8 @@ export default function SubjectClassHubModal({
               );
             })}
           </div>
-        </div>
+        )}
+      </div>
 
         {/* WhatsApp Doubt clearance */}
         <a

@@ -22,7 +22,7 @@ import {
   Lock,
 } from "lucide-react";
 import { UserProfile, SelectedCourse, PaymentDetails } from "@/types/app";
-import { SpecialClass, getSpecialClasses } from "@/services/specialClassService";
+import { SpecialClass, getSpecialClasses, fetchSpecialClassesFromSupabase } from "@/services/specialClassService";
 import { fetchCertificates } from "@/services/certificateService";
 import { DbCertificate } from "@/types/supabase";
 import LiveClassModal from "@/components/mobile/LiveClassModal";
@@ -31,13 +31,14 @@ import TimetableModal from "@/components/mobile/TimetableModal";
 import StudentIDModal from "@/components/mobile/StudentIDModal";
 import SpecialClassModal from "@/components/mobile/SpecialClassModal";
 import SubjectClassHubModal from "@/components/mobile/SubjectClassHubModal";
-import { getAdaviyyaSubjects, AdaviyyaSubject } from "@/services/subjectService";
+import { getAdaviyyaSubjects, AdaviyyaSubject, fetchAdaviyyaSubjectsFromSupabase } from "@/services/subjectService";
 import AttendanceDonutChart from "@/components/charts/AttendanceDonutChart";
 import ProgressScoreBarChart from "@/components/charts/ProgressScoreBarChart";
 import { getAppSettings, formatWhatsAppLink } from "@/services/settingsService";
 import { getNotifications, markAllNotificationsAsRead, AppNotification } from "@/services/notificationService";
 import StudentNoticeBoard from "@/components/mobile/StudentNoticeBoard";
 import { getLocalAttendanceRecords } from "@/services/attendanceService";
+import { LiveClassSession, fetchLiveClassesFromSupabase, getTeacherClasses } from "@/services/teacherService";
 
 interface ScreenDashboardProps {
   userProfile: UserProfile;
@@ -54,6 +55,9 @@ export default function ScreenDashboard({
   onChangeCourse,
   onOpenReceipt,
 }: ScreenDashboardProps) {
+  const studentName = userProfile?.name?.trim() || "Student";
+  const avatarLetter = studentName.charAt(0).toUpperCase() || "S";
+
   const [showLiveModal, setShowLiveModal] = useState(false);
   const [showMaterialsModal, setShowMaterialsModal] = useState(false);
   const [showTimetableModal, setShowTimetableModal] = useState(false);
@@ -61,13 +65,17 @@ export default function ScreenDashboard({
   const [showNotificationToast, setShowNotificationToast] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [unreadNotifs, setUnreadNotifs] = useState(0);
+  const [notificationsList, setNotificationsList] = useState<AppNotification[]>(() => getNotifications());
 
   // Special Classes State (Burdah Live)
   const [specialClasses, setSpecialClasses] = useState<SpecialClass[]>(() => getSpecialClasses());
   const [selectedSpecialClass, setSelectedSpecialClass] = useState<SpecialClass | null>(null);
   const [showSpecialModal, setShowSpecialModal] = useState(false);
 
-  // Dynamic Subjects based on Enrolled Course (Adaviyya, Fashion Designing, Home Tuition, Shamail)
+  // Dynamic Live Classes fetched directly from Supabase
+  const [liveClasses, setLiveClasses] = useState<LiveClassSession[]>(() => getTeacherClasses());
+
+  // Dynamic Subjects based on Enrolled Course
   const subjects: AdaviyyaSubject[] = React.useMemo(() => {
     const courseId = (selectedCourse.id || "").toLowerCase();
     if (courseId === "fashion-designing") {
@@ -79,14 +87,10 @@ export default function ScreenDashboard({
           instructor: "Lead Design Faculty",
           badgeGradient: "bg-gradient-to-tr from-purple-500 to-indigo-500 text-white shadow-lg",
           iconType: "sparkles",
-          liveClassUrl: "https://zoom.us/j/hanoon-fashion-drafting",
+          liveClassUrl: "",
           scheduleTime: "Tuesdays & Thursdays • 04:00 PM IST",
           description: "Master measurement, pattern drafting, basic block creation, and modest apparel ergonomics.",
-          chapters: [
-            { id: "fd-1", title: "Chapter 1: Anthropometrics & Standard Sizing", duration: "45 mins", pdfTitle: "Pattern Drafting Measurement Guide.pdf", pdfSize: "3.8 MB" },
-            { id: "fd-2", title: "Chapter 2: Bodice & Abaya Block Construction", duration: "50 mins", pdfTitle: "Abaya & Tunic Sloper Handbook.pdf", pdfSize: "4.5 MB" },
-            { id: "fd-3", title: "Chapter 3: Dart Manipulation & Contouring", duration: "40 mins", pdfTitle: "Contouring Modest Silhouettes.pdf", pdfSize: "3.2 MB" },
-          ],
+          chapters: [],
         },
         {
           id: "haddad" as any,
@@ -95,13 +99,10 @@ export default function ScreenDashboard({
           instructor: "Lead Design Faculty",
           badgeGradient: "bg-gradient-to-tr from-rose-500 to-pink-500 text-white shadow-lg",
           iconType: "book",
-          liveClassUrl: "https://zoom.us/j/hanoon-fashion-textiles",
+          liveClassUrl: "",
           scheduleTime: "Mondays & Wednesdays • 04:00 PM IST",
           description: "Understanding natural & synthetic fibers, breathable weaves, seasonal textiles, and drape behavior.",
-          chapters: [
-            { id: "tx-1", title: "Chapter 1: Natural vs Synthetic Fiber Science", duration: "40 mins", pdfTitle: "Textile Fibers Classification.pdf", pdfSize: "3.1 MB" },
-            { id: "tx-2", title: "Chapter 2: Fabric Grainlines & Cutting Rules", duration: "45 mins", pdfTitle: "Grainline Alignment & Bias Cutting.pdf", pdfSize: "3.6 MB" },
-          ],
+          chapters: [],
         },
         {
           id: "fiqh" as any,
@@ -110,13 +111,10 @@ export default function ScreenDashboard({
           instructor: "Lead Design Faculty",
           badgeGradient: "bg-gradient-to-tr from-emerald-500 to-teal-500 text-white shadow-lg",
           iconType: "scale",
-          liveClassUrl: "https://zoom.us/j/hanoon-fashion-stitching",
+          liveClassUrl: "",
           scheduleTime: "Fridays & Saturdays • 03:30 PM IST",
           description: "Sewing machine operation, stitch regulation, french seams, bias binding, and clean garment assembly.",
-          chapters: [
-            { id: "st-1", title: "Chapter 1: Machine Maintenance & Tension Control", duration: "35 mins", pdfTitle: "Sewing Machine Operation Manual.pdf", pdfSize: "2.9 MB" },
-            { id: "st-2", title: "Chapter 2: Seam Finishes, Zippers & Plackets", duration: "55 mins", pdfTitle: "Flawless Zipper & Placket Guide.pdf", pdfSize: "4.9 MB" },
-          ],
+          chapters: [],
         },
         {
           id: "hadith" as any,
@@ -125,13 +123,10 @@ export default function ScreenDashboard({
           instructor: "Lead Design Faculty",
           badgeGradient: "bg-gradient-to-tr from-amber-500 to-orange-500 text-white shadow-lg",
           iconType: "scroll",
-          liveClassUrl: "https://zoom.us/j/hanoon-fashion-embroidery",
+          liveClassUrl: "",
           scheduleTime: "Sundays • 10:00 AM IST",
           description: "Traditional and contemporary needlework, beadwork, embroidery, and luxury cuff detailing.",
-          chapters: [
-            { id: "em-1", title: "Chapter 1: Hand Embroidery Stitches & Motifs", duration: "45 mins", pdfTitle: "Embroidery Stitches Chart.pdf", pdfSize: "4.1 MB" },
-            { id: "em-2", title: "Chapter 2: Luxury Beading & Sequins Application", duration: "50 mins", pdfTitle: "Cuff & Neckline Ornamentation.pdf", pdfSize: "5.0 MB" },
-          ],
+          chapters: [],
         },
       ];
     } else if (courseId === "home-tuition") {
@@ -143,13 +138,10 @@ export default function ScreenDashboard({
           instructor: "Senior Tuition Faculty",
           badgeGradient: "bg-gradient-to-tr from-blue-600 to-cyan-500 text-white shadow-lg",
           iconType: "book",
-          liveClassUrl: "https://zoom.us/j/hanoon-tuition-maths",
+          liveClassUrl: "",
           scheduleTime: "Daily • 06:00 PM IST",
           description: "Algebra, Geometry, Trigonometry, and Arithmetic problem-solving with step-by-step guidance.",
-          chapters: [
-            { id: "mt-1", title: "Chapter 1: Fundamental Algebra & Equations", duration: "45 mins", pdfTitle: "Algebra Formula Sheet & Exercises.pdf", pdfSize: "3.4 MB" },
-            { id: "mt-2", title: "Chapter 2: Geometry Theorems & Proofs", duration: "50 mins", pdfTitle: "Geometry Theorems Explained.pdf", pdfSize: "4.2 MB" },
-          ],
+          chapters: [],
         },
         {
           id: "haddad" as any,
@@ -158,13 +150,10 @@ export default function ScreenDashboard({
           instructor: "Senior Tuition Faculty",
           badgeGradient: "bg-gradient-to-tr from-emerald-500 to-teal-500 text-white shadow-lg",
           iconType: "sparkles",
-          liveClassUrl: "https://zoom.us/j/hanoon-tuition-science",
+          liveClassUrl: "",
           scheduleTime: "Daily • 07:00 PM IST",
           description: "Core physical sciences, laboratory concepts, chemical reactions, and living systems explained simply.",
-          chapters: [
-            { id: "sc-1", title: "Chapter 1: Motion, Forces & Energy", duration: "45 mins", pdfTitle: "Physics Motion & Laws Notes.pdf", pdfSize: "3.7 MB" },
-            { id: "sc-2", title: "Chapter 2: Chemical Reactions & Periodic Trends", duration: "48 mins", pdfTitle: "Chemistry Core Reactions.pdf", pdfSize: "4.0 MB" },
-          ],
+          chapters: [],
         },
         {
           id: "fiqh" as any,
@@ -173,12 +162,10 @@ export default function ScreenDashboard({
           instructor: "Academic Mentor",
           badgeGradient: "bg-gradient-to-tr from-amber-500 to-rose-500 text-white shadow-lg",
           iconType: "scale",
-          liveClassUrl: "https://zoom.us/j/hanoon-tuition-doubts",
+          liveClassUrl: "",
           scheduleTime: "Flexible • On Demand",
           description: "Live interactive clearing of homework questions, textbook exercises, and tricky exam problems.",
-          chapters: [
-            { id: "db-1", title: "Weekly Doubt Clearing Vault & Solutions", duration: "60 mins", pdfTitle: "Solved Exemplar Questions.pdf", pdfSize: "5.1 MB" },
-          ],
+          chapters: [],
         },
         {
           id: "hadith" as any,
@@ -187,12 +174,10 @@ export default function ScreenDashboard({
           instructor: "Evaluation Lead",
           badgeGradient: "bg-gradient-to-tr from-purple-600 to-indigo-600 text-white shadow-lg",
           iconType: "scroll",
-          liveClassUrl: "https://zoom.us/j/hanoon-tuition-mocktests",
+          liveClassUrl: "",
           scheduleTime: "Saturdays • 05:00 PM IST",
           description: "Timed chapter tests, sample question papers, time-management strategies, and detailed answer reviews.",
-          chapters: [
-            { id: "mk-1", title: "Term 1 Comprehensive Mock Exam Paper", duration: "90 mins", pdfTitle: "Term 1 Mock Exam & Answer Key.pdf", pdfSize: "4.8 MB" },
-          ],
+          chapters: [],
         },
       ];
     }
@@ -206,15 +191,42 @@ export default function ScreenDashboard({
   const [certificates, setCertificates] = useState<DbCertificate[]>([]);
   const [selectedCert, setSelectedCert] = useState<DbCertificate | null>(null);
 
-  // Countdown timer to next interactive live class
-  const [timeLeft, setTimeLeft] = useState({ hours: 2, minutes: 14, seconds: 35 });
+  const [livePaymentStatus, setLivePaymentStatus] = useState<string>(paymentDetails.status);
+  const [lockedNoticeSubject, setLockedNoticeSubject] = useState<string | null>(null);
+
+  // Countdown timer dynamically calculated from upcoming live classes
+  const [countdownString, setCountdownString] = useState<string>("Calculating...");
 
   useEffect(() => {
+    // 1. Fetch Certificates from Supabase
     fetchCertificates().then((data) => {
       if (data && data.length > 0) {
-        setCertificates(data);
+        const filtered = data.filter((c) => {
+          if (!studentName || studentName === "Student") return true;
+          return (
+            c.student_name.toLowerCase().includes(studentName.toLowerCase()) ||
+            studentName.toLowerCase().includes(c.student_name.toLowerCase()) ||
+            (userProfile.id && c.student_id === userProfile.id)
+          );
+        });
+        setCertificates(filtered);
+      } else {
+        setCertificates([]);
       }
     });
+
+    // 2. Fetch Live Classes from Supabase
+    fetchLiveClassesFromSupabase(selectedCourse.id).then((cls) => {
+      setLiveClasses(cls || []);
+    });
+
+    // 3. Fetch Special Classes from Supabase
+    fetchSpecialClassesFromSupabase().then((spc) => {
+      setSpecialClasses(spc || []);
+    });
+
+    // 4. Fetch Course Subjects from Supabase
+    fetchAdaviyyaSubjectsFromSupabase().catch(() => {});
 
     const handleSpecialUpdate = (e: CustomEvent<SpecialClass[]>) => {
       if (e.detail) {
@@ -230,40 +242,70 @@ export default function ScreenDashboard({
       }
     };
 
+    const handleClassesUpdate = (e: CustomEvent<LiveClassSession[]>) => {
+      if (e.detail) {
+        setLiveClasses(e.detail);
+      } else {
+        setLiveClasses(getTeacherClasses());
+      }
+    };
+
     const updateNotifs = () => {
-      const count = getNotifications().filter((n) => !n.isRead).length;
+      const allNotifs = getNotifications();
+      setNotificationsList(allNotifs);
+      const count = allNotifs.filter((n) => !n.isRead).length;
       setUnreadNotifs(count);
     };
     updateNotifs();
 
     window.addEventListener("hanoon_special_classes_updated", handleSpecialUpdate as EventListener);
     window.addEventListener("hanoon_certificates_updated", handleCertUpdate as EventListener);
+    window.addEventListener("hanoon_classes_updated", handleClassesUpdate as EventListener);
     window.addEventListener("hanoon_notifications_updated", updateNotifs);
     window.addEventListener("hanoon_new_notification", updateNotifs);
 
+    // Dynamic timer ticker
     const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev.seconds > 0) return { ...prev, seconds: prev.seconds - 1 };
-        if (prev.minutes > 0) return { ...prev, minutes: prev.minutes - 1, seconds: 59 };
-        if (prev.hours > 0) return { hours: prev.hours - 1, minutes: 59, seconds: 59 };
-        return { hours: 2, minutes: 30, seconds: 0 };
-      });
+      const currentClasses = getTeacherClasses();
+      const liveNow = currentClasses.find((c) => c.status === "LIVE_NOW");
+      if (liveNow) {
+        setCountdownString("LIVE NOW");
+        return;
+      }
+
+      const scheduled = currentClasses
+        .filter((c) => c.status === "SCHEDULED" && c.date && c.time)
+        .sort((a, b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
+
+      if (scheduled.length > 0) {
+        const nextClass = scheduled[0];
+        const targetMs = new Date(`${nextClass.date}T${nextClass.time}`).getTime();
+        const diffMs = targetMs - Date.now();
+
+        if (diffMs > 0) {
+          const totalSec = Math.floor(diffMs / 1000);
+          const h = Math.floor(totalSec / 3600);
+          const m = Math.floor((totalSec % 3600) / 60);
+          const s = totalSec % 60;
+          const pad = (n: number) => n.toString().padStart(2, "0");
+          setCountdownString(`${pad(h)}h : ${pad(m)}m : ${pad(s)}s`);
+        } else {
+          setCountdownString("Class Starting Soon");
+        }
+      } else {
+        setCountdownString("No Scheduled Class");
+      }
     }, 1000);
 
     return () => {
       window.removeEventListener("hanoon_special_classes_updated", handleSpecialUpdate as EventListener);
       window.removeEventListener("hanoon_certificates_updated", handleCertUpdate as EventListener);
+      window.removeEventListener("hanoon_classes_updated", handleClassesUpdate as EventListener);
       window.removeEventListener("hanoon_notifications_updated", updateNotifs);
       window.removeEventListener("hanoon_new_notification", updateNotifs);
       clearInterval(timer);
     };
-  }, []);
-
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  const formattedCountdown = `${pad(timeLeft.hours)}h : ${pad(timeLeft.minutes)}m : ${pad(timeLeft.seconds)}s`;
-
-  const [livePaymentStatus, setLivePaymentStatus] = useState<string>(paymentDetails.status);
-  const [lockedNoticeSubject, setLockedNoticeSubject] = useState<string | null>(null);
+  }, [selectedCourse.id, studentName, userProfile.id]);
 
   useEffect(() => {
     setLivePaymentStatus(paymentDetails.status);
@@ -335,9 +377,6 @@ export default function ScreenDashboard({
     };
   }, [paymentDetails.upiTxId]);
 
-  const studentName = userProfile.name.trim() || "Student";
-  const avatarLetter = studentName.charAt(0).toUpperCase() || "S";
-
   const isApproved =
     (livePaymentStatus || "").toUpperCase() === "APPROVED" ||
     (livePaymentStatus || "").toUpperCase() === "VERIFIED" ||
@@ -405,6 +444,9 @@ export default function ScreenDashboard({
   const progressData: { module: string; score: number }[] = React.useMemo(() => {
     return [];
   }, []);
+
+  const liveNowClass = liveClasses.find((c) => c.status === "LIVE_NOW");
+  const upcomingClass = liveClasses.find((c) => c.status === "SCHEDULED");
 
   return (
     <div className="w-full max-w-md mx-auto overflow-x-hidden px-4 py-3 flex-1 flex flex-col justify-start space-y-4 select-none font-['Plus_Jakarta_Sans'] bg-purple-50/30 text-slate-900">
@@ -476,10 +518,18 @@ export default function ScreenDashboard({
 
           {/* Show latest notifications */}
           <div className="space-y-1.5">
-            {getNotifications().length === 0 ? (
-              <p className="text-[11px] text-slate-400 py-2 text-center">No notifications yet</p>
+            {notificationsList.length === 0 ? (
+              <div className="py-6 px-4 text-center space-y-2">
+                <div className="w-10 h-10 rounded-2xl bg-purple-50 text-purple-400 flex items-center justify-center mx-auto">
+                  <Bell className="w-5 h-5 text-purple-400" />
+                </div>
+                <p className="text-xs font-bold text-slate-700">No new notifications</p>
+                <p className="text-[10px] text-slate-400 max-w-[200px] mx-auto leading-relaxed">
+                  Class schedules, announcements, and study notes will appear here.
+                </p>
+              </div>
             ) : (
-              getNotifications().slice(0, 4).map((item) => (
+              notificationsList.slice(0, 4).map((item) => (
                 <div key={item.id} className="p-2.5 rounded-xl bg-purple-50/50 space-y-1 text-slate-700 border border-purple-100/50">
                   <div className="flex items-center justify-between gap-1">
                     <span className="font-extrabold text-[11px] text-slate-900 flex items-center gap-1">
@@ -622,7 +672,10 @@ export default function ScreenDashboard({
               if (certificates && certificates.length > 0) {
                 setSelectedCert(certificates[0]);
               } else {
-                setShowStudentIDModal(true);
+                const el = document.getElementById("certificates-section");
+                if (el) {
+                  el.scrollIntoView({ behavior: "smooth" });
+                }
               }
             }}
             className="p-3.5 rounded-2xl bg-white hover:bg-purple-50/40 border border-purple-100 hover:border-purple-300 shadow-sm hover:shadow-md transition-all text-left flex flex-col justify-between min-h-[96px] cursor-pointer group active:scale-[0.98]"
@@ -635,7 +688,7 @@ export default function ScreenDashboard({
                 My Certificates
               </p>
               <span className="text-[10px] text-emerald-600 font-semibold block mt-0.5">
-                {certificates.length > 0 ? `${certificates.length} Issued` : "Digital Pass & QR"}
+                {certificates.length > 0 ? `${certificates.length} Issued` : "No certificates yet"}
               </span>
             </div>
           </button>
@@ -724,8 +777,17 @@ export default function ScreenDashboard({
           </div>
 
           <div className="flex items-center gap-1 text-[10px] font-mono font-bold text-purple-700 bg-purple-50/80 px-2 py-0.5 rounded-md">
-            <Clock className="w-3 h-3 text-purple-600" />
-            <span>{formattedCountdown}</span>
+            {liveNowClass ? (
+              <span className="flex items-center gap-1 text-rose-600 font-bold">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
+                LIVE NOW
+              </span>
+            ) : (
+              <>
+                <Clock className="w-3 h-3 text-purple-600" />
+                <span>{countdownString}</span>
+              </>
+            )}
           </div>
         </div>
 
@@ -735,7 +797,7 @@ export default function ScreenDashboard({
               {selectedCourse.title}
             </h3>
             <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-              4 Core Subjects • Live Classes with Usthad Dr. Faisal
+              {subjects.length} Core Subjects • {liveNowClass ? `Live with ${liveNowClass.teacherName || "Faculty"}` : upcomingClass?.teacherName ? `Faculty: ${upcomingClass.teacherName}` : "Comprehensive Syllabus Track"}
             </p>
           </div>
 
@@ -756,8 +818,8 @@ export default function ScreenDashboard({
           >
             {isApproved ? (
               <>
-                <Radio className="w-3.5 h-3.5 animate-pulse" />
-                <span>Join Live</span>
+                <Radio className={`w-3.5 h-3.5 ${liveNowClass ? "animate-pulse" : ""}`} />
+                <span>{liveNowClass ? "Join Live" : "Classroom"}</span>
               </>
             ) : (
               <>
@@ -959,19 +1021,25 @@ export default function ScreenDashboard({
         )}
       </div>
 
-      {/* DIGITAL CERTIFICATES VIEW (If any issued) */}
-      {certificates.length > 0 && (
-        <div className="space-y-1.5 pt-0.5">
-          <div className="flex items-center justify-between px-1">
-            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-              <Award className="w-3.5 h-3.5 text-purple-600" />
-              <span>Digital Credentials</span>
-            </h3>
-            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-              {certificates.length} Issued
-            </span>
-          </div>
+      {/* DIGITAL CERTIFICATES VIEW (Dynamic with Clean Empty State) */}
+      <div className="space-y-1.5 pt-0.5" id="certificates-section">
+        <div className="flex items-center justify-between px-1">
+          <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+            <Award className="w-3.5 h-3.5 text-purple-600" />
+            <span>Digital Credentials</span>
+          </h3>
+          <span
+            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+              certificates.length > 0
+                ? "text-emerald-700 bg-emerald-50"
+                : "text-slate-500 bg-slate-100"
+            }`}
+          >
+            {certificates.length > 0 ? `${certificates.length} Issued` : "0 Issued"}
+          </span>
+        </div>
 
+        {certificates.length > 0 ? (
           <div className="space-y-2">
             {certificates.map((cert) => (
               <div
@@ -998,8 +1066,20 @@ export default function ScreenDashboard({
               </div>
             ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="bg-white p-4 rounded-2xl border border-purple-100/80 shadow-xs text-center space-y-2">
+            <div className="w-10 h-10 rounded-2xl bg-purple-50 text-purple-400 flex items-center justify-center mx-auto">
+              <Award className="w-5 h-5 text-purple-400" />
+            </div>
+            <div className="space-y-0.5">
+              <h4 className="text-xs font-bold text-slate-800">No certificates unlocked yet</h4>
+              <p className="text-[10.5px] text-slate-400 max-w-xs mx-auto leading-relaxed">
+                Official certificates of completion will be unlocked and available here once you complete your course syllabus and assessments.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* ========================================================
           MODALS

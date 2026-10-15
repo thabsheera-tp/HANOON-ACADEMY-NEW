@@ -20,6 +20,10 @@ import {
   Search,
   Filter,
   MessageCircle,
+  Edit3,
+  BookOpen,
+  Layers,
+  Star,
 } from "lucide-react";
 import LiveClassWhatsAppReminderModal from "@/components/admin/LiveClassWhatsAppReminderModal";
 import {
@@ -34,7 +38,13 @@ import {
   triggerClassLiveNotification,
 } from "@/services/notificationService";
 import { SHOWCASE_COURSES } from "@/components/mobile/ScreenCoursesList";
-import { FACULTY_MEMBERS } from "@/app/admin/page";
+import {
+  FacultyTeacher,
+  fetchFacultyTeachers,
+  getLocalFacultyTeachers,
+  subscribeToFacultyTeachers,
+} from "@/services/teacherFacultyService";
+import { addSpecialClass } from "@/services/specialClassService";
 import { getAdaviyyaSubjects } from "@/services/subjectService";
 import {
   getLiveClassEnrolledRecipients,
@@ -50,19 +60,39 @@ export default function ClassScheduleManagerSection({
   currentUserRole = "Staff",
   currentUserName = "Staff Scheduler",
 }: ClassScheduleManagerSectionProps) {
-  // Form states
+  // 1. Dynamic Faculty State (Real DB Teachers + Custom Input)
+  const [facultyList, setFacultyList] = useState<FacultyTeacher[]>(() => getLocalFacultyTeachers());
+  const [selectedTeacherId, setSelectedTeacherId] = useState<string>("");
+  const [isCustomTeacher, setIsCustomTeacher] = useState<boolean>(false);
+  const [customTeacherName, setCustomTeacherName] = useState<string>("");
+
+  // 2. Target Course & Subject State (Standard + Custom / Extra)
   const [courseId, setCourseId] = useState<string>("adaviyya");
+  const [isCustomCourse, setIsCustomCourse] = useState<boolean>(false);
+  const [customCourseName, setCustomCourseName] = useState<string>("");
   const [subjectId, setSubjectId] = useState<string>("seerah");
-  const [teacherId, setTeacherId] = useState<string>(FACULTY_MEMBERS[0]?.id || "tch-01");
+  const [isCustomSubject, setIsCustomSubject] = useState<boolean>(false);
+  const [customSubjectName, setCustomSubjectName] = useState<string>("");
+
+  // 3. Class Title & Schedule
   const [classTitle, setClassTitle] = useState("Seerah: Prophetic Virtues & Moral Tarbiyah");
   const [date, setDate] = useState(() => {
     const today = new Date();
     return today.toISOString().split("T")[0];
   });
   const [time, setTime] = useState("19:30");
+
+  // 4. Flexible Session Duration
   const [duration, setDuration] = useState("60 mins");
+
+  // 5. Platform & Meeting Link
   const [platform, setPlatform] = useState<"Google Meet" | "Zoom">("Google Meet");
   const [meetingLink, setMeetingLink] = useState("https://meet.google.com/han-oon-live");
+
+  // 6. Special Class State (e.g. Burdah Live, Dua Majlis)
+  const [isSpecialClass, setIsSpecialClass] = useState<boolean>(false);
+  const [specialClassTitle, setSpecialClassTitle] = useState<string>("");
+  const [specialClassLiveUrl, setSpecialClassLiveUrl] = useState<string>("");
 
   // UI feedback states
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -77,6 +107,39 @@ export default function ClassScheduleManagerSection({
   // Data states
   const [classes, setClasses] = useState<LiveClassSession[]>([]);
   const adaviyyaSubjects = getAdaviyyaSubjects();
+
+  // Load real faculty teachers from DB & localStorage
+  useEffect(() => {
+    let isMounted = true;
+
+    fetchFacultyTeachers()
+      .then((teachers) => {
+        if (!isMounted) return;
+        if (teachers && teachers.length > 0) {
+          setFacultyList(teachers);
+          setSelectedTeacherId((prev) => prev || teachers[0].id);
+        } else {
+          // If no faculty registered yet, default to custom input mode
+          setIsCustomTeacher(true);
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not fetch real faculty teachers:", err);
+      });
+
+    const unsubscribe = subscribeToFacultyTeachers((updated) => {
+      if (!isMounted) return;
+      setFacultyList(updated);
+      if (updated.length > 0 && !selectedTeacherId) {
+        setSelectedTeacherId(updated[0].id);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     setClasses(getTeacherClasses());
@@ -94,8 +157,8 @@ export default function ClassScheduleManagerSection({
   }, []);
 
   const selectedCourse = SHOWCASE_COURSES.find((c) => c.id === courseId) || SHOWCASE_COURSES[0];
-  const isAdaviyya = courseId === "adaviyya";
-  const selectedTeacher = FACULTY_MEMBERS.find((t) => t.id === teacherId) || FACULTY_MEMBERS[0];
+  const isAdaviyya = courseId === "adaviyya" && !isCustomCourse;
+  const activeSelectedTeacher = facultyList.find((t) => t.id === selectedTeacherId);
 
   // Quick switch of default meeting link based on selected platform
   const handlePlatformChange = (newPlatform: "Google Meet" | "Zoom") => {
@@ -115,15 +178,79 @@ export default function ClassScheduleManagerSection({
     }
   };
 
+  // Quick fill preset for Special Class (e.g. Burdah Live)
+  const handleApplyBurdahPreset = () => {
+    setIsSpecialClass(true);
+    setSpecialClassTitle("Burdah Live Gathering");
+    setSpecialClassLiveUrl("https://zoom.us/j/hanoon-burdah-live");
+    if (!customTeacherName && !activeSelectedTeacher) {
+      setCustomTeacherName("Usthad Dr. Faisal");
+      setIsCustomTeacher(true);
+    }
+  };
+
   // Schedule a new class
   const handleScheduleClass = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!classTitle.trim()) {
-      setErrorMessage("Please enter a Class Title.");
+
+    // 1. Resolve Teacher Name
+    let resolvedTeacherName = "";
+    let resolvedTeacherId = "";
+
+    if (isCustomTeacher) {
+      resolvedTeacherName = customTeacherName.trim();
+      resolvedTeacherId = `custom-${Date.now()}`;
+    } else if (activeSelectedTeacher) {
+      resolvedTeacherName = activeSelectedTeacher.fullName;
+      resolvedTeacherId = activeSelectedTeacher.id;
+    } else {
+      resolvedTeacherName = customTeacherName.trim();
+      resolvedTeacherId = `custom-${Date.now()}`;
+    }
+
+    if (!resolvedTeacherName) {
+      setErrorMessage("Please select or enter the Teacher's name.");
       return;
     }
-    if (!meetingLink.trim() || !meetingLink.startsWith("http")) {
+
+    // 2. Resolve Course Name & ID
+    const resolvedCourseName = isCustomCourse
+      ? customCourseName.trim()
+      : selectedCourse.title;
+    const resolvedCourseId = isCustomCourse
+      ? (customCourseName.toLowerCase().replace(/[^a-z0-9]/g, "-") || "custom-course")
+      : courseId;
+
+    if (!resolvedCourseName) {
+      setErrorMessage("Please provide a valid Target Course name.");
+      return;
+    }
+
+    // 3. Resolve Meeting Link (Special Class URL takes priority if checked)
+    const activeMeetingUrl = (isSpecialClass && specialClassLiveUrl.trim())
+      ? specialClassLiveUrl.trim()
+      : meetingLink.trim();
+
+    if (!activeMeetingUrl || !activeMeetingUrl.startsWith("http")) {
       setErrorMessage("Please enter a valid Google Meet or Zoom meeting link (starts with https://).");
+      return;
+    }
+
+    // 4. Resolve Title (Special Class Title, or Custom Subject + Class Title)
+    let combinedTitle = classTitle.trim();
+    if (isSpecialClass && specialClassTitle.trim()) {
+      combinedTitle = specialClassTitle.trim();
+    } else if (isCustomSubject && customSubjectName.trim()) {
+      combinedTitle = `${customSubjectName.trim()}: ${classTitle.trim()}`;
+    } else if (isAdaviyya) {
+      const subjectObj = adaviyyaSubjects.find((s) => s.id === subjectId);
+      if (subjectObj) {
+        combinedTitle = `${subjectObj.name}: ${classTitle.trim()}`;
+      }
+    }
+
+    if (!combinedTitle) {
+      setErrorMessage("Please enter a Class Title.");
       return;
     }
 
@@ -131,54 +258,86 @@ export default function ClassScheduleManagerSection({
     setErrorMessage(null);
 
     try {
-      const subjectObj = adaviyyaSubjects.find((s) => s.id === subjectId);
-      const combinedTitle = isAdaviyya && subjectObj ? `${subjectObj.name}: ${classTitle.trim()}` : classTitle.trim();
-
-      // 1. Save scheduled class session
+      // 1. Save scheduled class session with dynamic inputs
       const newClass = scheduleNewClass({
         title: combinedTitle,
-        courseId,
-        courseName: selectedCourse.title,
+        courseId: resolvedCourseId,
+        courseName: resolvedCourseName,
         date,
         time,
-        duration,
-        meetingLink: meetingLink.trim(),
+        duration: duration.trim() || "60 mins",
+        meetingLink: activeMeetingUrl,
         platform,
-        teacher_id: selectedTeacher.id,
-        teacherName: selectedTeacher.name,
+        teacher_id: resolvedTeacherId,
+        teacherName: resolvedTeacherName,
+        isSpecialClass,
+        specialClassTitle: isSpecialClass ? (specialClassTitle.trim() || combinedTitle) : undefined,
+        isCustomCourse,
+        subjectName: isCustomSubject ? customSubjectName.trim() : undefined,
       });
 
-      // 2. Automated Notification: Trigger immediate in-app and push notifications to students AND assigned teacher
+      // 2. If Special Class, also synchronize with SpecialClassService
+      if (isSpecialClass) {
+        try {
+          addSpecialClass({
+            title: specialClassTitle.trim() || combinedTitle,
+            subtitle: `Live Broadcast with ${resolvedTeacherName}`,
+            instructor: resolvedTeacherName,
+            category: "Gathering",
+            badgeGradient: "bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 text-white shadow-lg",
+            iconType: "sparkles",
+            scheduleTime: `${date} • ${time} IST`,
+            status: "UPCOMING",
+            liveUrl: activeMeetingUrl,
+            description: `Live interactive session: ${combinedTitle}. Conducted by ${resolvedTeacherName}.`,
+          });
+        } catch (specialErr) {
+          console.warn("Could not sync to specialClassService:", specialErr);
+        }
+      }
+
+      // 3. Automated Notification: Trigger immediate in-app and push notifications to students AND assigned teacher
       triggerClassScheduledNotification({
         classTitle: combinedTitle,
-        courseName: selectedCourse.title,
-        courseId,
+        courseName: resolvedCourseName,
+        courseId: resolvedCourseId,
         date,
         time,
-        meetingLink: meetingLink.trim(),
+        meetingLink: activeMeetingUrl,
         platform,
-        teacherName: selectedTeacher.name,
+        teacherName: resolvedTeacherName,
         senderName: currentUserName,
       });
 
-      // 3. Automated WhatsApp Reminder: Dispatch automated 15-minute reminders to enrolled students
-      getLiveClassEnrolledRecipients(courseId, selectedCourse.title, meetingLink.trim())
+      // 4. Automated WhatsApp Reminder: Dispatch automated 15-minute reminders to enrolled students
+      getLiveClassEnrolledRecipients(resolvedCourseId, resolvedCourseName, activeMeetingUrl)
         .then((recipients) => {
           recipients.forEach((recipient) => {
             sendWhatsAppAlert({
               type: "LIVE_CLASS_REMINDER",
               studentName: recipient.name,
               phone: recipient.phone,
-              courseName: selectedCourse.title,
-              liveLink: meetingLink.trim(),
+              courseName: resolvedCourseName,
+              liveLink: activeMeetingUrl,
             });
           });
         })
         .catch((e) => console.warn("WhatsApp reminder auto-dispatch error:", e));
 
-      // 4. Update view
+      // 5. Update view
       setClasses(getTeacherClasses());
-      setSuccessMessage(`Class "${combinedTitle}" scheduled! In-app & WhatsApp 15-min alerts queued for enrolled students.`);
+      setSuccessMessage(
+        isSpecialClass
+          ? `⭐ Special Class "${combinedTitle}" published! Alerts dispatched to all students.`
+          : `Class "${combinedTitle}" scheduled! In-app & WhatsApp alerts dispatched.`
+      );
+
+      // Reset specific fields
+      if (isSpecialClass) {
+        setSpecialClassTitle("");
+        setSpecialClassLiveUrl("");
+        setIsSpecialClass(false);
+      }
       setClassTitle("Adaviyya: Comprehensive Review Session");
 
       setTimeout(() => setSuccessMessage(null), 5000);
@@ -317,32 +476,100 @@ export default function ClassScheduleManagerSection({
             </span>
           </div>
 
+          <div className="flex items-center justify-between pb-1">
+            <span className="text-[11px] font-bold text-slate-500">
+              Role Access:{" "}
+              <span className="text-purple-700 font-extrabold uppercase bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
+                {currentUserRole === "super_admin" || currentUserRole === "admin" ? "Super Admin" : "Staff Verifier"}
+              </span>
+            </span>
+            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+              <Check className="w-3 h-3" /> Full Scheduling Privileges
+            </span>
+          </div>
+
           <form onSubmit={handleScheduleClass} className="space-y-4">
-            {/* 1. Target Course */}
+            {/* 1. Target Course (Standard + Custom / Extra Button) */}
             <div className="space-y-1.5">
-              <label className="text-xs font-extrabold text-slate-700 block">
-                Target Course <span className="text-rose-500">*</span>
-              </label>
-              <select
-                value={courseId}
-                onChange={(e) => setCourseId(e.target.value)}
-                className="w-full py-2.5 px-3 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm font-bold text-slate-900 outline-none transition-all cursor-pointer"
-              >
-                {SHOWCASE_COURSES.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.title} ({c.duration})
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-extrabold text-slate-700 block">
+                  Target Course <span className="text-rose-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsCustomCourse(!isCustomCourse)}
+                  className={`text-[11px] font-bold px-2 py-0.5 rounded-lg border cursor-pointer transition-all flex items-center gap-1 ${
+                    isCustomCourse
+                      ? "bg-purple-600 text-white border-purple-600 shadow-2xs"
+                      : "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
+                  }`}
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>{isCustomCourse ? "Standard Courses" : "Custom / Extra Course"}</span>
+                </button>
+              </div>
+
+              {isCustomCourse ? (
+                <div className="space-y-1 animate-fade-in">
+                  <input
+                    type="text"
+                    required={isCustomCourse}
+                    value={customCourseName}
+                    onChange={(e) => setCustomCourseName(e.target.value)}
+                    placeholder="Enter Custom Course (e.g. Burdah Live Gathering, Quran Tajweed Diploma)"
+                    className="w-full py-2.5 px-3.5 rounded-xl bg-purple-50/50 border border-purple-300 focus:border-purple-600 focus:bg-white text-xs sm:text-sm font-bold text-slate-900 outline-none transition-all placeholder:text-slate-400 shadow-2xs"
+                  />
+                  <span className="text-[10.5px] text-slate-400 block">
+                    Custom track will be recognized dynamically across student timetables.
+                  </span>
+                </div>
+              ) : (
+                <select
+                  value={courseId}
+                  onChange={(e) => setCourseId(e.target.value)}
+                  className="w-full py-2.5 px-3 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm font-bold text-slate-900 outline-none transition-all cursor-pointer"
+                >
+                  {SHOWCASE_COURSES.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.title} ({c.duration})
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
-            {/* 2. Core Subject (if Adaviyya) */}
-            {isAdaviyya && (
-              <div className="space-y-1.5">
+            {/* 2. Subject Track (Core Subject or Custom / Extra Subject) */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
                 <label className="text-xs font-extrabold text-slate-700 block">
-                  Subject Track
+                  Subject Track / Topic
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCustomSubject(!isCustomSubject)}
+                  className={`text-[11px] font-bold px-2 py-0.5 rounded-lg border cursor-pointer transition-all flex items-center gap-1 ${
+                    isCustomSubject
+                      ? "bg-purple-600 text-white border-purple-600 shadow-2xs"
+                      : "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
+                  }`}
+                >
+                  <Edit3 className="w-3 h-3" />
+                  <span>{isCustomSubject ? "Standard Track" : "Custom / Extra Subject"}</span>
+                </button>
+              </div>
+
+              {isCustomSubject || isCustomCourse ? (
+                <div className="space-y-1 animate-fade-in">
+                  <input
+                    type="text"
+                    value={customSubjectName}
+                    onChange={(e) => setCustomSubjectName(e.target.value)}
+                    placeholder="Enter Custom Subject or Module (e.g. Qasida Burdah Recitation, Tajweed Rules)"
+                    className="w-full py-2.5 px-3.5 rounded-xl bg-purple-50/50 border border-purple-300 focus:border-purple-600 focus:bg-white text-xs sm:text-sm font-semibold text-slate-900 outline-none transition-all placeholder:text-slate-400"
+                  />
+                </div>
+              ) : isAdaviyya ? (
+                <div className="grid grid-cols-2 gap-2 animate-fade-in">
                   {adaviyyaSubjects.map((s) => (
                     <button
                       type="button"
@@ -361,43 +588,196 @@ export default function ClassScheduleManagerSection({
                     </button>
                   ))}
                 </div>
+              ) : null}
+            </div>
+
+            {/* 3. Assigned Faculty (Dynamic Real Teachers + Custom Input) */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-extrabold text-slate-700 block">
+                  Assigned Faculty / Instructor <span className="text-rose-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsCustomTeacher(!isCustomTeacher)}
+                  className={`text-[11px] font-bold px-2 py-0.5 rounded-lg border cursor-pointer transition-all flex items-center gap-1 ${
+                    isCustomTeacher
+                      ? "bg-purple-600 text-white border-purple-600 shadow-2xs"
+                      : "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
+                  }`}
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>{isCustomTeacher ? "Registered Faculty" : "+ Add Custom Teacher"}</span>
+                </button>
+              </div>
+
+              {isCustomTeacher || facultyList.length === 0 ? (
+                <div className="space-y-1 animate-fade-in">
+                  <div className="relative">
+                    <GraduationCap className="w-4 h-4 text-purple-600 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      required={isCustomTeacher || facultyList.length === 0}
+                      value={customTeacherName}
+                      onChange={(e) => setCustomTeacherName(e.target.value)}
+                      placeholder="Type Teacher's Full Name (e.g. Usthad Dr. Faisal Hudawi, Usthad Rashid)"
+                      className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-purple-50/50 border border-purple-300 focus:border-purple-600 focus:bg-white text-xs sm:text-sm font-bold text-slate-900 outline-none transition-all placeholder:text-slate-400 shadow-2xs"
+                    />
+                  </div>
+                  <span className="text-[10.5px] text-slate-400 block">
+                    Admins and Verifiers can manually enter any real scholar or guest lecturer.
+                  </span>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <select
+                    value={selectedTeacherId}
+                    onChange={(e) => {
+                      if (e.target.value === "__add_custom__") {
+                        setIsCustomTeacher(true);
+                      } else {
+                        setSelectedTeacherId(e.target.value);
+                      }
+                    }}
+                    className="w-full py-2.5 px-3 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm font-bold text-slate-900 outline-none transition-all cursor-pointer"
+                  >
+                    {facultyList.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.fullName} — {t.specialization || "Faculty Scholar"}
+                      </option>
+                    ))}
+                    <option value="__add_custom__">+ Type Custom Teacher Name...</option>
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {/* 4. Special Class Toggle & Link (Prominent for Burdah Live / Special Majlis) */}
+            <div className={`p-3.5 rounded-2xl border transition-all ${
+              isSpecialClass 
+                ? "bg-gradient-to-r from-amber-500/10 via-purple-500/10 to-rose-500/10 border-amber-300 ring-2 ring-amber-400/20 shadow-xs" 
+                : "bg-slate-50/80 border-slate-200/80 hover:border-purple-200"
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
+                    isSpecialClass ? "bg-amber-500 text-white shadow-xs" : "bg-purple-100 text-purple-600"
+                  }`}>
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-black text-slate-900 block flex items-center gap-1.5">
+                      <span>Is this a Special Class?</span>
+                      {isSpecialClass && (
+                        <span className="text-[9px] uppercase font-black bg-amber-500 text-white px-1.5 py-0.2 rounded-md">
+                          Live Event
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-[11px] text-slate-500 block">
+                      Prominently highlight on student apps (e.g. Burdah Live, Dua Gathering)
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {!isSpecialClass && (
+                    <button
+                      type="button"
+                      onClick={handleApplyBurdahPreset}
+                      className="text-[10px] font-bold text-purple-700 bg-purple-100/70 hover:bg-purple-200 px-2 py-1 rounded-lg transition-colors cursor-pointer hidden sm:inline-block"
+                      title="Quick Fill Burdah Live Preset"
+                    >
+                      + Burdah Live Preset
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsSpecialClass(!isSpecialClass)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none cursor-pointer ${
+                      isSpecialClass ? "bg-amber-500" : "bg-slate-300"
+                    }`}
+                    role="switch"
+                    aria-checked={isSpecialClass}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        isSpecialClass ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
+              {isSpecialClass && (
+                <div className="mt-3.5 pt-3.5 border-t border-amber-200/60 space-y-3 animate-fade-in">
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-extrabold text-amber-900 flex items-center gap-1.5">
+                        <Star className="w-3.5 h-3.5 text-amber-600 fill-amber-500" />
+                        <span>Special Class Event Title</span>
+                        <span className="text-rose-500">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSpecialClassTitle("Burdah Live Gathering");
+                          setSpecialClassLiveUrl("https://zoom.us/j/hanoon-burdah-live");
+                        }}
+                        className="text-[10px] font-bold text-amber-800 underline hover:text-amber-950 cursor-pointer"
+                      >
+                        Insert &quot;Burdah Live&quot;
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      required={isSpecialClass}
+                      value={specialClassTitle}
+                      onChange={(e) => setSpecialClassTitle(e.target.value)}
+                      placeholder="e.g. Burdah Live Gathering & Spiritual Salawat"
+                      className="w-full py-2.5 px-3 rounded-xl bg-white border border-amber-300 focus:border-amber-600 focus:ring-1 focus:ring-amber-500 text-xs sm:text-sm font-bold text-slate-900 outline-none transition-all placeholder:text-slate-400 shadow-2xs"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-extrabold text-amber-900 flex items-center gap-1.5">
+                      <LinkIcon className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Dedicated Special Class Live Link URL</span>
+                      <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="url"
+                        required={isSpecialClass}
+                        value={specialClassLiveUrl}
+                        onChange={(e) => setSpecialClassLiveUrl(e.target.value)}
+                        placeholder="https://zoom.us/j/hanoon-burdah-live or Google Meet link"
+                        className="w-full px-3 py-2.5 rounded-xl bg-white border border-amber-300 focus:border-amber-600 focus:ring-1 focus:ring-amber-500 text-xs font-semibold text-slate-900 outline-none transition-all placeholder:text-slate-400 font-mono shadow-2xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 5. Class Title (General Session) */}
+            {!isSpecialClass && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-extrabold text-slate-700 block">
+                  Class Session Title <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required={!isSpecialClass}
+                  value={classTitle}
+                  onChange={(e) => setClassTitle(e.target.value)}
+                  placeholder="e.g. Prophetic Virtues & Character Analysis"
+                  className="w-full py-2.5 px-3.5 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm font-semibold text-slate-900 outline-none transition-all placeholder:text-slate-400"
+                />
               </div>
             )}
 
-            {/* 3. Assigned Faculty */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-extrabold text-slate-700 block">
-                Assigned Faculty / Instructor <span className="text-rose-500">*</span>
-              </label>
-              <select
-                value={teacherId}
-                onChange={(e) => setTeacherId(e.target.value)}
-                className="w-full py-2.5 px-3 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm font-bold text-slate-900 outline-none transition-all cursor-pointer"
-              >
-                {FACULTY_MEMBERS.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} — {t.department}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* 4. Class Title */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-extrabold text-slate-700 block">
-                Class Session Title <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={classTitle}
-                onChange={(e) => setClassTitle(e.target.value)}
-                placeholder="e.g. Prophetic Virtues & Character Analysis"
-                className="w-full py-2.5 px-3.5 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm font-semibold text-slate-900 outline-none transition-all placeholder:text-slate-400"
-              />
-            </div>
-
-            {/* 5. Date & Time */}
+            {/* 6. Date & Time */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-xs font-extrabold text-slate-700 block">
@@ -426,7 +806,44 @@ export default function ClassScheduleManagerSection({
               </div>
             </div>
 
-            {/* 6. Platform Selector */}
+            {/* 7. Flexible Session Duration (Text Input replacing strict dropdown) */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-extrabold text-slate-700 block">
+                  Session Duration <span className="text-rose-500">*</span>
+                </label>
+                <span className="text-[11px] font-bold text-purple-600 flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> Flexible Custom Entry
+                </span>
+              </div>
+              <input
+                type="text"
+                required
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+                placeholder="Type flexible duration (e.g. 45 mins, 1.5 hours, 90 mins)"
+                className="w-full py-2.5 px-3.5 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm font-semibold text-slate-900 outline-none transition-all placeholder:text-slate-400"
+              />
+              <div className="flex items-center gap-1.5 pt-0.5 flex-wrap">
+                <span className="text-[10px] text-slate-400 font-bold mr-1">Presets:</span>
+                {["45 mins", "60 mins", "1.5 hours", "2 hours", "90 mins"].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setDuration(preset)}
+                    className={`py-0.5 px-2 rounded-lg text-[10.5px] font-bold border cursor-pointer transition-all ${
+                      duration === preset
+                        ? "bg-purple-600 text-white border-purple-600 shadow-2xs"
+                        : "bg-purple-50/60 text-purple-700 border-purple-200 hover:bg-purple-100"
+                    }`}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 8. Platform Selector */}
             <div className="space-y-1.5">
               <label className="text-xs font-extrabold text-slate-700 block">
                 Broadcasting Platform <span className="text-rose-500">*</span>
@@ -460,40 +877,25 @@ export default function ClassScheduleManagerSection({
               </div>
             </div>
 
-            {/* 7. Meeting Link Input */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-extrabold text-slate-700 block">
-                {platform} Meeting Link <span className="text-rose-500">*</span>
-              </label>
-              <div className="relative">
-                <LinkIcon className="w-4 h-4 text-purple-600 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="url"
-                  required
-                  value={meetingLink}
-                  onChange={(e) => setMeetingLink(e.target.value)}
-                  placeholder={platform === "Google Meet" ? "https://meet.google.com/xxx-xxxx-xxx" : "https://zoom.us/j/xxxxxxxxx"}
-                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs font-semibold text-slate-900 outline-none transition-all placeholder:text-slate-400"
-                />
+            {/* 9. Standard Meeting Link Input (if not special class) */}
+            {!isSpecialClass && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-extrabold text-slate-700 block">
+                  {platform} Meeting Link <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <LinkIcon className="w-4 h-4 text-purple-600 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="url"
+                    required={!isSpecialClass}
+                    value={meetingLink}
+                    onChange={(e) => setMeetingLink(e.target.value)}
+                    placeholder={platform === "Google Meet" ? "https://meet.google.com/xxx-xxxx-xxx" : "https://zoom.us/j/xxxxxxxxx"}
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs font-semibold text-slate-900 outline-none transition-all placeholder:text-slate-400 font-mono"
+                  />
+                </div>
               </div>
-            </div>
-
-            {/* 8. Duration */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-extrabold text-slate-700 block">
-                Session Duration
-              </label>
-              <select
-                value={duration}
-                onChange={(e) => setDuration(e.target.value)}
-                className="w-full py-2 px-3 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs font-bold text-slate-800 outline-none cursor-pointer"
-              >
-                <option value="45 mins">45 mins</option>
-                <option value="60 mins">60 mins (Standard)</option>
-                <option value="75 mins">75 mins</option>
-                <option value="90 mins">90 mins (Extended)</option>
-              </select>
-            </div>
+            )}
 
             {/* Submit Action */}
             <div className="pt-2">
@@ -505,12 +907,20 @@ export default function ClassScheduleManagerSection({
                 {isSubmitting ? (
                   <span className="inline-flex items-center gap-2">
                     <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-                    <span>Scheduling & Triggering Alerts...</span>
+                    <span>Publishing & Triggering Alerts...</span>
                   </span>
                 ) : (
                   <>
-                    <Calendar className="w-4 h-4" />
-                    <span>Schedule Class & Notify Students</span>
+                    {isSpecialClass ? (
+                      <Sparkles className="w-4 h-4 text-amber-300" />
+                    ) : (
+                      <Calendar className="w-4 h-4" />
+                    )}
+                    <span>
+                      {isSpecialClass
+                        ? "Publish Special Class & Notify Students"
+                        : "Schedule Class & Notify Students"}
+                    </span>
                   </>
                 )}
               </button>
@@ -595,6 +1005,17 @@ export default function ClassScheduleManagerSection({
                             <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-purple-100 text-purple-800">
                               {item.courseName}
                             </span>
+                            {item.isSpecialClass && (
+                              <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1 shadow-2xs">
+                                <Sparkles className="w-3 h-3 text-amber-600" />
+                                <span>Special Class</span>
+                              </span>
+                            )}
+                            {item.isCustomCourse && (
+                              <span className="text-[9.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                Custom Track
+                              </span>
+                            )}
                             <span
                               className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full flex items-center gap-1 ${
                                 isLive

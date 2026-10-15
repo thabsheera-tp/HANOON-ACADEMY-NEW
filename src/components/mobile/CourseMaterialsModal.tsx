@@ -16,6 +16,11 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { SelectedCourse } from "@/types/app";
+import {
+  CourseMaterial,
+  fetchCourseMaterialsFromSupabase,
+  getCourseMaterials,
+} from "@/services/teacherService";
 
 interface CourseMaterialsModalProps {
   isOpen: boolean;
@@ -23,17 +28,6 @@ interface CourseMaterialsModalProps {
   selectedCourse: SelectedCourse;
   isPaid?: boolean;
   onEnroll?: () => void;
-}
-
-interface ChapterLesson {
-  id: string;
-  chapterNumber: number;
-  title: string;
-  instructor: string;
-  duration: string;
-  pdfTitle: string;
-  pdfSize: string;
-  pages: number;
 }
 
 export default function CourseMaterialsModal({
@@ -44,7 +38,9 @@ export default function CourseMaterialsModal({
   onEnroll,
 }: CourseMaterialsModalProps) {
   const [activeTab, setActiveTab] = useState<"videos" | "pdfs">("videos");
-  const [activeVideoId, setActiveVideoId] = useState<string>("ch-1");
+  const [materials, setMaterials] = useState<CourseMaterial[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeVideoId, setActiveVideoId] = useState<string>("");
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [downloadingPdfId, setDownloadingPdfId] = useState<string | null>(null);
   const [downloadedPdfs, setDownloadedPdfs] = useState<Record<string, boolean>>({});
@@ -52,60 +48,75 @@ export default function CourseMaterialsModal({
   // Strict payment verification binding
   const isPaid = Boolean(isPaidProp);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    setIsLoading(true);
+
+    const loadData = async () => {
+      try {
+        const data = await fetchCourseMaterialsFromSupabase(selectedCourse.id);
+        setMaterials(data || []);
+        const videos = (data || []).filter(
+          (m) => m.type === "VIDEO" || m.fileOrUrl?.includes("youtube") || m.fileOrUrl?.includes("mp4")
+        );
+        if (videos.length > 0) {
+          setActiveVideoId(videos[0].id);
+        }
+      } catch (err) {
+        console.warn("Error loading course materials:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+
+    const handleUpdate = () => {
+      loadData();
+    };
+    window.addEventListener("hanoon_material_uploaded", handleUpdate);
+    return () => {
+      window.removeEventListener("hanoon_material_uploaded", handleUpdate);
+    };
+  }, [isOpen, selectedCourse.id]);
+
   if (!isOpen) return null;
 
-  const chapters: ChapterLesson[] = [
-    {
-      id: "ch-1",
-      chapterNumber: 1,
-      title: "Foundations & Historical Milestones of Islamic Tarbiyah",
-      instructor: "Usthad Dr. Faisal Al-Hanoon",
-      duration: "45 mins",
-      pdfTitle: "Chapter 1 Foundation & Historical Timeline.pdf",
-      pdfSize: "4.8 MB",
-      pages: 18,
-    },
-    {
-      id: "ch-2",
-      chapterNumber: 2,
-      title: "Essential Rules of Taharah & Practical Fiqh of Salah",
-      instructor: "Usthad Bilal Farooqi",
-      duration: "52 mins",
-      pdfTitle: "Chapter 2 Applied Fiqh & Taharah Rulings.pdf",
-      pdfSize: "5.4 MB",
-      pages: 24,
-    },
-    {
-      id: "ch-3",
-      chapterNumber: 3,
-      title: "Ratib al-Haddad: Litany Translation & Daily Adhkar",
-      instructor: "Usthad Anas Nadwi",
-      duration: "38 mins",
-      pdfTitle: "Chapter 3 Ratib al-Haddad Arabic with Commentary.pdf",
-      pdfSize: "3.9 MB",
-      pages: 14,
-    },
-    {
-      id: "ch-4",
-      chapterNumber: 4,
-      title: "Prophetic Ethics: Adab with Parents & Community",
-      instructor: "Usthad Abdul Rahman Al-Hafiz",
-      duration: "42 mins",
-      pdfTitle: "Chapter 4 Prophetic Ethics Handbook.pdf",
-      pdfSize: "4.1 MB",
-      pages: 20,
-    },
-  ];
+  const pdfMaterials = materials.filter(
+    (m) => m.type === "PDF" || Boolean(m.pdfUrl) || m.fileOrUrl?.toLowerCase().endsWith(".pdf")
+  );
+  const videoMaterials = materials.filter(
+    (m) =>
+      m.type === "VIDEO" ||
+      m.fileOrUrl?.includes("youtube") ||
+      m.fileOrUrl?.includes("mp4") ||
+      m.fileOrUrl?.includes("drive")
+  );
 
-  const handleDownload = (id: string) => {
+  const activeLesson = videoMaterials.find((c) => c.id === activeVideoId) || videoMaterials[0];
+
+  const handleDownload = (id: string, url?: string, title?: string) => {
+    if (!isPaid) return;
     setDownloadingPdfId(id);
+
+    if (url && typeof document !== "undefined") {
+      try {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = title || "materials.pdf";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } catch (err) {
+        console.warn("Direct PDF download fallback:", err);
+      }
+    }
+
     setTimeout(() => {
       setDownloadingPdfId(null);
       setDownloadedPdfs((prev) => ({ ...prev, [id]: true }));
-    }, 1200);
+    }, 1000);
   };
-
-  const activeLesson = chapters.find((c) => c.id === activeVideoId) || chapters[0];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-900/60 backdrop-blur-xs animate-fade-in font-['Plus_Jakarta_Sans'] select-none">
@@ -185,7 +196,7 @@ export default function CourseMaterialsModal({
                 : "text-slate-600 hover:text-slate-900"
             }`}
           >
-            Video Recordings ({chapters.length})
+            Video Recordings ({videoMaterials.length})
           </button>
           <button
             type="button"
@@ -196,142 +207,171 @@ export default function CourseMaterialsModal({
                 : "text-slate-600 hover:text-slate-900"
             }`}
           >
-            Offline PDF Notes ({chapters.length})
+            Offline PDF Notes ({pdfMaterials.length})
           </button>
         </div>
 
         {/* TAB 1: VIDEOS */}
         {activeTab === "videos" && (
           <div className="space-y-3">
-            {/* Embedded Player Canvas */}
-            <div className="rounded-2xl bg-slate-900 text-white p-4 aspect-video flex flex-col justify-between shadow-inner">
-              <div className="flex items-center justify-between text-[11px] text-purple-300">
-                <span>Lesson {activeLesson.chapterNumber}</span>
-                <span className="font-mono text-emerald-400">1080p HD</span>
-              </div>
-
-              <div className="text-center my-auto space-y-1">
-                <button
-                  type="button"
-                  onClick={() => setIsPlaying(!isPlaying)}
-                  className="w-12 h-12 rounded-full bg-purple-600 hover:bg-purple-700 text-white flex items-center justify-center mx-auto shadow-md cursor-pointer transition-transform active:scale-95"
-                >
-                  {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
-                </button>
-                <p className="text-xs font-bold text-white pt-1">{activeLesson.title}</p>
-                <p className="text-[10px] text-purple-200">{activeLesson.instructor}</p>
-              </div>
-
-              <div className="flex items-center justify-between text-[10px] text-slate-400">
-                <span>00:00 / {activeLesson.duration}</span>
-                <span>Speed: 1.0x</span>
-              </div>
-            </div>
-
-            {/* Playlist */}
-            <div className="space-y-2">
-              {chapters.map((ch) => (
-                <div
-                  key={ch.id}
-                  onClick={() => {
-                    setActiveVideoId(ch.id);
-                    setIsPlaying(true);
-                  }}
-                  className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
-                    activeVideoId === ch.id
-                      ? "bg-purple-50 border-purple-300"
-                      : "bg-white border-purple-100 hover:bg-purple-50/40"
-                  }`}
-                >
-                  <div className="space-y-0.5">
-                    <span className="text-[10px] font-bold text-purple-700 uppercase">
-                      Chapter {ch.chapterNumber}
-                    </span>
-                    <h5 className="text-xs font-bold text-slate-900 leading-snug">
-                      {ch.title}
-                    </h5>
-                    <p className="text-[10px] text-slate-500">
-                      {ch.instructor} • {ch.duration}
-                    </p>
-                  </div>
-
-                  <PlayCircle className="w-5 h-5 text-purple-600 shrink-0" />
+            {videoMaterials.length === 0 ? (
+              <div className="py-12 px-4 text-center space-y-2">
+                <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-400 flex items-center justify-center mx-auto">
+                  <PlayCircle className="w-6 h-6 text-purple-400" />
                 </div>
-              ))}
-            </div>
+                <h4 className="text-sm font-bold text-slate-800">No recorded sessions available</h4>
+                <p className="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
+                  Recorded class archives and video lecture replays will be published here following completed live sessions.
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Embedded Player Canvas */}
+                {activeLesson && (
+                  <div className="rounded-2xl bg-slate-900 text-white p-4 aspect-video flex flex-col justify-between shadow-inner">
+                    <div className="flex items-center justify-between text-[11px] text-purple-300">
+                      <span>{activeLesson.courseName}</span>
+                      <span className="font-mono text-emerald-400">1080p HD</span>
+                    </div>
+
+                    <div className="text-center my-auto space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => setIsPlaying(!isPlaying)}
+                        className="w-12 h-12 rounded-full bg-purple-600 hover:bg-purple-700 text-white flex items-center justify-center mx-auto shadow-md cursor-pointer transition-transform active:scale-95"
+                      >
+                        {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
+                      </button>
+                      <p className="text-xs font-bold text-white pt-1">{activeLesson.title}</p>
+                      <p className="text-[10px] text-purple-200">{activeLesson.teacherName || "Faculty Instructor"}</p>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px] text-slate-400">
+                      <span>Duration: {activeLesson.sizeOrDuration}</span>
+                      <span>Speed: 1.0x</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Playlist */}
+                <div className="space-y-2">
+                  {videoMaterials.map((ch, idx) => (
+                    <div
+                      key={ch.id}
+                      onClick={() => {
+                        setActiveVideoId(ch.id);
+                        setIsPlaying(true);
+                      }}
+                      className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
+                        activeVideoId === ch.id
+                          ? "bg-purple-50 border-purple-300"
+                          : "bg-white border-purple-100 hover:bg-purple-50/40"
+                      }`}
+                    >
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] font-bold text-purple-700 uppercase">
+                          Lesson {idx + 1}
+                        </span>
+                        <h5 className="text-xs font-bold text-slate-900 leading-snug">
+                          {ch.title}
+                        </h5>
+                        <p className="text-[10px] text-slate-500">
+                          {ch.teacherName || "Faculty"} • {ch.sizeOrDuration}
+                        </p>
+                      </div>
+
+                      <PlayCircle className="w-5 h-5 text-purple-600 shrink-0" />
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )}
 
         {/* TAB 2: PDFS */}
         {activeTab === "pdfs" && (
           <div className="space-y-2.5">
-            {chapters.map((ch) => {
-              const isDownloaded = downloadedPdfs[ch.id];
-              const isDownloading = downloadingPdfId === ch.id;
-
-              return (
-                <div
-                  key={ch.id}
-                  className="p-3.5 rounded-2xl bg-white border border-purple-100 shadow-xs flex items-center justify-between gap-3"
-                >
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-1.5">
-                      <FileText className="w-4 h-4 text-purple-600" />
-                      <span className="text-[10px] font-bold text-purple-700 uppercase">
-                        Chapter {ch.chapterNumber} Handbook
-                      </span>
-                    </div>
-                    <h5 className="text-xs font-bold text-slate-900 leading-tight">
-                      {ch.pdfTitle}
-                    </h5>
-                    <p className="text-[10px] text-slate-400">
-                      {ch.pages} Pages • {ch.pdfSize} • High Resolution
-                    </p>
-                  </div>
-
-                  {isPaid ? (
-                    <button
-                      type="button"
-                      disabled={isDownloading}
-                      onClick={() => handleDownload(ch.id)}
-                      className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-xs shrink-0 ${
-                        isDownloaded
-                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                          : "bg-purple-600 hover:bg-purple-700 text-white"
-                      }`}
-                    >
-                      {isDownloaded ? (
-                        <>
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>Saved</span>
-                        </>
-                      ) : isDownloading ? (
-                        <span>Saving...</span>
-                      ) : (
-                        <>
-                          <Download className="w-3.5 h-3.5" />
-                          <span>Download</span>
-                        </>
-                      )}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled
-                      aria-disabled="true"
-                      title="Enroll to unlock PDF material download"
-                      className="py-2 px-3 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed select-none shrink-0"
-                    >
-                      <Lock className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Locked</span>
-                    </button>
-                  )}
+            {pdfMaterials.length === 0 ? (
+              <div className="py-12 px-4 text-center space-y-2">
+                <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-400 flex items-center justify-center mx-auto">
+                  <FileText className="w-6 h-6 text-purple-400" />
                 </div>
-              );
-            })}
+                <h4 className="text-sm font-bold text-slate-800">No study materials available</h4>
+                <p className="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
+                  Course syllabus notes, chapter handbooks, and reference PDFs will appear here once uploaded by your instructors.
+                </p>
+              </div>
+            ) : (
+              pdfMaterials.map((ch, idx) => {
+                const isDownloaded = downloadedPdfs[ch.id];
+                const isDownloading = downloadingPdfId === ch.id;
+
+                return (
+                  <div
+                    key={ch.id}
+                    className="p-3.5 rounded-2xl bg-white border border-purple-100 shadow-xs flex items-center justify-between gap-3"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <FileText className="w-4 h-4 text-purple-600" />
+                        <span className="text-[10px] font-bold text-purple-700 uppercase">
+                          Document #{idx + 1}
+                        </span>
+                      </div>
+                      <h5 className="text-xs font-bold text-slate-900 leading-tight">
+                        {ch.title}
+                      </h5>
+                      <p className="text-[10px] text-slate-400">
+                        {ch.sizeOrDuration} • {ch.uploadedAt}
+                      </p>
+                    </div>
+
+                    {isPaid ? (
+                      <button
+                        type="button"
+                        disabled={isDownloading}
+                        onClick={() => handleDownload(ch.id, ch.pdfUrl || ch.fileOrUrl, ch.title)}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-xs shrink-0 ${
+                          isDownloaded
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            : "bg-purple-600 hover:bg-purple-700 text-white"
+                        }`}
+                      >
+                        {isDownloaded ? (
+                          <>
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Saved</span>
+                          </>
+                        ) : isDownloading ? (
+                          <span>Saving...</span>
+                        ) : (
+                          <>
+                            <Download className="w-3.5 h-3.5" />
+                            <span>Download</span>
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled
+                        aria-disabled="true"
+                        title="Enroll to unlock PDF material download"
+                        className="py-2 px-3 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed select-none shrink-0"
+                      >
+                        <Lock className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Locked</span>
+                      </button>
+                    )}
+                  </div>
+                );
+              })
+            )}
           </div>
         )}
       </div>
     </div>
   );
 }
+

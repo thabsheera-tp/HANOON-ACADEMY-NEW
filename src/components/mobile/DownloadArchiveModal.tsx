@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   X,
   Download,
@@ -8,8 +8,10 @@ import {
   HardDrive,
   FileCheck,
   PlayCircle,
+  Video,
 } from "lucide-react";
 import { SelectedCourse } from "@/types/app";
+import { fetchCourseMaterialsFromSupabase, getCourseMaterials, CourseMaterial } from "@/services/teacherService";
 
 interface DownloadArchiveModalProps {
   isOpen: boolean;
@@ -23,6 +25,7 @@ interface RecordedModule {
   duration: string;
   size: string;
   date: string;
+  url?: string;
   progress?: number;
   downloaded?: boolean;
 }
@@ -32,42 +35,72 @@ export default function DownloadArchiveModal({
   onClose,
   selectedCourse,
 }: DownloadArchiveModalProps) {
-  const [modules, setModules] = useState<RecordedModule[]>([
-    {
-      id: "mod-1",
-      title: "Module 01: Core Foundations & Orientation",
-      duration: "45 mins",
-      size: "180 MB",
-      date: "Oct 2026",
-      downloaded: false,
-    },
-    {
-      id: "mod-2",
-      title: "Module 02: Advanced Rules & Recitation Check",
-      duration: "55 mins",
-      size: "240 MB",
-      date: "Oct 2026",
-      downloaded: false,
-    },
-    {
-      id: "mod-3",
-      title: "Module 03: Practical Workshop & Live Evaluation",
-      duration: "60 mins",
-      size: "290 MB",
-      date: "Oct 2026",
-      downloaded: false,
-    },
-  ]);
-
+  const [modules, setModules] = useState<RecordedModule[]>([]);
+  const [loading, setLoading] = useState(true);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    setLoading(true);
+    fetchCourseMaterialsFromSupabase(selectedCourse.id)
+      .then((mats: CourseMaterial[]) => {
+        const videoMats = mats.filter(
+          (m: CourseMaterial) => m.type === "VIDEO" || m.fileOrUrl?.includes("mp4") || m.fileOrUrl?.includes("youtube")
+        );
+
+        if (videoMats.length > 0) {
+          setModules(
+            videoMats.map((v: CourseMaterial) => ({
+              id: v.id,
+              title: v.title,
+              duration: v.sizeOrDuration || "45 mins",
+              size: v.sizeOrDuration || "150 MB",
+              date: v.uploadedAt ? new Date(v.uploadedAt).toLocaleDateString("en-IN", { month: "short", year: "numeric" }) : "Recent",
+              url: v.fileOrUrl,
+              downloaded: false,
+            }))
+          );
+        } else {
+          // Check local materials
+          const localMats = getCourseMaterials().filter(
+            (m: CourseMaterial) =>
+              (m.courseId === selectedCourse.id || m.courseId === "all") &&
+              (m.type === "VIDEO" || m.fileOrUrl?.includes("mp4") || m.fileOrUrl?.includes("youtube"))
+          );
+          setModules(
+            localMats.map((v: CourseMaterial) => ({
+              id: v.id,
+              title: v.title,
+              duration: v.sizeOrDuration || "45 mins",
+              size: v.sizeOrDuration || "150 MB",
+              date: v.uploadedAt ? new Date(v.uploadedAt).toLocaleDateString("en-IN", { month: "short", year: "numeric" }) : "Recent",
+              url: v.fileOrUrl,
+              downloaded: false,
+            }))
+          );
+        }
+      })
+      .catch(() => {
+        setModules([]);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [isOpen, selectedCourse.id]);
 
   if (!isOpen) return null;
 
-  const startDownload = (id: string) => {
+  const startDownload = (id: string, url?: string) => {
     if (downloadingId) return;
     setDownloadingId(id);
 
-    // Simulate progress ticks
+    // If there is a real link, trigger browser download
+    if (url && url.startsWith("http")) {
+      window.open(url, "_blank");
+    }
+
+    // Simulate mobile download progress ticks
     let current = 0;
     const interval = setInterval(() => {
       current += 25;
@@ -82,7 +115,7 @@ export default function DownloadArchiveModal({
           prev.map((m) => (m.id === id ? { ...m, progress: current } : m))
         );
       }
-    }, 400);
+    }, 300);
   };
 
   return (
@@ -118,64 +151,80 @@ export default function DownloadArchiveModal({
             <HardDrive className="w-4 h-4 text-emerald-400" />
             <span className="font-bold text-white/90">Storage Available:</span>
           </div>
-          <span className="font-black text-emerald-300">24.8 GB Free</span>
+          <span className="font-black text-emerald-300">Offline Ready</span>
         </div>
 
-        {/* Modules List */}
+        {/* Modules List or Clean Empty State */}
         <div className="space-y-3 overflow-y-auto pr-1 flex-1 py-1">
-          {modules.map((item) => {
-            const isThisDownloading = downloadingId === item.id;
+          {loading ? (
+            <div className="py-8 text-center text-xs text-white/60">
+              Loading offline recordings...
+            </div>
+          ) : modules.length === 0 ? (
+            <div className="py-8 px-4 text-center space-y-2 bg-white/[0.03] rounded-2xl border border-white/10">
+              <div className="w-10 h-10 rounded-2xl bg-white/10 text-white/60 flex items-center justify-center mx-auto">
+                <Video className="w-5 h-5 text-emerald-400" />
+              </div>
+              <h4 className="text-xs font-bold text-white">No recorded sessions available</h4>
+              <p className="text-[11px] text-emerald-200/70 leading-relaxed max-w-xs mx-auto">
+                Recorded class archives for {selectedCourse.title} will become downloadable here once lectures conclude.
+              </p>
+            </div>
+          ) : (
+            modules.map((item) => {
+              const isThisDownloading = downloadingId === item.id;
 
-            return (
-              <div
-                key={item.id}
-                className="p-3.5 rounded-2xl border border-white/10 bg-white/[0.05] hover:border-emerald-400/40 transition-all shadow-xs"
-              >
-                <div className="flex items-start justify-between gap-2 mb-1.5">
-                  <div>
-                    <h5 className="text-xs font-black text-white leading-snug">
-                      {item.title}
-                    </h5>
-                    <p className="text-[11px] text-emerald-200/70 font-medium mt-0.5">
-                      {item.duration} • {item.size} • {item.date}
-                    </p>
+              return (
+                <div
+                  key={item.id}
+                  className="p-3.5 rounded-2xl border border-white/10 bg-white/[0.05] hover:border-emerald-400/40 transition-all shadow-xs"
+                >
+                  <div className="flex items-start justify-between gap-2 mb-1.5">
+                    <div>
+                      <h5 className="text-xs font-black text-white leading-snug">
+                        {item.title}
+                      </h5>
+                      <p className="text-[11px] text-emerald-200/70 font-medium mt-0.5">
+                        {item.duration} • {item.size} • {item.date}
+                      </p>
+                    </div>
+
+                    {item.downloaded ? (
+                      <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-300 bg-emerald-500/20 border border-emerald-500/30 px-2 py-1 rounded-xl">
+                        <FileCheck className="w-3.5 h-3.5" />
+                        <span>Saved</span>
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => startDownload(item.id, item.url)}
+                        disabled={Boolean(downloadingId)}
+                        className="p-2 rounded-xl bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 hover:bg-emerald-500/30 active:scale-95 transition-all shadow-xs disabled:opacity-50 cursor-pointer"
+                        title="Download to Phone"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
 
-                  {item.downloaded ? (
-                    <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-300 bg-emerald-500/20 border border-emerald-500/30 px-2 py-1 rounded-xl">
-                      <FileCheck className="w-3.5 h-3.5" />
-                      <span>Saved</span>
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => startDownload(item.id)}
-                      disabled={Boolean(downloadingId)}
-                      className="p-2 rounded-xl bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 hover:bg-emerald-500/30 active:scale-95 transition-all shadow-xs disabled:opacity-50 cursor-pointer"
-                      title="Download to Phone"
-                    >
-                      <Download className="w-4 h-4" />
-                    </button>
+                  {/* Progress bar if downloading */}
+                  {isThisDownloading && (
+                    <div className="mt-2 space-y-1">
+                      <div className="flex items-center justify-between text-[10px] font-bold text-emerald-300">
+                        <span>Downloading to mobile storage...</span>
+                        <span>{item.progress || 10}%</span>
+                      </div>
+                      <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-emerald-400 to-teal-400 rounded-full transition-all duration-300"
+                          style={{ width: `${item.progress || 10}%` }}
+                        />
+                      </div>
+                    </div>
                   )}
                 </div>
-
-                {/* Progress bar if downloading */}
-                {isThisDownloading && (
-                  <div className="mt-2 space-y-1">
-                    <div className="flex items-center justify-between text-[10px] font-bold text-emerald-300">
-                      <span>Downloading to mobile storage...</span>
-                      <span>{item.progress || 10}%</span>
-                    </div>
-                    <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-emerald-400 to-teal-400 rounded-full transition-all duration-300"
-                        style={{ width: `${item.progress || 10}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
 
         {/* Close Button */}
