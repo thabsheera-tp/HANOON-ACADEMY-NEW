@@ -60,13 +60,16 @@ import HanoonLogo from "@/components/brand/HanoonLogo";
 import MonthlyRevenueBarChart from "@/components/charts/MonthlyRevenueBarChart";
 import TeacherManagementSection from "@/components/admin/TeacherManagementSection";
 import StudentRegistrationsSection from "@/components/admin/StudentRegistrationsSection";
+import StudentAnalyticsSection from "@/components/admin/StudentAnalyticsSection";
+import AttendanceTrackerSection from "@/components/admin/AttendanceTrackerSection";
+import FeeReceiptsManagerSection from "@/components/admin/FeeReceiptsManagerSection";
 import PdfNotesUploadSection from "@/components/admin/PdfNotesUploadSection";
 import ClassScheduleManagerSection from "@/components/admin/ClassScheduleManagerSection";
 import NotificationsManagerSection from "@/components/admin/NotificationsManagerSection";
 import AdminNoticeBoardManagerSection from "@/components/admin/AdminNoticeBoardManagerSection";
 import { getNotifications } from "@/services/notificationService";
 import { fetchPayments, updatePaymentStatus, getWhatsAppWelcomeUrl, getLastPaymentFetchError } from "@/services/paymentService";
-import { fetchStudents } from "@/services/studentService";
+import { fetchStudents, fetchUnifiedRegistrationsDetailed, UnifiedStudentRegistration } from "@/services/studentService";
 import { fetchPayroll, markPayrollAsPaid, createPayrollRecord } from "@/services/payrollService";
 import {
   getAppSettings,
@@ -127,13 +130,51 @@ export const FACULTY_MEMBERS = [
   },
 ];
 
+export function getWhatsAppPayrollAdviceUrl(pay: DbPayroll): string {
+  const teacher = FACULTY_MEMBERS.find(
+    (f) => f.name.toLowerCase() === (pay.teacher_name || "").toLowerCase() || f.id === pay.teacher_id
+  );
+  const rawPhone = teacher?.phone || "919846012345";
+  const message = `*HANOON ACADEMY | വിജ്ഞാന വെളിച്ചം* 🎓
+*FACULTY REMUNERATION ADVICE*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Assalamu Alaikum *${pay.teacher_name}*,
+
+Your faculty remuneration for live classes in *${pay.month_year}* has been processed.
+
+📚 *Live Classes:* ${pay.classes_taken} Sessions
+💵 *Assigned Rate:* ₹${pay.rate_per_class} / class
+💰 *Total Amount:* *₹${pay.total_amount.toLocaleString("en-IN")}*
+🔖 *Reference:* \`${pay.payment_reference || "UPI-DISBURSED"}\`
+✅ *Status:* PAID & SETTLED
+
+Jazakallahu Khairan for your dedication to Hanoon Academy students.
+
+_Office of Finance & Human Resources_
+🌐 https://hanoonacademy.com
+📞 Admin Desk: +91 98460 12345`;
+
+  return `https://wa.me/${rawPhone}?text=${encodeURIComponent(message)}`;
+}
+
 export default function AdminDashboardPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<UserProfileRecord | null>(null);
 
-  // Active Main Tab: overview, notices, upi, classes, notes, notifications, teachers, payroll, settings
+  // Active Main Tab: overview, analytics, attendance, receipts, notices, upi, classes, notes, notifications, teachers, payroll, settings
   const [activeTab, setActiveTab] = useState<
-    "overview" | "notices" | "upi" | "classes" | "notes" | "notifications" | "teachers" | "payroll" | "settings"
+    | "overview"
+    | "analytics"
+    | "attendance"
+    | "receipts"
+    | "notices"
+    | "upi"
+    | "classes"
+    | "notes"
+    | "notifications"
+    | "teachers"
+    | "payroll"
+    | "settings"
   >("overview");
   const [unreadNotifsCount, setUnreadNotifsCount] = useState<number>(0);
 
@@ -163,6 +204,7 @@ export default function AdminDashboardPage() {
   // Data States
   const [payments, setPayments] = useState<DbPayment[]>([]);
   const [students, setStudents] = useState<DbStudent[]>([]);
+  const [unifiedRegistrations, setUnifiedRegistrations] = useState<UnifiedStudentRegistration[]>([]);
   const [payroll, setPayroll] = useState<DbPayroll[]>([]);
   const [settings, setSettings] = useState<AppSettings>(getAppSettings());
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>(getAuditLogs());
@@ -321,6 +363,16 @@ export default function AdminDashboardPage() {
         setSettingsForm(settingsData);
         setAuditLogs(auditData || []);
         setTeacherClasses(getTeacherClasses());
+      }
+
+      // Concurrently load detailed unified registrations for Analytics, Attendance and Receipts
+      try {
+        const { data: unifiedData } = await fetchUnifiedRegistrationsDetailed();
+        if (unifiedData) {
+          setUnifiedRegistrations(unifiedData);
+        }
+      } catch (uErr) {
+        console.warn("Unified registrations loading notice:", uErr);
       }
 
       const lastPayErr = getLastPaymentFetchError();
@@ -748,6 +800,48 @@ export default function AdminDashboardPage() {
             )}
           </button>
 
+          {/* Tab 1.1: 📊 Student Analytics & Realization */}
+          <button
+            type="button"
+            onClick={() => setActiveTab("analytics")}
+            className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-xs border-b-2 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all shrink-0 ${
+              activeTab === "analytics"
+                ? "border-purple-600 text-purple-700 font-extrabold"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <TrendingUp className="w-4 h-4 shrink-0 text-purple-600" />
+            <span>📊 Analytics</span>
+          </button>
+
+          {/* Tab 1.2: 📅 Attendance Register */}
+          <button
+            type="button"
+            onClick={() => setActiveTab("attendance")}
+            className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-xs border-b-2 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all shrink-0 ${
+              activeTab === "attendance"
+                ? "border-purple-600 text-purple-700 font-extrabold"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+            <span>📅 Attendance</span>
+          </button>
+
+          {/* Tab 1.3: 🧾 Official Fee Receipts */}
+          <button
+            type="button"
+            onClick={() => setActiveTab("receipts")}
+            className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-xs border-b-2 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all shrink-0 ${
+              activeTab === "receipts"
+                ? "border-purple-600 text-purple-700 font-extrabold"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <FileText className="w-4 h-4 shrink-0 text-blue-600" />
+            <span>🧾 Fee Receipts</span>
+          </button>
+
           {/* Tab 1.5: 📢 Notice Board & Announcements */}
           <button
             type="button"
@@ -961,6 +1055,33 @@ export default function AdminDashboardPage() {
             ======================================================== */}
         {activeTab === "overview" && (
           <StudentRegistrationsSection isSuperAdmin={isSuperAdmin} />
+        )}
+
+        {/* ========================================================
+            TAB 1.1: 📊 STUDENT ANALYTICS & EXECUTIVE INTELLIGENCE
+            ======================================================== */}
+        {activeTab === "analytics" && (
+          <div className="animate-fade-in">
+            <StudentAnalyticsSection registrations={unifiedRegistrations} />
+          </div>
+        )}
+
+        {/* ========================================================
+            TAB 1.2: 📅 ATTENDANCE REGISTER & PARENT WHATSAPP ALERTS
+            ======================================================== */}
+        {activeTab === "attendance" && (
+          <div className="animate-fade-in">
+            <AttendanceTrackerSection registrations={unifiedRegistrations} />
+          </div>
+        )}
+
+        {/* ========================================================
+            TAB 1.3: 🧾 OFFICIAL FEE RECEIPTS & ADMISSION PASSES
+            ======================================================== */}
+        {activeTab === "receipts" && (
+          <div className="animate-fade-in">
+            <FeeReceiptsManagerSection registrations={unifiedRegistrations} />
+          </div>
         )}
 
         {/* ========================================================
@@ -1598,9 +1719,21 @@ export default function AdminDashboardPage() {
                                   <span>Pay Teacher</span>
                                 </button>
                               ) : (
-                                <span className="text-[11px] font-bold text-emerald-600">
-                                  Settled
-                                </span>
+                                <div className="inline-flex items-center gap-2">
+                                  <span className="text-[11px] font-bold text-emerald-600">
+                                    Settled
+                                  </span>
+                                  <a
+                                    href={getWhatsAppPayrollAdviceUrl(pay)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="p-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs inline-flex items-center gap-1 shadow-2xs transition-all cursor-pointer"
+                                    title="Send Remuneration Slip on WhatsApp"
+                                  >
+                                    <MessageCircle className="w-3.5 h-3.5" />
+                                    <span className="hidden sm:inline">Share Slip</span>
+                                  </a>
+                                </div>
                               )}
                             </td>
                           </tr>
