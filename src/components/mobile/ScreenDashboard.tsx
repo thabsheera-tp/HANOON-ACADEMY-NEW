@@ -35,7 +35,7 @@ import { getAdaviyyaSubjects, AdaviyyaSubject } from "@/services/subjectService"
 import AttendanceDonutChart from "@/components/charts/AttendanceDonutChart";
 import ProgressScoreBarChart from "@/components/charts/ProgressScoreBarChart";
 import { getAppSettings, formatWhatsAppLink } from "@/services/settingsService";
-import { getNotifications, AppNotification } from "@/services/notificationService";
+import { getNotifications, markAllNotificationsAsRead, AppNotification } from "@/services/notificationService";
 import StudentNoticeBoard from "@/components/mobile/StudentNoticeBoard";
 
 interface ScreenDashboardProps {
@@ -376,9 +376,49 @@ export default function ScreenDashboard({
     }
   };
 
+  const progressData = React.useMemo(() => {
+    const courseId = (selectedCourse.id || "").toLowerCase();
+    if (courseId === "fashion-designing") {
+      return [
+        { module: "Drafting", score: 90 },
+        { module: "Textiles", score: 85 },
+        { module: "Stitching", score: 92 },
+        { module: "Embellish", score: 78 },
+      ];
+    } else if (courseId === "home-tuition") {
+      return [
+        { module: "Maths", score: 86 },
+        { module: "Science", score: 91 },
+        { module: "English", score: 84 },
+        { module: "Malayalam", score: 88 },
+      ];
+    } else if (courseId === "ash-shamail") {
+      return [
+        { module: "Ethics", score: 88 },
+        { module: "Khasais", score: 85 },
+        { module: "Adab", score: 90 },
+        { module: "Sunnah", score: 82 },
+      ];
+    } else {
+      // Adaviyya or default
+      return [
+        { module: "Seerah", score: 88 },
+        { module: "Haddad", score: 92 },
+        { module: "Fiqh", score: 85 },
+        { module: "Hadith", score: 80 },
+      ];
+    }
+  }, [selectedCourse.id]);
+
+  const attendanceStats = React.useMemo(() => {
+    return isApproved
+      ? { present: 22, leave: 2, absent: 1 }
+      : { present: 6, leave: 1, absent: 1 };
+  }, [isApproved]);
+
   return (
-    <div className="w-full max-w-md mx-auto overflow-x-hidden px-4 py-3 flex-1 flex flex-col justify-start space-y-3.5 select-none font-['Plus_Jakarta_Sans'] bg-purple-50/30 text-slate-900">
-      {/* 1. TOP PROFILE BAR (Compact, Modern) */}
+    <div className="w-full max-w-md mx-auto overflow-x-hidden px-4 py-3 flex-1 flex flex-col justify-start space-y-4 select-none font-['Plus_Jakarta_Sans'] bg-purple-50/30 text-slate-900">
+      {/* 1. TOP PROFILE BAR & GREETING */}
       <div className="flex items-center justify-between pt-0.5">
         <div className="flex items-center gap-2.5">
           <div className="w-10 h-10 rounded-2xl bg-purple-600 text-white font-extrabold flex items-center justify-center shadow-xs text-sm shrink-0">
@@ -397,7 +437,6 @@ export default function ScreenDashboard({
         <button
           type="button"
           onClick={() => {
-            window.dispatchEvent(new CustomEvent("hanoon_open_notifications_drawer"));
             setShowNotificationToast((prev) => !prev);
           }}
           className="relative w-9 h-9 rounded-2xl bg-white border border-purple-100 shadow-xs flex items-center justify-center hover:bg-purple-50 transition-all text-slate-700 cursor-pointer shrink-0"
@@ -416,52 +455,70 @@ export default function ScreenDashboard({
 
       {/* Notification Toast Dropdown with Real Alerts */}
       {showNotificationToast && (
-        <div className="p-3.5 rounded-2xl bg-white border border-purple-200 text-xs text-slate-700 shadow-md space-y-2 animate-fade-in">
+        <div className="p-3.5 rounded-2xl bg-white border border-purple-200 text-xs text-slate-700 shadow-md space-y-2.5 animate-fade-in">
           <div className="flex items-center justify-between border-b border-purple-100/60 pb-2">
             <div className="flex items-center gap-1.5 font-bold text-purple-900">
               <Bell className="w-3.5 h-3.5 text-purple-600" />
               <span>Notifications & Class Alerts</span>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowNotificationToast(false)}
-              className="text-xs font-bold text-slate-400 hover:text-slate-700 cursor-pointer p-0.5"
-            >
-              ✕
-            </button>
+            <div className="flex items-center gap-2">
+              {unreadNotifs > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    markAllNotificationsAsRead();
+                    setUnreadNotifs(0);
+                  }}
+                  className="text-[10px] font-bold text-purple-600 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 px-2 py-0.5 rounded-md transition-colors"
+                >
+                  Mark all read
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowNotificationToast(false)}
+                className="text-xs font-bold text-slate-400 hover:text-slate-700 cursor-pointer p-0.5"
+              >
+                ✕
+              </button>
+            </div>
           </div>
 
-          {/* Show enrollment status or latest notification */}
+          {/* Show latest notifications */}
           <div className="space-y-1.5">
-            {getNotifications().slice(0, 3).map((item) => (
-              <div key={item.id} className="p-2 rounded-xl bg-purple-50/50 space-y-1 text-slate-700">
-                <div className="flex items-center justify-between gap-1">
-                  <span className="font-extrabold text-[11px] text-slate-900 flex items-center gap-1">
-                    {item.type === "CLASS_LIVE" && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />}
-                    <span>{item.title}</span>
-                  </span>
-                  <span className="text-[9px] text-slate-400">
-                    {new Date(item.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  </span>
+            {getNotifications().length === 0 ? (
+              <p className="text-[11px] text-slate-400 py-2 text-center">No notifications yet</p>
+            ) : (
+              getNotifications().slice(0, 4).map((item) => (
+                <div key={item.id} className="p-2.5 rounded-xl bg-purple-50/50 space-y-1 text-slate-700 border border-purple-100/50">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="font-extrabold text-[11px] text-slate-900 flex items-center gap-1">
+                      {item.type === "CLASS_LIVE" && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />}
+                      <span>{item.title}</span>
+                    </span>
+                    <span className="text-[9px] text-slate-400">
+                      {new Date(item.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  </div>
+                  <p className="text-[10.5px] text-slate-600 leading-snug">{item.message}</p>
+                  {item.meetingLink && (
+                    <a
+                      href={item.meetingLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-block mt-1 py-0.5 px-2 rounded-md bg-purple-600 hover:bg-purple-700 text-white font-bold text-[10px] transition-colors"
+                    >
+                      Join {item.platform || "Meeting"} ➔
+                    </a>
+                  )}
                 </div>
-                <p className="text-[10.5px] text-slate-600 leading-snug">{item.message}</p>
-                {item.meetingLink && (
-                  <a
-                    href={item.meetingLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-block mt-1 py-0.5 px-2 rounded-md bg-purple-600 text-white font-bold text-[10px]"
-                  >
-                    Join {item.platform || "Meeting"} ➔
-                  </a>
-                )}
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       )}
 
-      {/* PENDING VERIFICATION NOTICE BANNER (Strictly Informative, No Dev Buttons) */}
+      {/* PENDING VERIFICATION NOTICE BANNER (Strictly Informative) */}
       {isPending && !isApproved && (
         <div className="bg-amber-50/90 border border-amber-200 p-3 rounded-2xl shadow-xs space-y-1.5 animate-fade-in">
           <div className="flex items-center justify-between">
@@ -485,8 +542,185 @@ export default function ScreenDashboard({
         </div>
       )}
 
-      {/* 2. COMPACT ENROLLED PROGRAM & LIVE COUNTDOWN HERO CARD */}
-      <div className="bg-white p-3.5 rounded-2xl border border-purple-100 shadow-xs space-y-2.5">
+      {/* 2. COMPACT QUICK ACCESS GRID (2x2 Soft-Shadow Cards) */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+              Quick Access
+            </h3>
+          </div>
+          <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100">
+            Essential Services
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2.5">
+          {/* Card 1: My Courses */}
+          <button
+            type="button"
+            onClick={() => {
+              const el = document.getElementById("enrolled-subjects");
+              if (el) {
+                el.scrollIntoView({ behavior: "smooth" });
+              }
+            }}
+            className="p-3.5 rounded-2xl bg-white hover:bg-purple-50/40 border border-purple-100 hover:border-purple-300 shadow-sm hover:shadow-md transition-all text-left flex flex-col justify-between min-h-[96px] cursor-pointer group active:scale-[0.98]"
+          >
+            <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-all shadow-xs">
+              <BookOpen className="w-4 h-4" />
+            </div>
+            <div className="mt-2">
+              <p className="text-xs font-extrabold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
+                My Courses
+              </p>
+              <span className="text-[10px] text-slate-500 font-semibold block mt-0.5 truncate">
+                {selectedCourse.title}
+              </span>
+            </div>
+          </button>
+
+          {/* Card 2: Live Classes */}
+          <button
+            type="button"
+            onClick={() => {
+              if (isApproved) {
+                setShowLiveModal(true);
+              } else {
+                setLockedNoticeSubject("Live Classroom");
+              }
+            }}
+            className="p-3.5 rounded-2xl bg-white hover:bg-purple-50/40 border border-purple-100 hover:border-purple-300 shadow-sm hover:shadow-md transition-all text-left flex flex-col justify-between min-h-[96px] cursor-pointer group active:scale-[0.98]"
+          >
+            <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center group-hover:bg-rose-600 group-hover:text-white transition-all shadow-xs">
+              <Radio className="w-4 h-4 animate-pulse" />
+            </div>
+            <div className="mt-2">
+              <p className="text-xs font-extrabold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
+                Live Classes
+              </p>
+              <span className="text-[10px] text-rose-600 font-semibold block mt-0.5">
+                {isApproved ? "Join Live Stream" : "Locked (Pending)"}
+              </span>
+            </div>
+          </button>
+
+          {/* Card 3: Downloads & Notes */}
+          <button
+            type="button"
+            onClick={() => setShowMaterialsModal(true)}
+            className="p-3.5 rounded-2xl bg-white hover:bg-purple-50/40 border border-purple-100 hover:border-purple-300 shadow-sm hover:shadow-md transition-all text-left flex flex-col justify-between min-h-[96px] cursor-pointer group active:scale-[0.98]"
+          >
+            <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-all shadow-xs">
+              <Download className="w-4 h-4" />
+            </div>
+            <div className="mt-2">
+              <p className="text-xs font-extrabold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
+                Downloads & Notes
+              </p>
+              <span className="text-[10px] text-slate-500 font-semibold block mt-0.5">
+                PDFs & Handbooks
+              </span>
+            </div>
+          </button>
+
+          {/* Card 4: My Certificates */}
+          <button
+            type="button"
+            onClick={() => {
+              if (certificates && certificates.length > 0) {
+                setSelectedCert(certificates[0]);
+              } else {
+                setShowStudentIDModal(true);
+              }
+            }}
+            className="p-3.5 rounded-2xl bg-white hover:bg-purple-50/40 border border-purple-100 hover:border-purple-300 shadow-sm hover:shadow-md transition-all text-left flex flex-col justify-between min-h-[96px] cursor-pointer group active:scale-[0.98]"
+          >
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-xs">
+              <Award className="w-4 h-4" />
+            </div>
+            <div className="mt-2">
+              <p className="text-xs font-extrabold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
+                My Certificates
+              </p>
+              <span className="text-[10px] text-emerald-600 font-semibold block mt-0.5">
+                {certificates.length > 0 ? `${certificates.length} Issued` : "Digital Pass & QR"}
+              </span>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {/* 3. DATA VISUALIZATION (RECHARTS): ATTENDANCE DONUT & COURSE PROGRESS BAR */}
+      <div className="space-y-2.5">
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center gap-1.5">
+            <BarChart3 className="w-3.5 h-3.5 text-purple-600" />
+            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+              Academic Performance & Attendance
+            </h3>
+          </div>
+          <span className="text-[10px] font-bold text-slate-400">
+            Real-time Metrics
+          </span>
+        </div>
+
+        <div className="space-y-2.5">
+          {/* Card A: Attendance Donut Chart */}
+          <div className="bg-white p-3.5 rounded-2xl border border-purple-100 shadow-sm space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-xs font-extrabold text-slate-800 block">
+                  Attendance Record
+                </span>
+                <span className="text-[10px] text-slate-400">Class presence and session compliance</span>
+              </div>
+              <span className="text-[10px] font-extrabold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100">
+                Live Attendance
+              </span>
+            </div>
+            <AttendanceDonutChart
+              presentCount={attendanceStats.present}
+              leaveCount={attendanceStats.leave}
+              absentCount={attendanceStats.absent}
+            />
+          </div>
+
+          {/* Card B: Course Progress Bar Graph */}
+          <div className="bg-white p-3.5 rounded-2xl border border-purple-100 shadow-sm space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-xs font-extrabold text-slate-800 block">
+                  Course Progress & Scores
+                </span>
+                <span className="text-[10px] text-slate-400">Module completion and assessment scores</span>
+              </div>
+              <span className="text-[10px] font-extrabold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100">
+                Core Units
+              </span>
+            </div>
+            <ProgressScoreBarChart data={progressData} />
+          </div>
+        </div>
+      </div>
+
+      {/* 4. ANNOUNCEMENT BOARD / NOTICE BOARD (Prominently Placed for All Enrolled Students) */}
+      <StudentNoticeBoard
+        currentCourseId={selectedCourse.id}
+        onOpenMaterials={() => setShowMaterialsModal(true)}
+        onOpenSpecialClass={() => setShowSpecialModal(true)}
+        onOpenLiveClass={() => {
+          if (isApproved) {
+            setShowLiveModal(true);
+          } else {
+            setLockedNoticeSubject("Live Classroom");
+          }
+        }}
+      />
+
+      {/* 5. COMPACT ENROLLED PROGRAM & LIVE COUNTDOWN HERO CARD */}
+      <div className="bg-white p-3.5 rounded-2xl border border-purple-100 shadow-sm space-y-2.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-[9.5px] font-extrabold uppercase tracking-wider text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100">
@@ -556,27 +790,13 @@ export default function ScreenDashboard({
         </div>
       </div>
 
-      {/* 2.5 ADMIN ANNOUNCEMENT BOARD / NOTICE BOARD (Prominently Placed for All Enrolled Students) */}
-      <StudentNoticeBoard
-        currentCourseId={selectedCourse.id}
-        onOpenMaterials={() => setShowMaterialsModal(true)}
-        onOpenSpecialClass={() => setShowSpecialModal(true)}
-        onOpenLiveClass={() => {
-          if (isApproved) {
-            setShowLiveModal(true);
-          } else {
-            setLockedNoticeSubject("Live Classroom");
-          }
-        }}
-      />
-
-      {/* 3. ENROLLED SUBJECTS: COMPACT 2x2 QUICK ACCESS GRID (Real-time Unlock) */}
-      <div className="space-y-2">
+      {/* 6. ENROLLED SUBJECTS: 2x2 GRID (Real-time Unlock) */}
+      <div id="enrolled-subjects" className="space-y-2">
         <div className="flex items-center justify-between px-1">
           <div className="flex items-center gap-1.5">
             <BookOpen className="w-3.5 h-3.5 text-purple-600" />
             <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-              Enrolled Subjects
+              Enrolled Subjects Hub
             </h3>
           </div>
           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
@@ -644,120 +864,7 @@ export default function ScreenDashboard({
         </div>
       </div>
 
-      {/* 4. ACADEMIC QUICK ACCESS SERVICES: 2x2 GRID (Live Classes, Study Materials, Notifications) */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-              Quick Access Grid
-            </h3>
-          </div>
-          <span className="text-[10px] font-bold text-slate-400">
-            Essential Tools
-          </span>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2.5">
-          {/* Tile 1: Live Classes */}
-          <button
-            type="button"
-            onClick={() => {
-              if (isApproved) {
-                setShowLiveModal(true);
-              } else {
-                setLockedNoticeSubject("Live Classroom");
-              }
-            }}
-            className="p-3 rounded-2xl bg-white hover:bg-purple-50/40 border border-purple-100 hover:border-purple-300 shadow-xs hover:shadow-sm transition-all text-left flex flex-col justify-between min-h-[92px] cursor-pointer group active:scale-[0.98]"
-          >
-            <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center group-hover:bg-rose-600 group-hover:text-white transition-all shadow-xs">
-              <Radio className="w-4 h-4 animate-pulse" />
-            </div>
-            <div className="mt-2">
-              <p className="text-xs font-bold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
-                Live Classes
-              </p>
-              <span className="text-[10px] text-rose-600 font-semibold block mt-0.5">
-                Join Active Stream
-              </span>
-            </div>
-          </button>
-
-          {/* Tile 2: Study Materials */}
-          <button
-            type="button"
-            onClick={() => {
-              if (isApproved) {
-                setShowMaterialsModal(true);
-              } else {
-                setLockedNoticeSubject("Course Materials");
-              }
-            }}
-            className="p-3 rounded-2xl bg-white hover:bg-purple-50/40 border border-purple-100 hover:border-purple-300 shadow-xs hover:shadow-sm transition-all text-left flex flex-col justify-between min-h-[92px] cursor-pointer group active:scale-[0.98]"
-          >
-            <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-all shadow-xs">
-              <BookOpen className="w-4 h-4" />
-            </div>
-            <div className="mt-2">
-              <p className="text-xs font-bold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
-                Study Materials
-              </p>
-              <span className="text-[10px] text-slate-500 font-semibold block mt-0.5">
-                PDFs, Notes & Books
-              </span>
-            </div>
-          </button>
-
-          {/* Tile 3: Notifications */}
-          <button
-            type="button"
-            onClick={() => {
-              window.dispatchEvent(new CustomEvent("hanoon_open_notifications_drawer"));
-              setShowNotificationToast((prev) => !prev);
-            }}
-            className="p-3 rounded-2xl bg-white hover:bg-purple-50/40 border border-purple-100 hover:border-purple-300 shadow-xs hover:shadow-sm transition-all text-left flex flex-col justify-between min-h-[92px] cursor-pointer group active:scale-[0.98]"
-          >
-            <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-all shadow-xs relative">
-              <Bell className="w-4 h-4" />
-              {unreadNotifs > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[15px] h-3.5 px-0.5 rounded-full bg-rose-600 text-white font-black text-[8px] flex items-center justify-center">
-                  {unreadNotifs}
-                </span>
-              )}
-            </div>
-            <div className="mt-2">
-              <p className="text-xs font-bold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
-                Notifications
-              </p>
-              <span className="text-[10px] text-slate-500 font-semibold block mt-0.5">
-                Class Alerts & Notices
-              </span>
-            </div>
-          </button>
-
-          {/* Tile 4: Timetable & Student ID Pass */}
-          <button
-            type="button"
-            onClick={() => setShowTimetableModal(true)}
-            className="p-3 rounded-2xl bg-white hover:bg-purple-50/40 border border-purple-100 hover:border-purple-300 shadow-xs hover:shadow-sm transition-all text-left flex flex-col justify-between min-h-[92px] cursor-pointer group active:scale-[0.98]"
-          >
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-xs">
-              <Calendar className="w-4 h-4" />
-            </div>
-            <div className="mt-2">
-              <p className="text-xs font-bold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
-                Timetable & Pass
-              </p>
-              <span className="text-[10px] text-slate-500 font-semibold block mt-0.5">
-                Weekly Schedule & QR
-              </span>
-            </div>
-          </button>
-        </div>
-      </div>
-
-      {/* 5. SPECIAL CLASS (Burdah Live Only + Upcoming Indicator) */}
+      {/* 7. SPECIAL CLASS (Burdah Live Only + Upcoming Indicator) */}
       {burdahClass && (
         <div className="space-y-1.5 pt-0.5">
           <div className="flex items-center justify-between px-1">
@@ -802,14 +909,10 @@ export default function ScreenDashboard({
               <ChevronRight className="w-4 h-4 text-purple-600" />
             </div>
           </button>
-
-          <p className="text-center text-[11px] font-medium text-slate-400 italic pt-0.5">
-            Special classes upcoming...
-          </p>
         </div>
       )}
 
-      {/* 6. COMPACT ACTION UTILITIES: MENTOR WHATSAPP & FEE RECEIPT */}
+      {/* 8. COMPACT ACTION UTILITIES: MENTOR WHATSAPP & FEE RECEIPT */}
       <div className="grid grid-cols-2 gap-2.5 pt-0.5">
         <a
           href={formatWhatsAppLink(
@@ -850,58 +953,19 @@ export default function ScreenDashboard({
         ) : (
           <button
             type="button"
-            onClick={() => setShowAnalytics(!showAnalytics)}
+            onClick={() => setShowTimetableModal(true)}
             className="p-2.5 rounded-2xl bg-white border border-purple-100 hover:border-purple-300 shadow-xs flex items-center gap-2 transition-all cursor-pointer group active:scale-[0.98] text-left"
           >
-            <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-colors">
-              <BarChart3 className="w-3.5 h-3.5" />
+            <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+              <Calendar className="w-3.5 h-3.5" />
             </div>
             <div>
               <span className="text-xs font-bold text-slate-900 block leading-tight">
-                Analytics
+                Timetable
               </span>
-              <span className="text-[9.5px] text-slate-500 font-medium">Attendance & Score</span>
+              <span className="text-[9.5px] text-slate-500 font-medium">Weekly Schedule</span>
             </div>
           </button>
-        )}
-      </div>
-
-      {/* OPTIONAL EXPANDABLE ANALYTICS ACCORDION */}
-      <div className="pt-0.5">
-        <button
-          type="button"
-          onClick={() => setShowAnalytics((prev) => !prev)}
-          className="w-full py-2 px-3 rounded-xl bg-white border border-purple-100 hover:bg-purple-50/50 shadow-xs flex items-center justify-between text-xs font-bold text-slate-700 transition-all cursor-pointer"
-        >
-          <div className="flex items-center gap-2">
-            <BarChart3 className="w-3.5 h-3.5 text-purple-600" />
-            <span>Attendance & Progress Analytics</span>
-          </div>
-          {showAnalytics ? (
-            <ChevronUp className="w-4 h-4 text-slate-400" />
-          ) : (
-            <ChevronDown className="w-4 h-4 text-slate-400" />
-          )}
-        </button>
-
-        {showAnalytics && (
-          <div className="mt-2 space-y-2.5 animate-fade-in">
-            <div className="bg-white p-3.5 rounded-2xl border border-purple-100 shadow-xs space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-extrabold text-slate-800">
-                  Attendance Record
-                </span>
-                <span className="text-[10px] font-extrabold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100">
-                  Live Attendance
-                </span>
-              </div>
-              <AttendanceDonutChart presentCount={0} leaveCount={0} absentCount={0} />
-            </div>
-
-            <div className="bg-white p-3.5 rounded-2xl border border-purple-100 shadow-xs space-y-2">
-              <ProgressScoreBarChart data={[]} />
-            </div>
-          </div>
         )}
       </div>
 

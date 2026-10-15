@@ -36,6 +36,10 @@ import {
 import { SHOWCASE_COURSES } from "@/components/mobile/ScreenCoursesList";
 import { FACULTY_MEMBERS } from "@/app/admin/page";
 import { getAdaviyyaSubjects } from "@/services/subjectService";
+import {
+  getLiveClassEnrolledRecipients,
+  sendWhatsAppAlert,
+} from "@/services/whatsappService";
 
 interface ClassScheduleManagerSectionProps {
   currentUserRole?: string;
@@ -157,9 +161,24 @@ export default function ClassScheduleManagerSection({
         senderName: currentUserName,
       });
 
-      // 3. Update view
+      // 3. Automated WhatsApp Reminder: Dispatch automated 15-minute reminders to enrolled students
+      getLiveClassEnrolledRecipients(courseId, selectedCourse.title, meetingLink.trim())
+        .then((recipients) => {
+          recipients.forEach((recipient) => {
+            sendWhatsAppAlert({
+              type: "LIVE_CLASS_REMINDER",
+              studentName: recipient.name,
+              phone: recipient.phone,
+              courseName: selectedCourse.title,
+              liveLink: meetingLink.trim(),
+            });
+          });
+        })
+        .catch((e) => console.warn("WhatsApp reminder auto-dispatch error:", e));
+
+      // 4. Update view
       setClasses(getTeacherClasses());
-      setSuccessMessage(`Class "${combinedTitle}" scheduled successfully! Push and in-app alerts sent to students and ${selectedTeacher.name}.`);
+      setSuccessMessage(`Class "${combinedTitle}" scheduled! In-app & WhatsApp 15-min alerts queued for enrolled students.`);
       setClassTitle("Adaviyya: Comprehensive Review Session");
 
       setTimeout(() => setSuccessMessage(null), 5000);

@@ -44,18 +44,18 @@ export function formatWhatsAppPhone(rawPhone: string): string {
 }
 
 /**
- * Requirement 1 Message Format:
- * "ഹലോ [Student_Name], നിങ്ങളുടെ [Course_Name] ക്ലാസ് 15 മിനിറ്റിനുള്ളിൽ ആരംഭിക്കുന്നു! ജോയിൻ ചെയ്യാൻ താഴെ ക്ലിക്ക് ചെയ്യുക: [Live_Link]"
+ * Requirement 1: Live Class Reminders
+ * Format: "Hello [Student_Name], your [Course_Name] class starts in 15 mins! Join here: [Live_Link]"
  */
 export function buildLiveClassReminderMessage(
   studentName: string,
   courseName: string,
   liveLink: string
 ): string {
-  const sName = studentName?.trim() || "വിദ്യാർത്ഥി";
-  const cName = courseName?.trim() || "ഹനൂൻ അക്കാദമി";
+  const sName = studentName?.trim() || "Student";
+  const cName = courseName?.trim() || "Hanoon Academy Course";
   const link = liveLink?.trim() || "https://hanoonacademynew.vercel.app";
-  return `ഹലോ ${sName}, നിങ്ങളുടെ ${cName} ക്ലാസ് 15 മിനിറ്റിനുള്ളിൽ ആരംഭിക്കുന്നു! ജോയിൻ ചെയ്യാൻ താഴെ ക്ലിക്ക് ചെയ്യുക: ${link}`;
+  return `Hello ${sName}, your ${cName} class starts in 15 mins! Join here: ${link}`;
 }
 
 /**
@@ -76,12 +76,12 @@ export function getLiveClassReminderWhatsAppUrl(
 }
 
 /**
- * Requirement 2 Message Format:
- * "ഹലോ [Student_Name], ഹനൂൻ അക്കാദമിയിലേക്ക് സ്വാഗതം! നിങ്ങളുടെ പേയ്മെന്റ് സ്വീകരിച്ചിരിക്കുന്നു. നിങ്ങളുടെ കോഴ്സ് ഇപ്പോൾ ആക്ടീവ് ആണ്."
+ * Requirement 2: Payment Verification Alert
+ * Format: "Hello [Student_Name], welcome to Hanoon Academy! Your payment is approved and your course is active. Access your dashboard here: https://hanoonacademynew.vercel.app"
  */
 export function buildPaymentVerificationMessage(studentName: string): string {
-  const sName = studentName?.trim() || "വിദ്യാർത്ഥി";
-  return `ഹലോ ${sName}, ഹനൂൻ അക്കാദമിയിലേക്ക് സ്വാഗതം! നിങ്ങളുടെ പേയ്മെന്റ് സ്വീകരിച്ചിരിക്കുന്നു. നിങ്ങളുടെ കോഴ്സ് ഇപ്പോൾ ആക്ടീവ് ആണ്.`;
+  const sName = studentName?.trim() || "Student";
+  return `Hello ${sName}, welcome to Hanoon Academy! Your payment is approved and your course is active. Access your dashboard here: https://hanoonacademynew.vercel.app`;
 }
 
 /**
