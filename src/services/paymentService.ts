@@ -4,10 +4,19 @@ import { DbPayment, PaymentStatus } from "@/types/supabase";
 
 const LOCAL_PAYMENTS_KEY = "hanoon_local_payments";
 
+let lastPaymentFetchError: string | null = null;
+
+export function getLastPaymentFetchError(): string | null {
+  return lastPaymentFetchError;
+}
+
 export async function fetchPayments(): Promise<DbPayment[]> {
+  lastPaymentFetchError = null;
+
   if (isSupabaseConfigured && supabase) {
     try {
       let rawPayments: any[] | null = null;
+      let payFetchError: any = null;
 
       // 1. Try relational query
       const { data, error } = await supabase
@@ -21,35 +30,67 @@ export async function fetchPayments(): Promise<DbPayment[]> {
       if (!error && data) {
         rawPayments = data;
       } else {
-        // Fallback: Fetch plain payments if relation is not configured in schema
-        const fallbackRes = await supabase
+        if (error) payFetchError = error;
+        // Fallback: Fetch plain payments if relation is missing in schema cache
+        let fallbackRes = await supabase
           .from("payments")
           .select("*")
           .order("submitted_at", { ascending: false });
+
+        if (fallbackRes.error) {
+          // Retry without ordering in case submitted_at column is missing
+          fallbackRes = await supabase.from("payments").select("*");
+        }
+
         if (!fallbackRes.error && fallbackRes.data) {
           rawPayments = fallbackRes.data;
+          payFetchError = null; // Plain query succeeded
+        } else if (fallbackRes.error) {
+          payFetchError = fallbackRes.error;
         }
       }
 
+      if (payFetchError) {
+        lastPaymentFetchError = payFetchError.message || "Failed to query payments table.";
+        console.warn("Supabase payments fetch error:", payFetchError);
+      }
+
       if (rawPayments && rawPayments.length > 0) {
-        // Ensure student object is always populated by fetching students table
-        const { data: stdData } = await supabase
-          .from("students")
-          .select("*");
+        // Fetch students and profiles concurrently to resolve student names reliably
+        const [stdRes, profRes] = await Promise.all([
+          supabase.from("students").select("*"),
+          supabase.from("profiles").select("*"),
+        ]);
 
         const studentMap = new Map<string, any>();
-        if (stdData) {
-          for (const s of stdData) {
+        if (stdRes.data) {
+          for (const s of stdRes.data) {
             if (s.id) studentMap.set(s.id, s);
+            if (s.user_id) studentMap.set(s.user_id, s);
             const p = (s.whatsapp_num || "").replace(/\D/g, "");
-            if (p) studentMap.set(p, s);
+            if (p) studentMap.set(p.slice(-10), s);
+          }
+        }
+        if (profRes.data) {
+          for (const pr of profRes.data) {
+            if (pr.id && !studentMap.has(pr.id)) {
+              studentMap.set(pr.id, {
+                id: pr.id,
+                full_name: pr.full_name || pr.email?.split("@")[0] || "Registered Student",
+                whatsapp_num: pr.whatsapp_num || "",
+                district: pr.district || "Kerala",
+              });
+            }
           }
         }
 
         const enriched: DbPayment[] = rawPayments.map((p) => {
           let student = p.student;
           if (!student || !student.full_name) {
-            student = studentMap.get(p.student_id) || studentMap.get((p.whatsapp_num || "").replace(/\D/g, "")) || null;
+            student =
+              studentMap.get(p.student_id) ||
+              (p.whatsapp_num ? studentMap.get(p.whatsapp_num.replace(/\D/g, "").slice(-10)) : null) ||
+              null;
           }
           return {
             ...p,
@@ -62,6 +103,8 @@ export async function fetchPayments(): Promise<DbPayment[]> {
         return [];
       }
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      lastPaymentFetchError = msg;
       console.warn("Failed to fetch payments from Supabase, loading local:", err);
     }
   }

@@ -30,6 +30,7 @@ import {
 import {
   UnifiedStudentRegistration,
   fetchUnifiedRegistrations,
+  fetchUnifiedRegistrationsDetailed,
   updateStudentPaymentStatusDirect,
   subscribeToStudentRegistrations,
   purgeDuplicateAndDummyRegistrations,
@@ -78,6 +79,7 @@ export default function StudentRegistrationsSection({
   // Strict debounced loading to avoid race conditions & duplicate entries
   const debounceTimerRef = React.useRef<NodeJS.Timeout | null>(null);
   const inFlightRef = React.useRef(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Load Data
   const loadData = useCallback(async () => {
@@ -85,10 +87,12 @@ export default function StudentRegistrationsSection({
     inFlightRef.current = true;
     setLoading(true);
     try {
-      const data = await fetchUnifiedRegistrations();
+      const { data, error } = await fetchUnifiedRegistrationsDetailed();
       setRegistrations(data);
-    } catch (err) {
+      setFetchError(error);
+    } catch (err: any) {
       console.warn("Failed to load student registrations:", err);
+      setFetchError(err?.message || "Failed to load student registrations from Supabase.");
     } finally {
       setLoading(false);
       inFlightRef.current = false;
@@ -282,23 +286,16 @@ export default function StudentRegistrationsSection({
     }
   };
 
-  // Unique deduplicated registrations: records with screenshots or payments take precedence
+  // Preserves ALL records (payments and registered students) without dropping multiple attempts or transactions
   const deduplicatedRegistrations = useMemo(() => {
-    const seenPhones = new Set<string>();
+    const seenKeys = new Set<string>();
     const result: UnifiedStudentRegistration[] = [];
 
-    // Sort so entries with real screenshots/payments take precedence over bare leads
-    const sorted = [...registrations].sort((a, b) => {
-      const aScore = a.screenshotUrl ? 2 : a.paymentId ? 1 : 0;
-      const bScore = b.screenshotUrl ? 2 : b.paymentId ? 1 : 0;
-      return bScore - aScore;
-    });
-
-    for (const item of sorted) {
-      const cleanPhone = (item.whatsappNum || "").replace(/\D/g, "");
-      const key = cleanPhone && cleanPhone.length >= 7 ? `${cleanPhone}_${item.courseId || "adaviyya"}` : item.id;
-      if (seenPhones.has(key)) continue;
-      seenPhones.add(key);
+    for (const item of registrations) {
+      // Key uniquely by paymentId if it exists, otherwise by item ID
+      const uniqueKey = item.paymentId ? `pay_${item.paymentId}` : (item.id || `std_${item.studentId}`);
+      if (seenKeys.has(uniqueKey)) continue;
+      seenKeys.add(uniqueKey);
       result.push(item);
     }
 
@@ -422,6 +419,52 @@ export default function StudentRegistrationsSection({
           <span className="text-[10px] uppercase font-black tracking-wider text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-md border border-emerald-300">
             Live Cloud
           </span>
+        </div>
+      )}
+
+      {/* Prominent Red Alert Box for Supabase Fetch / RLS / Column Errors */}
+      {fetchError && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-rose-50 border-2 border-rose-300 text-rose-950 flex flex-col sm:flex-row items-start justify-between gap-3 shadow-md animate-fade-in">
+          <div className="flex items-start gap-3">
+            <XCircle className="w-6 h-6 text-rose-600 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="font-black text-rose-900 text-sm sm:text-base">
+                  Database Query Error Encountered
+                </h4>
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-rose-200 text-rose-800 px-2 py-0.5 rounded-full">
+                  Supabase / RLS Issue
+                </span>
+              </div>
+              <p className="text-xs text-rose-800 font-medium leading-relaxed">
+                The database returned an error while fetching student or payment records:
+              </p>
+              <div className="mt-2 p-2.5 rounded-lg bg-rose-100/90 border border-rose-300 font-mono text-[11px] text-rose-900 break-all select-all">
+                {fetchError}
+              </div>
+              <p className="text-[11px] text-rose-700 pt-1">
+                Tip: Check that Row-Level Security (RLS) policies on <code>public.payments</code>, <code>public.students</code>, and <code>public.profiles</code> permit SELECT access, and verify required columns exist.
+              </p>
+            </div>
+          </div>
+          <div className="shrink-0 flex items-center gap-2 self-end sm:self-center">
+            <button
+              type="button"
+              onClick={() => loadData()}
+              className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Retry Query
+            </button>
+            <button
+              type="button"
+              onClick={() => setFetchError(null)}
+              className="p-2 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-800 font-bold text-xs transition-colors cursor-pointer"
+              title="Dismiss error notice"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       )}
 
@@ -792,18 +835,43 @@ export default function StudentRegistrationsSection({
               ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-16 text-center">
-                    <div className="max-w-xs mx-auto space-y-2">
-                      <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 mx-auto flex items-center justify-center font-bold text-xl">
-                        🎓
+                    <div className="max-w-md mx-auto space-y-2">
+                      <div className={`w-12 h-12 rounded-2xl mx-auto flex items-center justify-center font-bold text-xl ${
+                        fetchError ? "bg-rose-100 text-rose-700" : "bg-purple-50 text-purple-600"
+                      }`}>
+                        {fetchError ? "⚠️" : "🎓"}
                       </div>
                       <h4 className="text-sm font-black text-slate-800">
-                        {searchQuery ? "No Matching Registrations" : "No student registrations found"}
+                        {fetchError
+                          ? "Database Records Unavailable"
+                          : searchQuery
+                          ? "No Matching Registrations"
+                          : "No student registrations found"}
                       </h4>
-                      <p className="text-xs text-slate-400">
-                        {searchQuery
-                          ? "Try searching for a different student name or mobile number."
-                          : "When students register on the website, their details and payment screenshots will appear here with 'Pending Verification' status."}
-                      </p>
+                      <div className="text-xs text-slate-500 leading-relaxed">
+                        {fetchError ? (
+                          <div className="space-y-2 mt-2">
+                            <p className="text-rose-700 font-medium">
+                              Supabase encountered an error when fetching registration records:
+                            </p>
+                            <p className="font-mono text-[11px] text-rose-800 bg-rose-50 border border-rose-200 p-2 rounded-lg break-all">
+                              {fetchError}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => loadData()}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                            >
+                              <RefreshCw className="w-3 h-3" />
+                              Retry Fetching
+                            </button>
+                          </div>
+                        ) : searchQuery ? (
+                          "Try searching for a different student name or mobile number."
+                        ) : (
+                          "When students register on the website, their details and payment screenshots will appear here with 'Pending Verification' status."
+                        )}
+                      </div>
                     </div>
                   </td>
                 </tr>
@@ -1005,18 +1073,45 @@ export default function StudentRegistrationsSection({
               <span>Loading student registrations...</span>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="py-12 text-center bg-purple-50/40 rounded-2xl p-6 border border-purple-100">
-              <div className="w-11 h-11 rounded-2xl bg-purple-100 text-purple-700 mx-auto flex items-center justify-center font-bold text-xl mb-2.5">
-                🎓
+            <div className={`py-10 text-center rounded-2xl p-5 border ${
+              fetchError ? "bg-rose-50/70 border-rose-200" : "bg-purple-50/40 border-purple-100"
+            }`}>
+              <div className={`w-11 h-11 rounded-2xl mx-auto flex items-center justify-center font-bold text-xl mb-2.5 ${
+                fetchError ? "bg-rose-100 text-rose-700" : "bg-purple-100 text-purple-700"
+              }`}>
+                {fetchError ? "⚠️" : "🎓"}
               </div>
               <h4 className="text-sm font-black text-slate-800">
-                {searchQuery ? "No Students Found" : "No Registrations Yet"}
+                {fetchError
+                  ? "Database Records Unavailable"
+                  : searchQuery
+                  ? "No Students Found"
+                  : "No Registrations Yet"}
               </h4>
-              <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto leading-relaxed">
-                {searchQuery
-                  ? "Check spelling or search by WhatsApp number."
-                  : "New student registrations and screenshots will show here with 'Pending Verification' status automatically."}
-              </p>
+              <div className="text-xs text-slate-500 mt-1 max-w-xs mx-auto leading-relaxed">
+                {fetchError ? (
+                  <div className="space-y-2 mt-2">
+                    <p className="text-rose-700 font-medium text-[11px]">
+                      Failed to fetch registrations from Supabase:
+                    </p>
+                    <p className="font-mono text-[10px] text-rose-800 bg-white border border-rose-200 p-2 rounded-lg break-all text-left">
+                      {fetchError}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => loadData()}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      Retry Fetching
+                    </button>
+                  </div>
+                ) : searchQuery ? (
+                  "Check spelling or search by WhatsApp number."
+                ) : (
+                  "New student registrations and screenshots will show here with 'Pending Verification' status automatically."
+                )}
+              </div>
             </div>
           ) : (
             filtered.map((item) => {

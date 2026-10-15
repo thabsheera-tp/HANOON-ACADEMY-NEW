@@ -65,7 +65,7 @@ import ClassScheduleManagerSection from "@/components/admin/ClassScheduleManager
 import NotificationsManagerSection from "@/components/admin/NotificationsManagerSection";
 import AdminNoticeBoardManagerSection from "@/components/admin/AdminNoticeBoardManagerSection";
 import { getNotifications } from "@/services/notificationService";
-import { fetchPayments, updatePaymentStatus, getWhatsAppWelcomeUrl } from "@/services/paymentService";
+import { fetchPayments, updatePaymentStatus, getWhatsAppWelcomeUrl, getLastPaymentFetchError } from "@/services/paymentService";
 import { fetchStudents } from "@/services/studentService";
 import { fetchPayroll, markPayrollAsPaid, createPayrollRecord } from "@/services/payrollService";
 import {
@@ -208,6 +208,7 @@ export default function AdminDashboardPage() {
   const [testCopiedUpi, setTestCopiedUpi] = useState(false);
   const [showClearLogConfirm, setShowClearLogConfirm] = useState(false);
   const [isClearingLogs, setIsClearingLogs] = useState(false);
+  const [dashboardFetchError, setDashboardFetchError] = useState<string | null>(null);
   const [approvedWhatsAppNotice, setApprovedWhatsAppNotice] = useState<{
     studentName: string;
     courseName: string;
@@ -300,8 +301,16 @@ export default function AdminDashboardPage() {
         setAuditLogs(auditData);
         setTeacherClasses(getTeacherClasses());
       }
-    } catch (err) {
+
+      const lastPayErr = getLastPaymentFetchError();
+      if (lastPayErr) {
+        setDashboardFetchError(lastPayErr);
+      } else {
+        setDashboardFetchError(null);
+      }
+    } catch (err: any) {
       console.error("Failed to load admin dashboard data:", err);
+      setDashboardFetchError(err?.message || "Failed to load database records from Supabase.");
     } finally {
       setLoading(false);
     }
@@ -856,10 +865,53 @@ export default function AdminDashboardPage() {
             </div>
             <button
               onClick={() => setSaveSuccessMsg(null)}
-              className="text-emerald-700 font-extrabold text-xs"
+              className="text-emerald-700 font-extrabold text-xs cursor-pointer"
             >
               ✕
             </button>
+          </div>
+        )}
+
+        {/* Database Query Warning Alert Banner */}
+        {dashboardFetchError && (
+          <div className="p-4 sm:p-5 rounded-2xl bg-rose-50 border-2 border-rose-300 text-rose-950 flex flex-col sm:flex-row items-start justify-between gap-3 shadow-md animate-fade-in">
+            <div className="flex items-start gap-3">
+              <XCircle className="w-6 h-6 text-rose-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="font-black text-rose-900 text-sm">
+                    Supabase Query Error Encountered
+                  </h4>
+                  <span className="text-[10px] font-bold uppercase tracking-wider bg-rose-200 text-rose-800 px-2 py-0.5 rounded-full">
+                    RLS / Column Issue
+                  </span>
+                </div>
+                <p className="text-xs text-rose-800 font-medium">
+                  The database returned an error while loading records:
+                </p>
+                <div className="mt-1.5 p-2.5 rounded-lg bg-rose-100/90 border border-rose-300 font-mono text-[11px] text-rose-900 break-all select-all">
+                  {dashboardFetchError}
+                </div>
+              </div>
+            </div>
+            <div className="shrink-0 flex items-center gap-2 self-end sm:self-center">
+              <button
+                type="button"
+                onClick={() => loadAllData()}
+                className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Retry
+              </button>
+              <button
+                type="button"
+                onClick={() => setDashboardFetchError(null)}
+                className="p-2 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-800 font-bold text-xs transition-colors cursor-pointer"
+                title="Dismiss"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         )}
 

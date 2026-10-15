@@ -386,13 +386,42 @@ function saveLocalBackup(student: DbStudent, payment: DbPayment) {
 }
 
 export async function fetchStudents(): Promise<DbStudent[]> {
+  const mergedStudents: DbStudent[] = [];
+  const seenIds = new Set<string>();
+
   if (isSupabaseConfigured && supabase) {
     try {
-      const { data, error } = await supabase
-        .from("students")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (!error && data && data.length > 0) return data;
+      const [stuRes, profRes] = await Promise.all([
+        supabase.from("students").select("*").order("created_at", { ascending: false }),
+        supabase.from("profiles").select("*").order("created_at", { ascending: false }),
+      ]);
+
+      if (stuRes.data) {
+        for (const s of stuRes.data) {
+          if (s.id && !seenIds.has(s.id)) {
+            seenIds.add(s.id);
+            mergedStudents.push(s);
+          }
+        }
+      }
+
+      if (profRes.data) {
+        for (const p of profRes.data) {
+          if (p.role === "student" && p.id && !seenIds.has(p.id)) {
+            seenIds.add(p.id);
+            mergedStudents.push({
+              id: p.id,
+              user_id: p.id,
+              full_name: p.full_name || p.email?.split("@")[0] || "Student",
+              whatsapp_num: p.whatsapp_num || "",
+              district: p.district || "Kerala",
+              created_at: p.created_at || new Date().toISOString(),
+            });
+          }
+        }
+      }
+
+      if (mergedStudents.length > 0) return mergedStudents;
     } catch (e) {
       console.warn("Supabase students fetch failed, checking local storage:", e);
     }
@@ -410,7 +439,7 @@ export async function fetchStudents(): Promise<DbStudent[]> {
     }
   }
 
-  return [];
+  return mergedStudents;
 }
 
 export interface UnifiedStudentRegistration {
@@ -586,64 +615,146 @@ async function executeSaveStudentLead(profile: {
   return savedStudent;
 }
 
-/**
- * Fetches all real student registrations combined with their payment records from Supabase
- */
-export async function fetchUnifiedRegistrations(): Promise<UnifiedStudentRegistration[]> {
-  const result: UnifiedStudentRegistration[] = [];
+let lastUnifiedFetchError: string | null = null;
 
-  // 1. Fetch payments and students concurrently from Supabase
+export function getLastUnifiedFetchError(): string | null {
+  return lastUnifiedFetchError;
+}
+
+export interface FetchUnifiedRegistrationsResult {
+  data: UnifiedStudentRegistration[];
+  error: string | null;
+}
+
+/**
+ * Fetches all real student registrations combined with their payment records from Supabase.
+ * - Bypasses strict filtering to return ALL records (PENDING, APPROVED, REJECTED, UNPAID, or NULL).
+ * - Queries payments, students, and profiles with resilient fallback if relationships fail.
+ * - Captures exact Supabase / RLS error messages to prevent blank UI.
+ */
+export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedRegistrationsResult> {
+  const result: UnifiedStudentRegistration[] = [];
+  lastUnifiedFetchError = null;
+  const errorMessages: string[] = [];
+
+  // 1. Fetch payments, students, profiles, and courses concurrently from Supabase
   let payments: DbPayment[] = [];
-  let allStudents: DbStudent[] = [];
+  let allStudents: any[] = [];
+  let allProfiles: any[] = [];
+  const courseMap = new Map<string, string>();
   let fetchedPaymentsFromSupabase = false;
   let fetchedStudentsFromSupabase = false;
 
   if (isSupabaseConfigured && supabase) {
+    // A. Query Payments (Try join first, fallback to plain query if relationship is missing in schema)
     try {
-      const [payRes, stuRes] = await Promise.all([
-        supabase
-          .from("payments")
-          .select(`
-            *,
-            student:students(*)
-          `)
-          .order("submitted_at", { ascending: false }),
-        supabase
-          .from("students")
-          .select("*")
-          .order("created_at", { ascending: false }),
-      ]);
+      let rawPayments: any[] | null = null;
+      let payFetchError: any = null;
 
-      if (!payRes.error && payRes.data !== null) {
-        payments = payRes.data as DbPayment[];
+      const { data, error } = await supabase
+        .from("payments")
+        .select(`
+          *,
+          student:students(*),
+          course:courses(*)
+        `)
+        .order("submitted_at", { ascending: false });
+
+      if (!error && data) {
+        rawPayments = data;
         fetchedPaymentsFromSupabase = true;
       } else {
-        // Fallback: Query payments without join in case relationship is missing
-        const plainPay = await supabase
+        if (error) payFetchError = error;
+        // Fallback: Query payments without relational join
+        let plainPay = await supabase
           .from("payments")
           .select("*")
           .order("submitted_at", { ascending: false });
-        if (!plainPay.error && plainPay.data !== null) {
-          payments = plainPay.data as DbPayment[];
+
+        if (plainPay.error) {
+          // If ordering failed (e.g. submitted_at column missing), query without order
+          plainPay = await supabase.from("payments").select("*");
+        }
+
+        if (!plainPay.error && plainPay.data) {
+          rawPayments = plainPay.data;
           fetchedPaymentsFromSupabase = true;
+          payFetchError = null; // Plain query succeeded
+        } else if (plainPay.error) {
+          payFetchError = plainPay.error;
         }
       }
 
-      if (!stuRes.error && stuRes.data !== null) {
-        allStudents = stuRes.data as DbStudent[];
-        fetchedStudentsFromSupabase = true;
+      if (payFetchError) {
+        const msg = payFetchError.message || "Failed to query payments table.";
+        errorMessages.push(`Payments: ${msg} (code: ${payFetchError.code || "RLS/Schema"})`);
+        console.warn("Supabase payments fetch error:", payFetchError);
+      } else if (rawPayments) {
+        payments = rawPayments as DbPayment[];
       }
-    } catch (err) {
-      console.warn("Supabase fetchUnifiedRegistrations query error:", err);
+    } catch (payErr) {
+      const msg = payErr instanceof Error ? payErr.message : String(payErr);
+      errorMessages.push(`Payments Query Exception: ${msg}`);
+      console.warn("Payments query exception:", payErr);
     }
+
+    // B. Query Students
+    try {
+      let stuRes = await supabase
+        .from("students")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (stuRes.error) {
+        // Fallback without order
+        stuRes = await supabase.from("students").select("*");
+      }
+
+      if (!stuRes.error && stuRes.data) {
+        allStudents = stuRes.data;
+        fetchedStudentsFromSupabase = true;
+      } else if (stuRes.error) {
+        errorMessages.push(`Students: ${stuRes.error.message} (code: ${stuRes.error.code || "RLS/Schema"})`);
+        console.warn("Supabase students fetch error:", stuRes.error);
+      }
+    } catch (stuErr) {
+      const msg = stuErr instanceof Error ? stuErr.message : String(stuErr);
+      errorMessages.push(`Students Query Exception: ${msg}`);
+      console.warn("Students query exception:", stuErr);
+    }
+
+    // C. Query Profiles (To augment student resolution or catch students stored in profiles)
+    try {
+      const profRes = await supabase.from("profiles").select("*");
+      if (profRes.data) {
+        allProfiles = profRes.data;
+      } else if (profRes.error) {
+        console.warn("Profiles query notice:", profRes.error.message);
+      }
+    } catch (profErr) {
+      console.warn("Profiles query exception:", profErr);
+    }
+
+    // D. Query Courses for human-readable course titles
+    try {
+      const { data: cData } = await supabase.from("courses").select("id, title_en, title_ml, fee_amount");
+      if (cData) {
+        for (const c of cData) {
+          if (c.id && c.title_en) courseMap.set(c.id, c.title_en);
+        }
+      }
+    } catch {}
+  } else {
+    errorMessages.push("Supabase connection not initialized. Please configure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
   }
 
-  // Fallback to local storage ONLY if Supabase is unconfigured or completely unavailable
+  // Fallback to local storage ONLY if Supabase returned 0 items and had error or unconfigured
   if (!fetchedPaymentsFromSupabase && typeof window !== "undefined") {
     try {
       const local = localStorage.getItem(LOCAL_PAYMENTS_KEY);
       if (local) {
-        payments = JSON.parse(local) as DbPayment[];
+        const parsed = JSON.parse(local) as DbPayment[];
+        if (parsed.length > 0) payments = parsed;
       }
     } catch (e) {
       console.warn("Local payments read error:", e);
@@ -654,127 +765,196 @@ export async function fetchUnifiedRegistrations(): Promise<UnifiedStudentRegistr
     try {
       const local = localStorage.getItem(LOCAL_STUDENTS_KEY);
       if (local) {
-        allStudents = JSON.parse(local) as DbStudent[];
+        const parsed = JSON.parse(local);
+        if (Array.isArray(parsed) && parsed.length > 0) allStudents = parsed;
       }
     } catch (e) {
       console.warn("Local students read error:", e);
     }
   }
 
-  // Build lookup maps for fast, robust student resolution
-  const studentById = new Map<string, DbStudent>();
-  const studentByPhone = new Map<string, DbStudent>();
+  // Build lookup maps for robust in-memory student resolution
+  const studentById = new Map<string, any>();
+  const studentByUserId = new Map<string, any>();
+  const studentByPhone = new Map<string, any>();
+
+  // 1. Populate from students table
   for (const s of allStudents) {
     if (s.id) studentById.set(s.id, s);
+    if (s.user_id) studentByUserId.set(s.user_id, s);
     const pClean = (s.whatsapp_num || "").replace(/\D/g, "");
-    if (pClean) studentByPhone.set(pClean, s);
+    if (pClean && pClean.length >= 7) {
+      studentByPhone.set(pClean.slice(-10), s);
+    }
   }
 
-  // Add all payments with strict PENDING default
-  // Deduplicate by payment ID first, then by student+course for PENDING entries
+  // 2. Augment from profiles table
+  for (const pr of allProfiles) {
+    if (pr.id && !studentById.has(pr.id)) {
+      studentById.set(pr.id, {
+        id: pr.id,
+        user_id: pr.id,
+        full_name: pr.full_name || pr.email?.split("@")[0] || "Registered Student",
+        whatsapp_num: pr.whatsapp_num || "",
+        district: pr.district || "Kerala",
+        created_at: pr.created_at || new Date().toISOString(),
+      });
+    }
+    const prPhone = (pr.whatsapp_num || "").replace(/\D/g, "");
+    if (prPhone && prPhone.length >= 7 && !studentByPhone.has(prPhone.slice(-10))) {
+      studentByPhone.set(prPhone.slice(-10), {
+        id: pr.id,
+        user_id: pr.id,
+        full_name: pr.full_name || pr.email?.split("@")[0] || "Registered Student",
+        whatsapp_num: pr.whatsapp_num || "",
+        district: pr.district || "Kerala",
+        created_at: pr.created_at || new Date().toISOString(),
+      });
+    }
+  }
+
+  // Add all payments WITHOUT dropping any record by status or duplicate phone
   const seenPaymentIds = new Set<string>();
-  const pendingStudentCourseKeys = new Set<string>();
 
-  // Sort payments so APPROVED/REJECTED take priority over PENDING for deduplication
-  const sortedPayments = [...payments].sort((a, b) => {
-    const priorityA = a.status === "APPROVED" ? 0 : a.status === "REJECTED" ? 1 : 2;
-    const priorityB = b.status === "APPROVED" ? 0 : b.status === "REJECTED" ? 1 : 2;
-    if (priorityA !== priorityB) return priorityA - priorityB;
-    // Within same status, newest first
-    const dateA = new Date(a.submitted_at || a.updated_at || 0).getTime();
-    const dateB = new Date(b.submitted_at || b.updated_at || 0).getTime();
-    return dateB - dateA;
-  });
+  for (const p of payments) {
+    // Only skip exact duplicate payment IDs (if multiple queries returned the exact same row)
+    if (p.id && seenPaymentIds.has(p.id)) continue;
+    if (p.id) seenPaymentIds.add(p.id);
 
-  for (const p of sortedPayments) {
-    // Skip duplicate payment IDs
-    if (seenPaymentIds.has(p.id)) continue;
-    seenPaymentIds.add(p.id);
-
-    // Resolve student reliably even if Supabase relation was null
+    // Resolve student reliably even if Supabase foreign key relation was null
+    const txDigits = (p.upi_txid || "").replace(/\D/g, "");
+    const paymentPhone = (p as any).whatsapp_num || (p as any).phone || "";
     const student =
       p.student ||
-      studentById.get(p.student_id) ||
-      studentByPhone.get((p.upi_txid || "").replace(/\D/g, ""));
-    const phone = student?.whatsapp_num || (p as any).whatsapp_num || "";
-    const resolvedName = student?.full_name || (p as any).student_name || (p as any).full_name || "Enrolled Student";
+      (p.student_id ? studentById.get(p.student_id) : null) ||
+      (p.student_id ? studentByUserId.get(p.student_id) : null) ||
+      (paymentPhone ? studentByPhone.get(paymentPhone.replace(/\D/g, "").slice(-10)) : null) ||
+      (txDigits.length >= 10 ? studentByPhone.get(txDigits.slice(-10)) : null);
 
-    // Strictly APPROVED only if explicitly approved in admin; otherwise strictly PENDING
-    const isApproved = p.status === "APPROVED" || (p.status as string) === "verified";
-    const isRejected = p.status === "REJECTED";
-    const paymentStatus: "PENDING" | "APPROVED" | "REJECTED" = isApproved
-      ? "APPROVED"
-      : isRejected
-      ? "REJECTED"
-      : "PENDING";
+    const phone =
+      student?.whatsapp_num ||
+      paymentPhone ||
+      "";
 
-    const cleanPhone = (phone || "").replace(/\D/g, "");
+    const resolvedName =
+      student?.full_name ||
+      (p as any).student_name ||
+      (p as any).full_name ||
+      (p as any).name ||
+      (p.upi_txid ? `Student (Tx: ${p.upi_txid.slice(0, 10)})` : `Student (${p.student_id ? p.student_id.slice(0, 8) : "Registered"})`);
 
-    // For PENDING payments, deduplicate by student or phone + course to show only the most recent
-    if (paymentStatus === "PENDING") {
-      const studentCourseKey = `${cleanPhone || p.student_id}_${p.course_id || "adaviyya"}`;
-      if (pendingStudentCourseKeys.has(studentCourseKey)) continue;
-      pendingStudentCourseKeys.add(studentCourseKey);
+    const district =
+      student?.district ||
+      (p as any).district ||
+      "Kerala";
+
+    // Normalize payment status: PENDING, APPROVED, REJECTED, or UNPAID
+    const rawStatus = (p.status || "").toUpperCase();
+    let paymentStatus: "PENDING" | "APPROVED" | "REJECTED" | "UNPAID" = "PENDING";
+    if (rawStatus === "APPROVED" || rawStatus === "VERIFIED" || rawStatus === "ACTIVE" || rawStatus === "PAID") {
+      paymentStatus = "APPROVED";
+    } else if (rawStatus === "REJECTED" || rawStatus === "FAILED" || rawStatus === "CANCELLED") {
+      paymentStatus = "REJECTED";
+    } else if (rawStatus === "UNPAID") {
+      paymentStatus = "UNPAID";
+    } else {
+      paymentStatus = "PENDING";
     }
 
     const courseTitle =
       p.course?.title_en ||
+      courseMap.get(p.course_id) ||
       COURSE_NAMES_MAP[p.course_id] ||
       (p.course_id ? p.course_id.charAt(0).toUpperCase() + p.course_id.slice(1) : "Adaviyya Track");
 
     result.push({
-      id: p.id,
+      id: p.id || `pay-${Math.random().toString(36).substring(2, 9)}`,
       studentId: student?.id || p.student_id,
       fullName: resolvedName,
       whatsappNum: phone,
-      district: student?.district || "Kerala",
+      district,
       courseChoice: courseTitle,
-      courseId: p.course_id,
-      registrationDate: p.submitted_at || p.updated_at || new Date().toISOString(),
+      courseId: p.course_id || "adaviyya",
+      registrationDate: p.submitted_at || (p as any).created_at || p.updated_at || new Date().toISOString(),
       paymentStatus,
-      amount: p.amount || 500,
-      upiTxId: p.upi_txid || "-",
+      amount: p.amount ?? 500,
+      upiTxId: p.upi_txid || (p as any).transaction_id || "Pending Verification",
       screenshotUrl: p.screenshot_url || (p as any).screenshotUrl || (student as any)?.screenshot_url || "",
       paymentId: p.id,
       rejectionReason: p.rejection_reason || undefined,
     });
   }
 
-  // 2. Add registered students who have NO payment records at all (leads without payments)
+  // 2. Add registered students from students and profiles who have NO payment records at all
   const existingStudentIds = new Set(result.map((r) => r.studentId).filter(Boolean));
   const existingPhones = new Set(
     result
-      .map((r) => (r.whatsappNum || "").replace(/\D/g, ""))
+      .map((r) => (r.whatsappNum || "").replace(/\D/g, "").slice(-10))
       .filter((p) => p && p.length >= 7)
   );
 
+  // Add students from students table
   for (const s of allStudents) {
-    const cleanP = (s.whatsapp_num || "").replace(/\D/g, "");
-    if (!cleanP || cleanP.length < 7) continue;
-
-    // Skip if this student already appears via a payment record (by studentId OR by phone number)
-    if (existingStudentIds.has(s.id) || existingPhones.has(cleanP)) continue;
+    const cleanP = (s.whatsapp_num || "").replace(/\D/g, "").slice(-10);
+    if (existingStudentIds.has(s.id) || (cleanP && existingPhones.has(cleanP))) continue;
 
     result.push({
       id: `reg-${s.id}`,
       studentId: s.id,
       fullName: s.full_name || "Enrolled Student",
-      whatsappNum: s.whatsapp_num,
+      whatsappNum: s.whatsapp_num || "",
       district: s.district || "Kerala",
       courseChoice: "Adaviyya (General Admission)",
       courseId: "adaviyya",
       registrationDate: s.created_at || new Date().toISOString(),
       paymentStatus: "PENDING",
       amount: 500,
-      upiTxId: "Pending Verification",
+      upiTxId: "Pending Payment",
       paymentId: undefined,
     });
     existingStudentIds.add(s.id);
-    existingPhones.add(cleanP);
+    if (cleanP) existingPhones.add(cleanP);
   }
 
-  // Sort latest first
-  return result.sort((a, b) => new Date(b.registrationDate).getTime() - new Date(a.registrationDate).getTime());
+  // Add registered student accounts from profiles table
+  for (const prof of allProfiles) {
+    if (prof.role && prof.role !== "student") continue; // Exclude admins/teachers
+    const cleanP = (prof.whatsapp_num || "").replace(/\D/g, "").slice(-10);
+    if (existingStudentIds.has(prof.id) || (cleanP && existingPhones.has(cleanP))) continue;
+
+    result.push({
+      id: `prof-${prof.id}`,
+      studentId: prof.id,
+      fullName: prof.full_name || prof.email?.split("@")[0] || "Registered Student",
+      whatsappNum: prof.whatsapp_num || "",
+      district: prof.district || "Kerala",
+      courseChoice: "Adaviyya (General Admission)",
+      courseId: "adaviyya",
+      registrationDate: prof.created_at || new Date().toISOString(),
+      paymentStatus: "PENDING",
+      amount: 500,
+      upiTxId: "Pending Payment",
+      paymentId: undefined,
+    });
+    existingStudentIds.add(prof.id);
+    if (cleanP) existingPhones.add(cleanP);
+  }
+
+  // Sort newest first
+  result.sort((a, b) => new Date(b.registrationDate).getTime() - new Date(a.registrationDate).getTime());
+
+  const finalError = errorMessages.length > 0 ? errorMessages.join(" | ") : null;
+  lastUnifiedFetchError = finalError;
+
+  return {
+    data: result,
+    error: finalError,
+  };
+}
+
+export async function fetchUnifiedRegistrations(): Promise<UnifiedStudentRegistration[]> {
+  const res = await fetchUnifiedRegistrationsDetailed();
+  return res.data;
 }
 
 /**
