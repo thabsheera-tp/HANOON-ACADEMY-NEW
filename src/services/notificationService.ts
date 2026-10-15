@@ -45,10 +45,34 @@ export const INITIAL_NOTIFICATIONS: AppNotification[] = [
 ];
 
 /**
+ * Helper to check if the current user session is an enrolled student or authorized staff/admin.
+ * Un-enrolled visitors and students prior to enrollment are blocked from receiving notifications.
+ */
+export function isUserEnrolledOrStaff(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const isEnrolled = localStorage.getItem("hanoon_student_enrolled") === "true";
+    const isAdmin = localStorage.getItem("hanoon_admin_authenticated") === "true";
+    const role = localStorage.getItem("hanoon_portal_role");
+    const isStaff = role === "admin" || role === "teacher" || role === "staff";
+    return isEnrolled || isAdmin || isStaff;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Retrieves all in-app notifications from local storage.
+ * Restricted: Students cannot access notifications prior to complete enrollment.
  */
 export function getNotifications(): AppNotification[] {
   if (typeof window === "undefined") return INITIAL_NOTIFICATIONS;
+
+  // Strict restriction: Notifications are NOT available for students before enrolling
+  if (!isUserEnrolledOrStaff()) {
+    return [];
+  }
+
   try {
     const raw = localStorage.getItem(STORAGE_KEY_NOTIFICATIONS);
     if (raw) {
@@ -102,6 +126,8 @@ export async function requestBrowserNotificationPermission(): Promise<Notificati
  */
 export function triggerBrowserPush(title: string, options?: NotificationOptions): boolean {
   if (typeof window === "undefined" || !("Notification" in window)) return false;
+  // Never fire browser push notifications for students before enrolling
+  if (!isUserEnrolledOrStaff()) return false;
   try {
     if (Notification.permission === "granted") {
       new Notification(title, {

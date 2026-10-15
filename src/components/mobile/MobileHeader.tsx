@@ -51,16 +51,26 @@ export default function MobileHeader({
   const [hasNewAlertAnimation, setHasNewAlertAnimation] = useState(false);
 
   useEffect(() => {
+    // Notifications should NOT be available or listened to before student enrolls and is approved
+    if (!isApproved) {
+      setNotifications([]);
+      setIsNotifDrawerOpen(false);
+      return;
+    }
+
     setNotifications(getNotifications());
 
     const updateNotifs = () => {
+      if (!isApproved) return;
       setNotifications(getNotifications());
       setHasNewAlertAnimation(true);
       setTimeout(() => setHasNewAlertAnimation(false), 3000);
     };
 
     const handleOpenDrawer = () => {
-      setIsNotifDrawerOpen(true);
+      if (isApproved) {
+        setIsNotifDrawerOpen(true);
+      }
     };
 
     window.addEventListener("hanoon_notifications_updated", updateNotifs);
@@ -71,7 +81,7 @@ export default function MobileHeader({
       window.removeEventListener("hanoon_new_notification", updateNotifs);
       window.removeEventListener("hanoon_open_notifications_drawer", handleOpenDrawer);
     };
-  }, []);
+  }, [isApproved]);
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
@@ -134,26 +144,28 @@ export default function MobileHeader({
           </button>
         </div>
 
-        {/* Right Header Element: Notifications Bell + Profile Avatar / Help */}
+        {/* Right Header Element: Notifications Bell (Enrolled Students Only) + Profile Avatar / Help */}
         <div className="flex items-center gap-1.5">
-          {/* Notifications Bell */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setIsNotifDrawerOpen(!isNotifDrawerOpen)}
-              title="Notifications"
-              className={`p-2 rounded-xl text-slate-700 hover:bg-purple-50 active:scale-95 transition-all relative cursor-pointer ${
-                hasNewAlertAnimation ? "animate-bounce" : ""
-              }`}
-            >
-              <Bell className="w-4 h-4 text-purple-700" />
-              {unreadCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-rose-600 text-white font-black text-[9.5px] flex items-center justify-center shadow-xs">
-                  {unreadCount}
-                </span>
-              )}
-            </button>
-          </div>
+          {/* Notifications Bell: Strictly available ONLY for enrolled & approved students */}
+          {isApproved && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsNotifDrawerOpen(!isNotifDrawerOpen)}
+                title="Notifications"
+                className={`p-2 rounded-xl text-slate-700 hover:bg-purple-50 active:scale-95 transition-all relative cursor-pointer ${
+                  hasNewAlertAnimation ? "animate-bounce" : ""
+                }`}
+              >
+                <Bell className="w-4 h-4 text-purple-700" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-rose-600 text-white font-black text-[9.5px] flex items-center justify-center shadow-xs">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+            </div>
+          )}
 
           {isApproved ? (
             <div className="flex items-center relative">
@@ -232,8 +244,8 @@ export default function MobileHeader({
         </div>
       </div>
 
-      {/* Notifications Drawer Modal */}
-      {isNotifDrawerOpen && (
+      {/* Notifications Drawer Modal - STRICTLY RESTRICTED TO ENROLLED STUDENTS */}
+      {isApproved && isNotifDrawerOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
           <div className="bg-white rounded-3xl shadow-2xl border border-purple-100 max-w-sm w-full max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             {/* Drawer Header */}

@@ -384,6 +384,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
           });
           if (typeof window !== "undefined") {
             localStorage.removeItem("hanoon_pending_payment");
+            localStorage.setItem("hanoon_student_enrolled", "true");
           }
         } else if (
           activePayment &&
@@ -411,6 +412,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
     const handleLogout = () => {
       if (typeof window !== "undefined") {
         localStorage.removeItem("hanoon_pending_payment");
+        localStorage.removeItem("hanoon_student_enrolled");
       }
       setUserProfile({ name: "", phone: "", place: "" });
       setPaymentDetails({
@@ -451,6 +453,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
               ) {
                 if (typeof window !== "undefined") {
                   localStorage.removeItem("hanoon_pending_payment");
+                  localStorage.setItem("hanoon_student_enrolled", "true");
                 }
                 setPaymentDetails((prev) => ({
                   ...prev,
@@ -473,6 +476,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
         if (status === "APPROVED" || status === "verified") {
           if (typeof window !== "undefined") {
             localStorage.removeItem("hanoon_pending_payment");
+            localStorage.setItem("hanoon_student_enrolled", "true");
           }
           setPaymentDetails((prev) => ({
             ...prev,
