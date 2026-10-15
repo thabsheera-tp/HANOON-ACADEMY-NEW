@@ -27,68 +27,27 @@ export interface Announcement {
 
 const STORAGE_KEY_ANNOUNCEMENTS = "hanoon_academy_announcements_v1";
 
-export const INITIAL_ANNOUNCEMENTS: Announcement[] = [
-  {
-    id: "ann-init-1",
-    title: "🌴 Holiday Tomorrow - Special Milad Observance",
-    content:
-      "All regular curriculum live lectures will remain suspended tomorrow in observance of Milad-un-Nabi. Evening Special Burdah Majlis will convene at 8:00 PM IST via Google Meet.",
-    category: "HOLIDAY",
-    isPinned: true,
-    targetCourseId: "ALL",
-    authorName: "Office of the Principal",
-    authorRole: "Administration",
-    createdAt: new Date(Date.now() - 3600000 * 3).toISOString(), // 3 hours ago
-    actionLabel: "View Burdah Hub",
-    actionLink: "#special-class",
-  },
-  {
-    id: "ann-init-2",
-    title: "📝 Mid-Term Exam Next Week - Syllabus & Timetable",
-    content:
-      "Semester evaluations for Adaviyya Stream (Hadith & Fiqh modules) will commence next Wednesday. Please review uploaded PDF chapters and attend revision sessions.",
-    category: "EXAM",
-    isPinned: true,
-    targetCourseId: "adaviyya",
-    targetCourseName: "Adaviyya (Women Sharia)",
-    authorName: "Academic Council",
-    authorRole: "Examination Cell",
-    createdAt: new Date(Date.now() - 3600000 * 18).toISOString(), // 18 hours ago
-    actionLabel: "Study Materials",
-    actionLink: "#materials",
-  },
-  {
-    id: "ann-init-3",
-    title: "📢 Chapter 3 PDF Notes Available for Download",
-    content:
-      "Usthad Dr. Faisal has uploaded the comprehensive explanation notes for Umdat al-Ahkam (Kitab at-Taharah). Download the PDF directly from your subject classroom hub.",
-    category: "CIRCULAR",
-    isPinned: false,
-    targetCourseId: "adaviyya",
-    targetCourseName: "Adaviyya",
-    authorName: "Usthad Dr. Faisal Al-Hanoon",
-    authorRole: "Lead Faculty",
-    createdAt: new Date(Date.now() - 3600000 * 48).toISOString(), // 2 days ago
-  },
-];
+const DUMMY_ANNOUNCEMENT_IDS = new Set(["ann-init-1", "ann-init-2", "ann-init-3"]);
+
+export const INITIAL_ANNOUNCEMENTS: Announcement[] = [];
 
 /**
  * Retrieves all announcements from local storage or defaults.
  */
 export function getAnnouncements(): Announcement[] {
-  if (typeof window === "undefined") return INITIAL_ANNOUNCEMENTS;
+  if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY_ANNOUNCEMENTS);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        return parsed.filter((a: any) => a && !DUMMY_ANNOUNCEMENT_IDS.has(a.id));
       }
     }
   } catch (e) {
     console.warn("Failed to load announcements from storage:", e);
   }
-  return INITIAL_ANNOUNCEMENTS;
+  return [];
 }
 
 /**

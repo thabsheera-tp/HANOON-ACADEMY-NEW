@@ -30,19 +30,7 @@ export interface AppNotification {
 
 const STORAGE_KEY_NOTIFICATIONS = "hanoon_app_notifications_v1";
 
-export const INITIAL_NOTIFICATIONS: AppNotification[] = [
-  {
-    id: "notif-init-1",
-    title: "Welcome to Hanoon Academy",
-    message: "Explore your course curriculum, join scheduled live classes, and access chapter study notes directly.",
-    type: "BROADCAST",
-    targetRole: "all",
-    timestamp: new Date().toISOString(),
-    isRead: false,
-    senderName: "Administration",
-    priority: "normal",
-  },
-];
+export const INITIAL_NOTIFICATIONS: AppNotification[] = [];
 
 /**
  * Helper to check if the current user session is an enrolled student or authorized staff/admin.

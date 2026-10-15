@@ -37,6 +37,7 @@ import ProgressScoreBarChart from "@/components/charts/ProgressScoreBarChart";
 import { getAppSettings, formatWhatsAppLink } from "@/services/settingsService";
 import { getNotifications, markAllNotificationsAsRead, AppNotification } from "@/services/notificationService";
 import StudentNoticeBoard from "@/components/mobile/StudentNoticeBoard";
+import { getLocalAttendanceRecords } from "@/services/attendanceService";
 
 interface ScreenDashboardProps {
   userProfile: UserProfile;
@@ -376,45 +377,34 @@ export default function ScreenDashboard({
     }
   };
 
-  const progressData = React.useMemo(() => {
-    const courseId = (selectedCourse.id || "").toLowerCase();
-    if (courseId === "fashion-designing") {
-      return [
-        { module: "Drafting", score: 90 },
-        { module: "Textiles", score: 85 },
-        { module: "Stitching", score: 92 },
-        { module: "Embellish", score: 78 },
-      ];
-    } else if (courseId === "home-tuition") {
-      return [
-        { module: "Maths", score: 86 },
-        { module: "Science", score: 91 },
-        { module: "English", score: 84 },
-        { module: "Malayalam", score: 88 },
-      ];
-    } else if (courseId === "ash-shamail") {
-      return [
-        { module: "Ethics", score: 88 },
-        { module: "Khasais", score: 85 },
-        { module: "Adab", score: 90 },
-        { module: "Sunnah", score: 82 },
-      ];
-    } else {
-      // Adaviyya or default
-      return [
-        { module: "Seerah", score: 88 },
-        { module: "Haddad", score: 92 },
-        { module: "Fiqh", score: 85 },
-        { module: "Hadith", score: 80 },
-      ];
-    }
-  }, [selectedCourse.id]);
-
   const attendanceStats = React.useMemo(() => {
-    return isApproved
-      ? { present: 22, leave: 2, absent: 1 }
-      : { present: 6, leave: 1, absent: 1 };
-  }, [isApproved]);
+    try {
+      const records = getLocalAttendanceRecords();
+      const phoneDigits = (userProfile.phone || "").replace(/\D/g, "");
+      const sName = studentName.toLowerCase();
+      const studentRecords = records.filter((r) => {
+        if (!r) return false;
+        const rPhone = (r.studentPhone || "").replace(/\D/g, "");
+        const rName = (r.studentName || "").trim().toLowerCase();
+        return (
+          (phoneDigits && rPhone && rPhone === phoneDigits) ||
+          (rName && rName === sName) ||
+          (r.studentId && r.studentId === userProfile.id)
+        );
+      });
+      const present = studentRecords.filter((r) => r.status === "PRESENT").length;
+      const leave = studentRecords.filter((r) => r.status === "EXCUSED" || r.status === "LATE").length;
+      const absent = studentRecords.filter((r) => r.status === "ABSENT").length;
+      return { present, leave, absent };
+    } catch {
+      return { present: 0, leave: 0, absent: 0 };
+    }
+  }, [userProfile.phone, userProfile.id, studentName]);
+
+  // Assessment scores: No hardcoded dummy scores. Assessment scores appear once evaluations are recorded.
+  const progressData: { module: string; score: number }[] = React.useMemo(() => {
+    return [];
+  }, []);
 
   return (
     <div className="w-full max-w-md mx-auto overflow-x-hidden px-4 py-3 flex-1 flex flex-col justify-start space-y-4 select-none font-['Plus_Jakarta_Sans'] bg-purple-50/30 text-slate-900">

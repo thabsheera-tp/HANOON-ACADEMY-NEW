@@ -28,66 +28,32 @@ export interface AttendanceSummary {
 
 const LOCAL_ATTENDANCE_KEY = "hanoon_attendance_records_v1";
 
-const INITIAL_DEMO_RECORDS: AttendanceRecord[] = [
-  {
-    id: "att-001",
-    studentId: "std-demo-1",
-    studentName: "Muhammed Rashid",
-    studentPhone: "919846011223",
-    courseId: "adaviyya",
-    subjectId: "seerah",
-    date: new Date().toISOString().split("T")[0],
-    status: "PRESENT",
-    markedAt: new Date().toISOString(),
-  },
-  {
-    id: "att-002",
-    studentId: "std-demo-2",
-    studentName: "Fathima Nihala",
-    studentPhone: "919745123456",
-    courseId: "adaviyya",
-    subjectId: "seerah",
-    date: new Date().toISOString().split("T")[0],
-    status: "PRESENT",
-    markedAt: new Date().toISOString(),
-  },
-  {
-    id: "att-003",
-    studentId: "std-demo-3",
-    studentName: "Aysha Shamna",
-    studentPhone: "919447334455",
-    courseId: "adaviyya",
-    subjectId: "seerah",
-    date: new Date().toISOString().split("T")[0],
-    status: "LATE",
-    notes: "Joined 15 mins late due to prayer",
-    markedAt: new Date().toISOString(),
-  },
-  {
-    id: "att-004",
-    studentId: "std-demo-4",
-    studentName: "Zainul Abideen",
-    studentPhone: "919847998877",
-    courseId: "adaviyya",
-    subjectId: "seerah",
-    date: new Date().toISOString().split("T")[0],
-    status: "PRESENT",
-    markedAt: new Date().toISOString(),
-  },
-];
+const DUMMY_ATTENDANCE_STUDENT_IDS = new Set(["std-demo-1", "std-demo-2", "std-demo-3", "std-demo-4"]);
+const DUMMY_ATTENDANCE_RECORD_IDS = new Set(["att-001", "att-002", "att-003", "att-004"]);
+const DUMMY_STUDENT_NAMES = new Set(["muhammed rashid", "fathima nihala", "aysha shamna", "zainul abideen"]);
 
 export function getLocalAttendanceRecords(): AttendanceRecord[] {
-  if (typeof window === "undefined") return INITIAL_DEMO_RECORDS;
+  if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(LOCAL_ATTENDANCE_KEY);
     if (!raw) {
-      localStorage.setItem(LOCAL_ATTENDANCE_KEY, JSON.stringify(INITIAL_DEMO_RECORDS));
-      return INITIAL_DEMO_RECORDS;
+      return [];
     }
-    return JSON.parse(raw) as AttendanceRecord[];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((r: any) => {
+        if (!r) return false;
+        if (DUMMY_ATTENDANCE_STUDENT_IDS.has(r.studentId)) return false;
+        if (DUMMY_ATTENDANCE_RECORD_IDS.has(r.id)) return false;
+        const name = (r.studentName || "").trim().toLowerCase();
+        if (DUMMY_STUDENT_NAMES.has(name)) return false;
+        return true;
+      });
+    }
   } catch {
-    return INITIAL_DEMO_RECORDS;
+    return [];
   }
+  return [];
 }
 
 export function saveLocalAttendanceRecords(records: AttendanceRecord[]): void {

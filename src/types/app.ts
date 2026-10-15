@@ -1,8 +1,10 @@
 export interface UserProfile {
+  id?: string;
   name: string;
   phone: string;
   place: string;
   age?: string | number;
+  email?: string;
 }
 
 export interface SelectedCourse {
