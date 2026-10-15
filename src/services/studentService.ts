@@ -452,6 +452,17 @@ async function executeRegisterStudentAndPayment(
             },
           })
         );
+
+        // Instant cross-tab broadcast
+        try {
+          const bc = new BroadcastChannel("hanoon_registration_channel");
+          bc.postMessage({ type: "NEW_REGISTRATION", student: studentData, payment: paymentData });
+          bc.close();
+        } catch {}
+
+        try {
+          localStorage.setItem("hanoon_last_registration_ping", Date.now().toString());
+        } catch {}
       }
 
       return {
@@ -1248,11 +1259,13 @@ export async function updateStudentPaymentStatusDirect(params: {
  */
 export function subscribeToStudentRegistrations(onChange: () => void): () => void {
   let channel: any = null;
+  let broadcastChannel: any = null;
 
   if (isSupabaseConfigured && supabase) {
     try {
+      const channelId = `admin_registrations_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       channel = supabase
-        .channel("admin_student_registrations_realtime")
+        .channel(channelId)
         .on(
           "postgres_changes",
           { event: "*", schema: "public", table: "students" },
@@ -1261,6 +1274,11 @@ export function subscribeToStudentRegistrations(onChange: () => void): () => voi
         .on(
           "postgres_changes",
           { event: "*", schema: "public", table: "payments" },
+          () => onChange()
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "profiles" },
           () => onChange()
         )
         .subscribe();
@@ -1274,11 +1292,28 @@ export function subscribeToStudentRegistrations(onChange: () => void): () => voi
   if (typeof window !== "undefined") {
     window.addEventListener("hanoon_payment_event", handleWindowUpdate);
     window.addEventListener("hanoon_students_updated", handleWindowUpdate);
+    window.addEventListener("storage", (e) => {
+      if (e.key?.includes("payment") || e.key?.includes("student") || e.key?.includes("hanoon")) {
+        onChange();
+      }
+    });
+
+    try {
+      broadcastChannel = new BroadcastChannel("hanoon_registration_channel");
+      broadcastChannel.onmessage = () => {
+        onChange();
+      };
+    } catch {}
   }
 
   return () => {
     if (channel && supabase) {
       supabase.removeChannel(channel);
+    }
+    if (broadcastChannel) {
+      try {
+        broadcastChannel.close();
+      } catch {}
     }
     if (typeof window !== "undefined") {
       window.removeEventListener("hanoon_payment_event", handleWindowUpdate);

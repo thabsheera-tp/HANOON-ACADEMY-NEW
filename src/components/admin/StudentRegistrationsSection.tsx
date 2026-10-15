@@ -80,21 +80,32 @@ export default function StudentRegistrationsSection({
   const debounceTimerRef = React.useRef<NodeJS.Timeout | null>(null);
   const inFlightRef = React.useRef(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [newRegistrationAlert, setNewRegistrationAlert] = useState<string | null>(null);
+  const prevCountRef = React.useRef<number>(0);
 
-  // Load Data
-  const loadData = useCallback(async () => {
+  // Load Data with silent background refresh support
+  const loadData = useCallback(async (arg?: boolean | any) => {
+    const silent = arg === true;
     if (inFlightRef.current) return;
     inFlightRef.current = true;
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const { data, error } = await fetchUnifiedRegistrationsDetailed();
+      if (prevCountRef.current > 0 && data.length > prevCountRef.current) {
+        const latest = data[0];
+        setNewRegistrationAlert(`🔔 New Registration: ${latest?.fullName || "Student"} just submitted details for ${latest?.courseChoice || "a course"}!`);
+        setTimeout(() => setNewRegistrationAlert(null), 6000);
+      }
+      prevCountRef.current = data.length;
       setRegistrations(data);
       setFetchError(error);
     } catch (err: any) {
       console.warn("Failed to load student registrations:", err);
-      setFetchError(err?.message || "Failed to load student registrations from Supabase.");
+      if (!silent) {
+        setFetchError(err?.message || "Failed to load student registrations from Supabase.");
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
       inFlightRef.current = false;
     }
   }, []);
@@ -102,18 +113,41 @@ export default function StudentRegistrationsSection({
   const debouncedLoadData = useCallback(() => {
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     debounceTimerRef.current = setTimeout(() => {
-      loadData();
-    }, 250);
+      loadData(true);
+    }, 150);
   }, [loadData]);
 
   useEffect(() => {
-    loadData();
+    // 1. Initial complete load
+    loadData(false);
+
+    // 2. Real-time Multi-Channel Listener (Supabase Realtime + BroadcastChannel + window events)
     const unsubscribe = subscribeToStudentRegistrations(() => {
       debouncedLoadData();
     });
+
+    // 3. Fast Active Heartbeat Polling: Refresh every 3.5 seconds silently
+    const pollInterval = setInterval(() => {
+      loadData(true);
+    }, 3500);
+
+    // 4. Instant refresh when admin tab gains focus or user switches back to page
+    const handleFocus = () => loadData(true);
+    const handleVisibility = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        loadData(true);
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+
     return () => {
       unsubscribe();
+      clearInterval(pollInterval);
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [loadData, debouncedLoadData]);
 
@@ -397,6 +431,25 @@ export default function StudentRegistrationsSection({
 
   return (
     <div className="space-y-5 sm:space-y-6 w-full animate-fade-in font-['Plus_Jakarta_Sans']">
+      {/* Realtime Live Incoming Registration Notification Banner */}
+      {newRegistrationAlert && (
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-700 text-white flex items-center justify-between gap-3 shadow-lg animate-bounce">
+          <div className="flex items-center gap-2.5">
+            <span className="p-2 rounded-xl bg-white/20">
+              <CheckCircle2 className="w-5 h-5 text-white" />
+            </span>
+            <span className="text-xs font-black tracking-wide">{newRegistrationAlert}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setNewRegistrationAlert(null)}
+            className="p-1 rounded-lg hover:bg-white/20 text-white text-xs font-black cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Supabase Connection Status Banner */}
       {!isSupabaseConfigured ? (
         <div className="p-4 rounded-2xl bg-amber-50 border-2 border-amber-300 text-amber-950 flex items-start gap-3 shadow-xs">
@@ -796,7 +849,7 @@ export default function StudentRegistrationsSection({
 
               <button
                 type="button"
-                onClick={loadData}
+                onClick={() => loadData(false)}
                 disabled={loading || isPurging}
                 className="p-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-100 transition-all cursor-pointer disabled:opacity-50"
                 title="Refresh Data from Supabase"
