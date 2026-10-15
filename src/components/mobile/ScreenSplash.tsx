@@ -14,14 +14,23 @@ interface ScreenSplashProps {
 export default function ScreenSplash({
   onGetStarted,
   onExploreCourses,
+  onStaffLogin,
 }: ScreenSplashProps) {
   const router = useRouter();
 
-  const handleExplore = () => {
-    if (onExploreCourses) {
-      onExploreCourses();
-    } else if (onGetStarted) {
+  const handleStart = () => {
+    if (onGetStarted) {
       onGetStarted();
+    } else if (onExploreCourses) {
+      onExploreCourses();
+    }
+  };
+
+  const handleStaff = () => {
+    if (onStaffLogin) {
+      onStaffLogin();
+    } else {
+      router.push("/login?portal=staff");
     }
   };
 
@@ -39,25 +48,31 @@ export default function ScreenSplash({
         </div>
 
         {/* Heading: Hanoon Academy */}
-        <div className="space-y-1.5">
+        <div>
           <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900">
             Hanoon <span className="text-purple-600">Academy</span>
           </h1>
-          <p className="text-xs font-semibold text-slate-500 max-w-xs mx-auto">
-            വിജ്ഞാന വെളിച്ചം • Authentic Islamic Education & Applied Skills
-          </p>
         </div>
       </div>
 
-      {/* Bottom Actions Section: ONLY Explore Courses Button */}
-      <div className="shrink-0 w-full pb-4 sm:pb-6">
+      {/* Bottom Actions Section: Get Started & Staff Login */}
+      <div className="shrink-0 w-full pb-4 sm:pb-6 space-y-3">
         <button
           type="button"
-          onClick={handleExplore}
+          onClick={handleStart}
           className="w-full py-4 px-6 rounded-2xl font-bold text-sm text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-md shadow-purple-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
         >
-          <span>Explore Courses</span>
+          <span>Get Started</span>
           <ArrowRight className="w-4 h-4" />
+        </button>
+
+        <button
+          type="button"
+          onClick={handleStaff}
+          className="w-full py-3.5 px-6 rounded-2xl font-bold text-xs text-purple-700 bg-purple-50 hover:bg-purple-100 active:scale-[0.98] border border-purple-200/80 transition-all flex items-center justify-center gap-2 cursor-pointer"
+        >
+          <Lock className="w-3.5 h-3.5 text-purple-600" />
+          <span>Staff Login</span>
         </button>
       </div>
     </div>
