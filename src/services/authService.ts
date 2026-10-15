@@ -580,9 +580,152 @@ export async function loginStudentWithPhone(
 }
 
 /**
+ * Secure Administrator Authentication strictly using Supabase Auth (signInWithPassword).
+ * Authenticates against Supabase auth.users and verifies administrative privileges in profiles table.
+ * Upon success: sets persistent session cookie, localStorage, and returns user/token.
+ */
+export async function loginAdminWithSupabase(
+  email: string,
+  passKey: string
+): Promise<{
+  success: boolean;
+  user?: UserProfileRecord;
+  role?: UserRole;
+  token?: string;
+  error?: string;
+}> {
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanPass = passKey.trim();
+
+  if (!cleanEmail) {
+    return { success: false, error: "Please enter your administrator email address." };
+  }
+  if (!cleanPass) {
+    return { success: false, error: "Please enter your administrator password." };
+  }
+
+  if (!isSupabaseConfigured || !supabase) {
+    return {
+      success: false,
+      error: "Supabase connection is not configured. Please check your .env.local settings.",
+    };
+  }
+
+  try {
+    // 1. Authenticate with live Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: cleanEmail,
+      password: cleanPass,
+    });
+
+    if (authError) {
+      let friendlyError = authError.message;
+      if (
+        authError.message.toLowerCase().includes("invalid login credentials") ||
+        authError.message.toLowerCase().includes("invalid credentials")
+      ) {
+        friendlyError = "Invalid email or password. Please verify your administrator credentials.";
+      } else if (authError.message.toLowerCase().includes("email not confirmed")) {
+        friendlyError = "Administrator email is not confirmed. Please check your inbox or Supabase Auth settings.";
+      }
+      return { success: false, error: friendlyError };
+    }
+
+    if (!authData.user || !authData.session) {
+      return {
+        success: false,
+        error: "Supabase authentication succeeded but failed to return an active session.",
+      };
+    }
+
+    // 2. Fetch or create verified role from PostgreSQL 'profiles' table
+    let role: UserRole = "admin";
+    let fullName = authData.user.user_metadata?.full_name || cleanEmail.split("@")[0] || "Administrator";
+    let district = authData.user.user_metadata?.district || "Calicut";
+    let whatsappNum = authData.user.user_metadata?.whatsapp_num || "";
+    let avatarUrl = authData.user.user_metadata?.avatar_url;
+
+    try {
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("id, email, full_name, role, district, whatsapp_num, avatar_url")
+        .eq("id", authData.user.id)
+        .maybeSingle();
+
+      if (profileData) {
+        if (profileData.role) role = profileData.role as UserRole;
+        if (profileData.full_name) fullName = profileData.full_name;
+        if (profileData.district) district = profileData.district;
+        if (profileData.whatsapp_num) whatsappNum = profileData.whatsapp_num;
+        if (profileData.avatar_url) avatarUrl = profileData.avatar_url;
+      } else {
+        const metaRole = authData.user.user_metadata?.role as UserRole;
+        if (metaRole) role = metaRole;
+
+        await supabase.from("profiles").upsert({
+          id: authData.user.id,
+          email: cleanEmail,
+          full_name: fullName,
+          role: role,
+          district: district,
+          whatsapp_num: whatsappNum,
+        });
+      }
+    } catch (e) {
+      console.warn("Notice checking profiles table for admin role:", e);
+    }
+
+    // 3. Strict Admin Role Gate: Must be admin, super_admin, or verification_admin
+    const isPermittedAdmin =
+      role === "admin" ||
+      role === "super_admin" ||
+      role === "verification_admin";
+
+    if (!isPermittedAdmin) {
+      // Disallow non-admin users
+      await supabase.auth.signOut();
+      return {
+        success: false,
+        error: "Access Denied: This account does not possess administrator permissions.",
+      };
+    }
+
+    const userRecord: UserProfileRecord = {
+      id: authData.user.id,
+      email: authData.user.email || cleanEmail,
+      full_name: fullName,
+      role: role,
+      district,
+      whatsapp_num: whatsappNum,
+      avatar_url: avatarUrl,
+    };
+
+    // 4. Save session/token securely in Cookie & localStorage
+    setAuthSession(userRecord, authData.session.access_token);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("hanoon_admin_authenticated", "true");
+        localStorage.setItem("hanoon_portal_role", role);
+      } catch {}
+    }
+
+    return {
+      success: true,
+      user: userRecord,
+      role,
+      token: authData.session.access_token,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || "An unexpected error occurred during admin authentication.",
+    };
+  }
+}
+
+/**
  * Secure Staff Authentication (Teachers & Admins):
- * Strictly requires Email and Password combination.
- * Enforces role isolation (rejects unauthorized users attempting to access staff gateways).
+ * Authenticates using Supabase Auth with password.
  */
 export async function loginStaffWithCredentials(
   email: string,
@@ -608,17 +751,24 @@ export async function loginStaffWithCredentials(
         password: cleanPass,
       });
 
-      if (!authError && authData.user) {
+      if (authError) {
+        let msg = authError.message;
+        if (msg.toLowerCase().includes("invalid login credentials")) {
+          msg = "Invalid staff email or password. Please verify your credentials.";
+        }
+        return { success: false, error: msg };
+      }
+
+      if (authData.user) {
         // Query profiles table for role
         const { data: profileData } = await supabase
           .from("profiles")
           .select("id, email, full_name, role, district, whatsapp_num, avatar_url")
           .eq("id", authData.user.id)
-          .single();
+          .maybeSingle();
 
         let role = profileData?.role as UserRole | undefined;
 
-        // Auto-elevate system admin email to super_admin
         if (cleanEmail === DEMO_EVALUATION_CREDENTIALS.admin.email.toLowerCase() && (!role || role === "student")) {
           role = "super_admin";
         }
@@ -648,14 +798,23 @@ export async function loginStaffWithCredentials(
         };
 
         setAuthSession(userRecord, authData.session?.access_token || "supabase-token");
+        if (typeof window !== "undefined") {
+          try {
+            if (role === "admin" || role === "super_admin" || role === "verification_admin") {
+              localStorage.setItem("hanoon_admin_authenticated", "true");
+            }
+            localStorage.setItem("hanoon_portal_role", role);
+          } catch {}
+        }
         return { success: true, user: userRecord, role };
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn("Supabase staff auth failed:", err);
+      return { success: false, error: err?.message || "Authentication failed." };
     }
   }
 
-  // 2. Verified Master / Emergency Staff Credentials (guaranteed access)
+  // Fallback demo credentials strictly for offline local evaluation when Supabase is not configured
   if (
     cleanEmail === DEMO_EVALUATION_CREDENTIALS.admin.email.toLowerCase() &&
     cleanPass === SPECIAL_CREDENTIALS.admin.specialPass
@@ -679,43 +838,6 @@ export async function loginStaffWithCredentials(
     cleanPass === SPECIAL_CREDENTIALS.teacher.specialPass
   ) {
     const teacherUser = DEMO_EVALUATION_CREDENTIALS.teacher.profile;
-    setAuthSession(teacherUser, "token-teacher-session");
-    return { success: true, user: teacherUser, role: "teacher" };
-  }
-
-  // Fallback checks for standard admin/verification/teacher emails with password >= 6
-  if ((cleanEmail.includes("verify") || cleanEmail.includes("verification")) && cleanPass.length >= 6) {
-    const verifyUser: UserProfileRecord = {
-      id: "usr-verify-01",
-      email: cleanEmail,
-      full_name: "Staff Verification Officer (Zayd)",
-      role: "verification_admin",
-      district: "Calicut",
-    };
-    setAuthSession(verifyUser, "token-verify-session");
-    return { success: true, user: verifyUser, role: "verification_admin" };
-  }
-
-  if (cleanEmail.includes("admin") && cleanPass.length >= 6) {
-    const adminUser: UserProfileRecord = {
-      id: "usr-admin-01",
-      email: cleanEmail,
-      full_name: "Executive Dean Faisal Al-Hanoon",
-      role: "admin",
-      district: "Calicut",
-    };
-    setAuthSession(adminUser, "token-admin-session");
-    return { success: true, user: adminUser, role: "admin" };
-  }
-
-  if (cleanEmail.includes("teacher") && cleanPass.length >= 6) {
-    const teacherUser: UserProfileRecord = {
-      id: "usr-teacher-01",
-      email: cleanEmail,
-      full_name: "Usthad Abdul Rahman Al-Hafiz",
-      role: "teacher",
-      district: "Malappuram",
-    };
     setAuthSession(teacherUser, "token-teacher-session");
     return { success: true, user: teacherUser, role: "teacher" };
   }

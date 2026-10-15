@@ -4,6 +4,11 @@ import type { NextRequest } from "next/server";
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // 1. Allow Admin Login page without redirection loop
+  if (pathname === "/admin/login") {
+    return NextResponse.next();
+  }
+
   const isAdminRoute = pathname.startsWith("/admin");
   const isTeacherRoute = pathname.startsWith("/teacher");
 
@@ -12,11 +17,16 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-
   const sessionCookie = request.cookies.get("hanoon_auth_session")?.value;
 
-  // 1. Unauthenticated users -> Redirect to /login with staff portal active
+  // 2. Unauthenticated users -> Redirect to /admin/login for admin, /login for teacher
   if (!sessionCookie) {
+    if (isAdminRoute) {
+      const loginUrl = new URL("/admin/login", request.url);
+      loginUrl.searchParams.set("redirect", pathname);
+      loginUrl.searchParams.set("reason", "unauthenticated");
+      return NextResponse.redirect(loginUrl);
+    }
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("portal", "staff");
     loginUrl.searchParams.set("redirect", pathname);
@@ -31,24 +41,29 @@ export function proxy(request: NextRequest) {
 
     // Check session expiry
     if (expiresAt && expiresAt < Date.now()) {
+      if (isAdminRoute) {
+        const loginUrl = new URL("/admin/login", request.url);
+        loginUrl.searchParams.set("reason", "expired");
+        return NextResponse.redirect(loginUrl);
+      }
       const loginUrl = new URL("/login", request.url);
       loginUrl.searchParams.set("portal", "staff");
       loginUrl.searchParams.set("reason", "expired");
       return NextResponse.redirect(loginUrl);
     }
 
-    // 2. Protect /admin route: accessible by Super Admin ('admin', 'super_admin') AND Verification Staff ('verification_admin')
+    // 3. Protect /admin route: accessible by Super Admin ('admin', 'super_admin') AND Verification Staff ('verification_admin')
     if (isAdminRoute) {
       const isAllowedAdmin = role === "admin" || role === "super_admin" || role === "verification_admin";
       if (!isAllowedAdmin) {
         if (role === "teacher") {
           return NextResponse.redirect(new URL("/teacher", request.url));
         }
-        return NextResponse.redirect(new URL("/login?portal=staff&error=admin_only", request.url));
+        return NextResponse.redirect(new URL("/admin/login?error=admin_only", request.url));
       }
     }
 
-    // 3. Protect /teacher route: accessible by role === 'teacher' or 'admin' or 'super_admin'
+    // 4. Protect /teacher route: accessible by role === 'teacher' or 'admin' or 'super_admin'
     if (isTeacherRoute) {
       if (role !== "teacher" && role !== "admin" && role !== "super_admin") {
         return NextResponse.redirect(new URL("/login?portal=staff&error=teacher_only", request.url));
@@ -57,6 +72,11 @@ export function proxy(request: NextRequest) {
 
     return NextResponse.next();
   } catch {
+    if (isAdminRoute) {
+      const loginUrl = new URL("/admin/login", request.url);
+      loginUrl.searchParams.set("reason", "invalid_session");
+      return NextResponse.redirect(loginUrl);
+    }
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("portal", "staff");
     loginUrl.searchParams.set("reason", "invalid_session");

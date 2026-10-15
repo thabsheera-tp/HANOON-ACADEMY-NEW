@@ -424,22 +424,79 @@ export default function AdminDashboardPage() {
   };
 
   useEffect(() => {
-    const session = getCurrentSession();
-    const isAuthorized =
-      session?.user?.role === "admin" ||
-      session?.user?.role === "super_admin" ||
-      session?.user?.role === "verification_admin";
+    let isMounted = true;
 
-    if (!session || !session.user || !isAuthorized) {
-      router.replace("/login?error=admin_only");
-      return;
-    }
-    setCurrentUser(session.user);
-    const isVerif = session.user.role === "verification_admin";
-    if (isVerif) {
-      setActiveTab("overview");
-    }
-    loadAllData(isVerif);
+    const verifyAdminSession = async () => {
+      let activeUser: UserProfileRecord | null = null;
+
+      // 1. Check live Supabase Auth session first
+      const { supabase, isSupabaseConfigured } = await import("@/lib/supabaseClient");
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { data: { session: supaSession }, error } = await supabase.auth.getSession();
+          if (!error && supaSession?.user) {
+            const { data: profile } = await supabase
+              .from("profiles")
+              .select("id, email, full_name, role, district, whatsapp_num, avatar_url")
+              .eq("id", supaSession.user.id)
+              .maybeSingle();
+
+            const role = (profile?.role as any) || (supaSession.user.user_metadata?.role as any) || "admin";
+            const isAuthorized =
+              role === "admin" ||
+              role === "super_admin" ||
+              role === "verification_admin";
+
+            if (!isAuthorized) {
+              if (isMounted) router.replace("/admin/login?error=admin_only");
+              return;
+            }
+
+            activeUser = {
+              id: supaSession.user.id,
+              email: supaSession.user.email || "",
+              full_name: profile?.full_name || supaSession.user.user_metadata?.full_name || "Administrator",
+              role: role,
+              district: profile?.district || "Calicut",
+              whatsapp_num: profile?.whatsapp_num || "",
+            };
+            setAuthSession(activeUser, supaSession.access_token);
+          }
+        } catch (e) {
+          console.warn("Live Supabase admin session check error:", e);
+        }
+      }
+
+      // 2. Fallback to cached cookie / localStorage session
+      if (!activeUser) {
+        const localSession = getCurrentSession();
+        const isAuthorized =
+          localSession?.user?.role === "admin" ||
+          localSession?.user?.role === "super_admin" ||
+          localSession?.user?.role === "verification_admin";
+
+        if (localSession?.user && isAuthorized) {
+          activeUser = localSession.user;
+        }
+      }
+
+      // 3. If unauthenticated, redirect immediately to /admin/login
+      if (!activeUser) {
+        if (isMounted) router.replace("/admin/login");
+        return;
+      }
+
+      if (isMounted) {
+        setCurrentUser(activeUser);
+        const isVerif = activeUser.role === "verification_admin";
+        if (isVerif) {
+          setActiveTab("overview");
+        }
+        loadAllData(isVerif);
+      }
+    };
+
+    verifyAdminSession();
 
     // Supabase Realtime synchronization for pending verification queue
     let realtimeChannel: any = null;
@@ -472,6 +529,7 @@ export default function AdminDashboardPage() {
     window.addEventListener("hanoon_payment_event", handleLocalPayment);
 
     return () => {
+      isMounted = false;
       if (realtimeChannel) {
         import("@/lib/supabaseClient").then(({ supabase }) => {
           if (supabase) supabase.removeChannel(realtimeChannel);
@@ -482,8 +540,16 @@ export default function AdminDashboardPage() {
   }, [loadAllData, router]);
 
   const handleSignOut = async () => {
+    try {
+      const { supabase, isSupabaseConfigured } = await import("@/lib/supabaseClient");
+      if (isSupabaseConfigured && supabase) {
+        await supabase.auth.signOut();
+      }
+    } catch (e) {
+      console.warn("Supabase auth signOut warning:", e);
+    }
     await logoutUser();
-    router.push("/login");
+    router.replace("/admin/login");
   };
 
   // Payment Verification Actions
@@ -684,8 +750,6 @@ export default function AdminDashboardPage() {
     }
   };
 
-  if (!currentUser) return null;
-
   // Filtered Payments Table Data
   const filteredPayments = payments.filter((p) => {
     const matchesSearch =
@@ -704,10 +768,10 @@ export default function AdminDashboardPage() {
 
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-purple-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 font-['Plus_Jakarta_Sans']">
         <div className="flex flex-col items-center gap-3">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600" />
-          <span className="text-xs font-semibold text-slate-500">Verifying administrator authorization...</span>
+          <div className="w-9 h-9 border-3 border-purple-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs font-semibold text-slate-400">Verifying administrator authorization...</span>
         </div>
       </div>
     );
@@ -765,12 +829,12 @@ export default function AdminDashboardPage() {
             <button
               type="button"
               onClick={handleSignOut}
-              title="Sign Out"
-              className="p-1.5 sm:py-1.5 sm:px-3 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs font-bold text-rose-700 flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+              title="Sign Out of Admin Dashboard"
+              className="py-1.5 px-2.5 sm:px-3 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs font-bold text-rose-700 flex items-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-2xs active:scale-95"
               aria-label="Sign Out"
             >
-              <LogOut className="w-3.5 h-3.5 shrink-0" />
-              <span className="hidden sm:inline text-xs font-bold">Logout</span>
+              <LogOut className="w-3.5 h-3.5 shrink-0 text-rose-600" />
+              <span className="text-xs font-extrabold">Logout</span>
             </button>
           </div>
         </div>
