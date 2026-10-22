@@ -182,6 +182,14 @@ export default function AdminDashboardPage() {
   >("overview");
   const [unreadNotifsCount, setUnreadNotifsCount] = useState<number>(0);
 
+  // Data States
+  const [payments, setPayments] = useState<DbPayment[]>([]);
+  const [students, setStudents] = useState<DbStudent[]>([]);
+  const [unifiedRegistrations, setUnifiedRegistrations] = useState<UnifiedStudentRegistration[]>([]);
+  const [payroll, setPayroll] = useState<DbPayroll[]>([]);
+  const [settings, setSettings] = useState<AppSettings>(getAppSettings());
+  const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>(getAuditLogs());
+
   useEffect(() => {
     const updateUnread = () => {
       const count = getNotifications().filter((n) => !n.isRead).length;
@@ -204,14 +212,6 @@ export default function AdminDashboardPage() {
       window.removeEventListener("hanoon_audit_logs_updated", updateAuditLogs);
     };
   }, []);
-
-  // Data States
-  const [payments, setPayments] = useState<DbPayment[]>([]);
-  const [students, setStudents] = useState<DbStudent[]>([]);
-  const [unifiedRegistrations, setUnifiedRegistrations] = useState<UnifiedStudentRegistration[]>([]);
-  const [payroll, setPayroll] = useState<DbPayroll[]>([]);
-  const [settings, setSettings] = useState<AppSettings>(getAppSettings());
-  const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>(getAuditLogs());
 
   // Teacher Oversight States
   const [teacherClasses, setTeacherClasses] = useState<LiveClassSession[]>([]);

@@ -365,7 +365,7 @@ async function executeRegisterStudentAndPayment(
   if (isSupabaseConfigured && supabase) {
     try {
       // Step A: Always resolve or insert real student record in Supabase to get real database UUID
-      let studentData: DbStudent | null = await saveOrUpdateStudentInSupabase({
+      const studentData: DbStudent | null = await saveOrUpdateStudentInSupabase({
         fullName: cleanName,
         whatsappNum: (whatsappNum || "").trim() || cleanPhone,
         district: cleanDistrict,
@@ -1645,7 +1645,7 @@ export async function purgeDuplicateAndDummyRegistrations(
       const validStudentIds = new Set(dedupedStudents.map((s) => s.id));
 
       // Filter and deduplicate payments
-      let cleanPayments = localPaymentsRaw.filter((p) => {
+      const cleanPayments = localPaymentsRaw.filter((p) => {
         if (p.student && isDummy(p.student.full_name, p.student.whatsapp_num)) return false;
         if (includeRejected && p.status === "REJECTED") {
           purgedPaymentsCount++;

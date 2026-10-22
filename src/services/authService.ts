@@ -479,7 +479,7 @@ export async function loginStudentWithPhone(
       const newName = fullName?.trim() || `Student ${cleanPhone.slice(-4)}`;
       const newDistrict = district?.trim() || "Malappuram";
 
-      let studentRecord: any = await saveOrUpdateStudentInSupabase({
+      const studentRecord: any = await saveOrUpdateStudentInSupabase({
         fullName: newName,
         whatsappNum: phone.trim() || cleanPhone,
         district: newDistrict,
