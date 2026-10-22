@@ -283,7 +283,7 @@ CREATE TABLE IF NOT EXISTS public.app_settings (
     qr_code_url TEXT,
     merchant_name TEXT NOT NULL DEFAULT 'Hanoon Academy',
     auto_approval_enabled BOOLEAN DEFAULT false,
-    contact_whatsapp TEXT DEFAULT '919846012345',
+    contact_whatsapp TEXT DEFAULT '919656294203',
     notification_alerts BOOLEAN DEFAULT true,
     compact_mobile_mode BOOLEAN DEFAULT false,
     course_pricing JSONB DEFAULT '{
@@ -307,7 +307,7 @@ CREATE TABLE IF NOT EXISTS public.settings (
     qr_code_url TEXT,
     merchant_name TEXT NOT NULL DEFAULT 'Hanoon Academy',
     auto_approval_enabled BOOLEAN DEFAULT false,
-    contact_whatsapp TEXT DEFAULT '919846012345',
+    contact_whatsapp TEXT DEFAULT '919656294203',
     course_pricing JSONB DEFAULT '{}'::jsonb,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -568,7 +568,7 @@ VALUES (
     'global',
     'mubeennk203@okhdfcbank',
     'Hanoon Academy',
-    '919846012345',
+    '919656294203',
     false,
     '{
         "adaviyya": 1500,

@@ -24,6 +24,7 @@ import {
   BookOpen,
   Layers,
   Star,
+  Play,
 } from "lucide-react";
 import LiveClassWhatsAppReminderModal from "@/components/admin/LiveClassWhatsAppReminderModal";
 import {
@@ -31,6 +32,7 @@ import {
   scheduleNewClass,
   startLiveBroadcast,
   stopLiveBroadcast,
+  saveRecordedClassToSupabase,
   LiveClassSession,
 } from "@/services/teacherService";
 import {
@@ -93,6 +95,9 @@ export default function ClassScheduleManagerSection({
   const [isSpecialClass, setIsSpecialClass] = useState<boolean>(false);
   const [specialClassTitle, setSpecialClassTitle] = useState<string>("");
   const [specialClassLiveUrl, setSpecialClassLiveUrl] = useState<string>("");
+
+  // 7. Optional Recorded Class Link (Google Drive / YouTube)
+  const [recordedClassLink, setRecordedClassLink] = useState<string>("");
 
   // UI feedback states
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -322,7 +327,26 @@ export default function ClassScheduleManagerSection({
             });
           });
         })
-        .catch((e) => console.warn("WhatsApp reminder auto-dispatch error:", e));
+      // 4b. Sync Recorded Class Link to Supabase if provided
+      if (recordedClassLink.trim()) {
+        try {
+          await saveRecordedClassToSupabase({
+            title: combinedTitle,
+            courseId: resolvedCourseId,
+            courseName: resolvedCourseName,
+            subjectId: isCustomSubject ? "custom" : subjectId,
+            subjectName: isCustomSubject ? customSubjectName.trim() : (isAdaviyya ? adaviyyaSubjects.find(s => s.id === subjectId)?.name : undefined),
+            recordedClassLink: recordedClassLink.trim(),
+            sessionDate: date,
+            duration: duration.trim() || "60 mins",
+            teacherName: resolvedTeacherName,
+            teacherId: resolvedTeacherId,
+            liveClassId: newClass.id,
+          });
+        } catch (recErr) {
+          console.warn("Could not sync recorded class link to Supabase:", recErr);
+        }
+      }
 
       // 5. Update view
       setClasses(getTeacherClasses());
@@ -338,6 +362,7 @@ export default function ClassScheduleManagerSection({
         setSpecialClassLiveUrl("");
         setIsSpecialClass(false);
       }
+      setRecordedClassLink("");
       setClassTitle("Adaviyya: Comprehensive Review Session");
 
       setTimeout(() => setSuccessMessage(null), 5000);
@@ -897,6 +922,24 @@ export default function ClassScheduleManagerSection({
               </div>
             )}
 
+            {/* 10. Optional Recorded Class Link (Google Drive / YouTube) */}
+            <div className="space-y-1.5 p-3 rounded-2xl bg-purple-50/50 border border-purple-200">
+              <label className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+                <Video className="w-3.5 h-3.5 text-purple-600" />
+                <span>Recorded Class Link (Google Drive / YouTube)</span>
+              </label>
+              <div className="relative">
+                <LinkIcon className="w-4 h-4 text-purple-600 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="url"
+                  value={recordedClassLink}
+                  onChange={(e) => setRecordedClassLink(e.target.value)}
+                  placeholder="https://drive.google.com/... or https://youtube.com/watch?v=..."
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-white border border-purple-200 focus:border-purple-600 focus:ring-1 focus:ring-purple-500 text-xs font-semibold text-slate-900 outline-none transition-all placeholder:text-slate-400 font-mono"
+                />
+              </div>
+            </div>
+
             {/* Submit Action */}
             <div className="pt-2">
               <button
@@ -1132,6 +1175,20 @@ export default function ClassScheduleManagerSection({
                             <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
                             <span>Send WhatsApp Alert</span>
                           </button>
+
+                          {/* Recorded Class Watch Button */}
+                          {(item.recordingUrl || (item as any).recording_url) && (
+                            <a
+                              href={item.recordingUrl || (item as any).recording_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="py-1 px-2.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer"
+                              title="Watch Recorded Class Link (Google Drive / YouTube)"
+                            >
+                              <Play className="w-3 h-3 text-purple-600 fill-purple-600" />
+                              <span>▶️ Watch Recorded Class</span>
+                            </a>
+                          )}
 
                           <a
                             href={item.meetingLink}

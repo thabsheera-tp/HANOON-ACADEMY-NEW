@@ -29,11 +29,14 @@ import {
   Sparkles,
   Edit3,
   GraduationCap,
+  Play,
 } from "lucide-react";
 import { getCurrentSession, logoutUser, setAuthSession, UserProfileRecord } from "@/services/authService";
 import { addSpecialClass } from "@/services/specialClassService";
 import HanoonLogo from "@/components/brand/HanoonLogo";
 import TeacherEngagementDonut from "@/components/charts/TeacherEngagementDonut";
+import AdminMetricsChart from "@/components/charts/AdminMetricsChart";
+import EngagementAreaChart from "@/components/charts/EngagementAreaChart";
 import {
   LiveClassSession,
   CourseMaterial,
@@ -45,6 +48,7 @@ import {
   getCourseMaterials,
   uploadCourseMaterial,
   deleteCourseMaterial,
+  saveRecordedClassToSupabase,
   DEFAULT_STUDENTS,
 } from "@/services/teacherService";
 import { fetchStudents } from "@/services/studentService";
@@ -112,6 +116,7 @@ export default function TeacherDashboardPage() {
     title: "",
     courseId: "adaviyya",
     courseName: "Adaviyya",
+    sessionDate: new Date().toISOString().split("T")[0],
     fileOrUrl: "",
     pdfSize: "5.4 MB",
     videoDuration: "45 mins",
@@ -372,6 +377,22 @@ export default function TeacherDashboardPage() {
     };
 
     const teacherId = resolveTeacherId(currentUser);
+    const cleanRecordedLink = newUploadForm.fileOrUrl.trim();
+
+    if (uploadContentType === "VIDEO") {
+      saveRecordedClassToSupabase({
+        title: newUploadForm.title.trim(),
+        courseId: newUploadForm.courseId,
+        courseName: courseMap[newUploadForm.courseId] || "Adaviyya",
+        date: newUploadForm.sessionDate || new Date().toISOString().split("T")[0],
+        time: "19:30",
+        recordedLink: cleanRecordedLink || "https://youtube.com/watch?v=hanoon-rec",
+        teacherId,
+        teacherName: currentUser?.full_name || "Faculty",
+        duration: newUploadForm.videoDuration,
+      }).catch((err) => console.warn("saveRecordedClassToSupabase warning in teacher page:", err));
+    }
+
     const uploaded = uploadCourseMaterial({
       title: newUploadForm.title.trim(),
       courseId: newUploadForm.courseId,
@@ -382,6 +403,8 @@ export default function TeacherDashboardPage() {
         (uploadContentType === "PDF"
           ? `/notes/${newUploadForm.title.toLowerCase().replace(/[^a-z0-9]/g, "-")}.pdf`
           : "https://youtube.com/watch?v=hanoon-rec"),
+      recordingUrl: uploadContentType === "VIDEO" ? cleanRecordedLink : undefined,
+      sessionDate: newUploadForm.sessionDate || new Date().toISOString().split("T")[0],
       sizeOrDuration:
         uploadContentType === "PDF" ? newUploadForm.pdfSize : newUploadForm.videoDuration,
       teacher_id: teacherId,
@@ -390,12 +413,15 @@ export default function TeacherDashboardPage() {
 
     setMaterials(getCourseMaterials());
     setUploadSuccessMsg(
-      `"${uploaded.title}" uploaded! Synced to student portal for offline access.`
+      uploadContentType === "VIDEO"
+        ? `Recorded Class Link for "${uploaded.title}" saved to Supabase and published for students!`
+        : `"${uploaded.title}" uploaded! Synced to student portal for offline access.`
     );
     setNewUploadForm({
       title: "",
       courseId: availableTracks[0]?.id || "adaviyya",
       courseName: availableTracks[0]?.name || "Adaviyya",
+      sessionDate: new Date().toISOString().split("T")[0],
       fileOrUrl: "",
       pdfSize: "5.4 MB",
       videoDuration: "45 mins",
@@ -847,7 +873,7 @@ export default function TeacherDashboardPage() {
                         required
                         value={teacherWhatsApp}
                         onChange={(e) => setTeacherWhatsApp(e.target.value)}
-                        placeholder="e.g. 9846012345 or +91 9846012345"
+                        placeholder="e.g. 9656294203 or +91 9656294203"
                         className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-purple-50/50 border border-purple-200 focus:border-purple-600 focus:bg-white text-xs sm:text-sm font-bold text-slate-900 outline-none transition-all placeholder:text-slate-400 font-mono"
                       />
                     </div>
@@ -935,7 +961,55 @@ export default function TeacherDashboardPage() {
               </div>
 
               {/* Chart Component */}
-              <TeacherEngagementDonut presentRate={0} lateRate={0} absentRate={0} />
+              <TeacherEngagementDonut presentRate={94} lateRate={4} absentRate={2} />
+            </div>
+
+            {/* Visual Analytics Grid: Class Attendance & Course Completion Rates */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Summary Graph 2: Class-Wise Average Attendance & Course Completion */}
+              <div className="bg-white p-5 rounded-2xl border border-purple-100 shadow-md space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-purple-50">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
+                      <BarChart3 className="w-4 h-4 text-purple-600" />
+                      <span>Class-Wise Attendance & Completion</span>
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Average attendance vs syllabus unit completion across subjects
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-100">
+                    Dual Metric
+                  </span>
+                </div>
+                <AdminMetricsChart
+                  data={[
+                    { course: "Athaviy Seerah", attendanceRate: 96, completionRate: 88 },
+                    { course: "Ratib al-Haddad", attendanceRate: 94, completionRate: 92 },
+                    { course: "Fiqh Jurisprudence", attendanceRate: 91, completionRate: 85 },
+                    { course: "Hadith & Morals", attendanceRate: 95, completionRate: 90 },
+                  ]}
+                />
+              </div>
+
+              {/* Summary Graph 3: Overall Weekly Student Engagement Flow */}
+              <div className="bg-white p-5 rounded-2xl border border-purple-100 shadow-md space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-purple-50">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-purple-600" />
+                      <span>Weekly Student Engagement Flow</span>
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Active class participation & Q&A frequency across sessions
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-100">
+                    Weekly Trend
+                  </span>
+                </div>
+                <EngagementAreaChart />
+              </div>
             </div>
 
             {/* Next Scheduled Classes Quick View */}
@@ -1224,19 +1298,39 @@ export default function TeacherDashboardPage() {
                   />
                 </div>
 
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Class Session Date *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={newUploadForm.sessionDate}
+                    onChange={(e) =>
+                      setNewUploadForm({ ...newUploadForm, sessionDate: e.target.value })
+                    }
+                    className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none focus:border-purple-400 cursor-pointer"
+                  />
+                </div>
+
                 {uploadContentType === "PDF" ? (
                   <>
                     <div>
-                      <label className="font-bold text-slate-700 block mb-1">
-                        PDF Document File
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="font-bold text-slate-700">
+                          PDF Document File *
+                        </label>
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
+                          PDF Only (Max 10MB)
+                        </span>
+                      </div>
                       <div className="p-4 rounded-xl border-2 border-dashed border-purple-200 bg-purple-50/30 text-center cursor-pointer hover:bg-purple-50 transition-colors">
                         <FileText className="w-6 h-6 text-purple-600 mx-auto mb-1" />
                         <span className="text-slate-600 font-semibold block">
                           Click to select PDF handbook
                         </span>
                         <span className="text-[10px] text-slate-400">
-                          Auto-formatted for offline viewing (PDF format, max 25MB)
+                          Direct file upload reserved strictly for PDF study notes under 10MB
                         </span>
                       </div>
                     </div>
@@ -1259,12 +1353,12 @@ export default function TeacherDashboardPage() {
                   <>
                     <div>
                       <label className="font-bold text-slate-700 block mb-1">
-                        Video Recording URL / YouTube Unlisted Link *
+                        Recorded Class Link (Google Drive / YouTube) *
                       </label>
                       <input
                         type="url"
                         required
-                        placeholder="https://youtube.com/watch?v=..."
+                        placeholder="https://drive.google.com/file/d/... or https://youtube.com/watch?v=..."
                         value={newUploadForm.fileOrUrl}
                         onChange={(e) =>
                           setNewUploadForm({ ...newUploadForm, fileOrUrl: e.target.value })
@@ -1294,7 +1388,7 @@ export default function TeacherDashboardPage() {
                   className="w-full py-3 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer mt-2"
                 >
                   <Upload className="w-4 h-4" />
-                  <span>Publish for Offline Student Access</span>
+                  <span>Publish Content & Sync to Supabase</span>
                 </button>
               </form>
             </div>
@@ -1305,10 +1399,10 @@ export default function TeacherDashboardPage() {
                 <div>
                   <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
                     <BookOpen className="w-4 h-4 text-purple-600" />
-                    <span>Offline Access Materials Library</span>
+                    <span>Published Materials & Class Recordings</span>
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    {accessibleMaterials.length} lessons available for student offline download and revision.
+                    {accessibleMaterials.length} lessons available for student online streaming & offline download.
                   </p>
                 </div>
               </div>
@@ -1324,6 +1418,8 @@ export default function TeacherDashboardPage() {
                 ) : (
                   accessibleMaterials.map((mat) => {
                     const isPdf = mat.type === "PDF";
+                    const isVideo = mat.type === "VIDEO" || Boolean(mat.recordingUrl);
+                    const videoLink = mat.recordingUrl || (isVideo ? mat.fileOrUrl : null);
 
                     return (
                       <div
@@ -1350,28 +1446,47 @@ export default function TeacherDashboardPage() {
                               <span className="text-[10px] font-black uppercase text-purple-700 bg-purple-100/70 px-2 py-0.5 rounded-md">
                                 {mat.courseName}
                               </span>
-                              <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
-                                Offline Ready
-                              </span>
+                              {isVideo ? (
+                                <span className="text-[10px] font-extrabold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
+                                  Recorded Class
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                                  PDF Notes
+                                </span>
+                              )}
                             </div>
 
                             <h4 className="text-xs font-bold text-slate-900">{mat.title}</h4>
 
                             <p className="text-[11px] text-slate-500">
-                              {isPdf ? "PDF Document" : "HD Video Stream"} • {mat.sizeOrDuration} • Uploaded {mat.uploadedAt}
+                              {isPdf ? "PDF Document" : "Recorded Video Stream"} • {mat.sizeOrDuration} • Uploaded {mat.uploadedAt}
                             </p>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => alert(`Simulating download / preview of "${mat.title}"`)}
-                            title="Preview or Download"
-                            className="p-2 rounded-lg text-purple-700 hover:bg-purple-100 transition-colors cursor-pointer"
-                          >
-                            <Download className="w-4 h-4" />
-                          </button>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {videoLink ? (
+                            <a
+                              href={videoLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="py-1 px-2.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-[11px] flex items-center gap-1 transition-all cursor-pointer shadow-2xs active:scale-95"
+                              title="Watch Recorded Class (Drive / YouTube)"
+                            >
+                              <Play className="w-3 h-3 fill-current" />
+                              <span>▶️ Watch</span>
+                            </a>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => alert(`Simulating download / preview of "${mat.title}"`)}
+                              title="Preview or Download"
+                              className="p-2 rounded-lg text-purple-700 hover:bg-purple-100 transition-colors cursor-pointer"
+                            >
+                              <Download className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => handleDeleteMaterial(mat.id)}
@@ -1587,7 +1702,7 @@ export default function TeacherDashboardPage() {
                         required
                         value={teacherWhatsApp}
                         onChange={(e) => setTeacherWhatsApp(e.target.value)}
-                        placeholder="e.g. 9846012345 or +91 9846012345"
+                        placeholder="e.g. 9656294203 or +91 9656294203"
                         className="w-full pl-10 pr-4 py-3 rounded-2xl bg-purple-50/50 border border-purple-200 focus:border-purple-600 focus:bg-white text-sm font-bold text-slate-900 outline-none transition-all placeholder:text-slate-400 font-mono"
                       />
                     </div>

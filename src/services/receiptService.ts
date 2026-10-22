@@ -157,7 +157,7 @@ export function getWhatsAppFeeReceiptUrl(receipt: FeeReceiptData): string {
 ✨ *Course Access:* Portal live class streams, recorded lecture library, and PDF notes are now completely unlocked on your dashboard.
 
 🌐 *Student Portal:* https://hanoonacademy.com/student
-📞 *Admissions Desk:* +91 98460 12345
+📞 *Admissions Desk:* +91 96562 94203
 _Hanoon Academy — Islamic EdTech & Skill Mastery_`;
 
   return `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;

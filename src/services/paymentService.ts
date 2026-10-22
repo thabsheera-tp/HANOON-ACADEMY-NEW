@@ -26,7 +26,10 @@ export async function fetchPayments(): Promise<DbPayment[]> {
               if (s.id) studentMap.set(s.id, s);
               if (s.user_id) studentMap.set(s.user_id, s);
               const p = (s.whatsapp_number || s.whatsapp_num || s.phone || "").replace(/\D/g, "");
-              if (p) studentMap.set(p.slice(-10), s);
+              if (p) {
+                studentMap.set(p.slice(-10), s);
+                studentMap.set(p, s);
+              }
             }
           }
           if (Array.isArray(json.profiles)) {
@@ -48,7 +51,7 @@ export async function fetchPayments(): Promise<DbPayment[]> {
 
             const lookupStudent =
               (p.student_id ? studentMap.get(p.student_id) : null) ||
-              (payPhone ? studentMap.get(payPhone.slice(-10)) : null) ||
+              (payPhone ? studentMap.get(payPhone.slice(-10)) || studentMap.get(payPhone) : null) ||
               (txDigits.length >= 10 ? studentMap.get(txDigits.slice(-10)) : null) ||
               null;
 
@@ -149,7 +152,10 @@ export async function fetchPayments(): Promise<DbPayment[]> {
           if (s.id) studentMap.set(s.id, s);
           if (s.user_id) studentMap.set(s.user_id, s);
           const p = (s.whatsapp_number || s.whatsapp_num || s.phone || "").replace(/\D/g, "");
-          if (p) studentMap.set(p.slice(-10), s);
+          if (p) {
+            studentMap.set(p.slice(-10), s);
+            studentMap.set(p, s);
+          }
         }
         for (const pr of profList) {
           if (pr.id && !studentMap.has(pr.id)) {
@@ -172,7 +178,7 @@ export async function fetchPayments(): Promise<DbPayment[]> {
 
           const lookupStudent =
             (p.student_id ? studentMap.get(p.student_id) : null) ||
-            (payPhone ? studentMap.get(payPhone.slice(-10)) : null) ||
+            (payPhone ? studentMap.get(payPhone.slice(-10)) || studentMap.get(payPhone) : null) ||
             (txDigits.length >= 10 ? studentMap.get(txDigits.slice(-10)) : null) ||
             null;
 

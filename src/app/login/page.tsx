@@ -143,8 +143,8 @@ function LoginFormContent() {
       return;
     }
 
-    if (!cleanPhone || cleanPhone.length < 10) {
-      setErrorMessage("Please enter a valid 10-digit WhatsApp or mobile number.");
+    if (!cleanPhone || cleanPhone.length < 10 || cleanPhone.length > 15) {
+      setErrorMessage("Please enter a valid WhatsApp or mobile number (10 to 15 digits).");
       return;
     }
 
@@ -186,7 +186,7 @@ function LoginFormContent() {
           router.push(redirectParam || "/student?screen=payment");
         }, 350);
       } else {
-        setErrorMessage(result.error || "Please enter a valid 10-digit mobile number.");
+        setErrorMessage(result.error || "Please enter a valid mobile number (10 to 15 digits).");
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Authentication error occurred.";
@@ -328,9 +328,15 @@ function LoginFormContent() {
                 <input
                   type="tel"
                   required
-                  placeholder="e.g. 9846012345"
+                  placeholder="e.g. 9656294203 or +971XXXXXXXXX"
                   value={studentPhone}
-                  onChange={(e) => setStudentPhone(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const hasPlus = val.startsWith("+");
+                    const digitsOnly = val.replace(/\D/g, "").slice(0, 15);
+                    setStudentPhone(hasPlus ? `+${digitsOnly}` : digitsOnly);
+                  }}
+                  maxLength={16}
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-semibold"
                 />
               </div>

@@ -456,10 +456,10 @@ export async function loginStudentWithPhone(
   error?: string;
 }> {
   const cleanPhone = phone.replace(/\D/g, "");
-  if (!cleanPhone || cleanPhone.length < 10) {
+  if (!cleanPhone || cleanPhone.length < 10 || cleanPhone.length > 15) {
     return {
       success: false,
-      error: "Please enter a valid 10-digit mobile or WhatsApp number.",
+      error: "Please enter a valid mobile or WhatsApp number (10 to 15 digits).",
     };
   }
 
@@ -481,7 +481,7 @@ export async function loginStudentWithPhone(
 
       let studentRecord: any = await saveOrUpdateStudentInSupabase({
         fullName: newName,
-        whatsappNum: cleanPhone,
+        whatsappNum: phone.trim() || cleanPhone,
         district: newDistrict,
       });
 

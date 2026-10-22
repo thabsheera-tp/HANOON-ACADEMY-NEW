@@ -14,6 +14,7 @@ import {
   Download,
   CheckCircle2,
   Check,
+  MessageCircle,
 } from "lucide-react";
 import { ScreenTab, UserProfile } from "@/types/app";
 import HanoonLogo from "@/components/brand/HanoonLogo";
@@ -213,6 +214,15 @@ export default function MobileHeader({
                     </div>
 
                     <div className="pt-1.5 border-t border-purple-50 space-y-1">
+                      <a
+                        href="https://wa.me/919656294203?text=Assalamu%20Alaikum%20Admin,%20I%20need%20assistance%20with%20my%20Student%20Portal."
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full flex items-center gap-2 p-2 rounded-xl text-xs font-bold text-emerald-700 hover:bg-emerald-50 transition-colors cursor-pointer text-left"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Contact Admin</span>
+                      </a>
                       <button
                         type="button"
                         onClick={handleSignOut}
@@ -230,7 +240,7 @@ export default function MobileHeader({
             /* Clean Support Link for Unpaid / Unverified Users (No Avatar or Badge in Header) */
             <div className="flex items-center">
               <a
-                href="https://wa.me/919846012345?text=Assalamu%20Alaikum%20Admin,%20I%20need%20help%20with%20Hanoon%20Academy."
+                href="https://wa.me/919656294203?text=Assalamu%20Alaikum%20Admin,%20I%20need%20help%20with%20Hanoon%20Academy."
                 target="_blank"
                 rel="noopener noreferrer"
                 className="py-1 px-2.5 rounded-full text-[10.5px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 transition-all cursor-pointer shadow-2xs inline-flex items-center gap-1"

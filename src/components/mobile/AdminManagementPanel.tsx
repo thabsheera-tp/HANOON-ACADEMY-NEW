@@ -608,7 +608,7 @@ export default function AdminManagementPanel({
                         </span>
                       </div>
                       <p className="text-xs text-slate-500">
-                        {pay.course?.title_en || pay.course_id} • WhatsApp: {pay.student?.whatsapp_num || "9846012345"}
+                        {pay.course?.title_en || pay.course_id} • WhatsApp: {pay.student?.whatsapp_num || "9656294203"}
                       </p>
                     </div>
 

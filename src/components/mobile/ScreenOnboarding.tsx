@@ -97,8 +97,8 @@ export default function ScreenOnboarding({
       return;
     }
     const cleanDigits = phone.replace(/\D/g, "");
-    if (!cleanDigits || cleanDigits.length < 10) {
-      setError("Please enter a valid 10-digit WhatsApp or mobile number.");
+    if (!cleanDigits || cleanDigits.length < 10 || cleanDigits.length > 15) {
+      setError("Please enter a valid WhatsApp or mobile number (10 to 15 digits).");
       return;
     }
     if (!place.trim()) {
@@ -113,7 +113,7 @@ export default function ScreenOnboarding({
 
     const newProfile: UserProfile = {
       name: name.trim(),
-      phone: cleanDigits,
+      phone: phone.trim(),
       place: place.trim(),
       age: age.trim() || undefined,
     };
@@ -218,9 +218,15 @@ export default function ScreenOnboarding({
                 inputMode="tel"
                 required
                 autoComplete="tel"
-                placeholder="e.g. 9846012345"
+                placeholder="e.g. 9656294203 or +971XXXXXXXXX"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const hasPlus = val.startsWith("+");
+                  const digitsOnly = val.replace(/\D/g, "").slice(0, 15);
+                  setPhone(hasPlus ? `+${digitsOnly}` : digitsOnly);
+                }}
+                maxLength={16}
                 className="w-full pl-10 pr-4 py-3 sm:py-3.5 min-h-[48px] rounded-2xl bg-purple-50/40 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-base sm:text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-semibold focus:ring-4 focus:ring-purple-500/10 font-mono"
               />
             </div>

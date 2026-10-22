@@ -20,6 +20,7 @@ import {
   MapPin,
   X,
   MessageCircle,
+  GraduationCap,
 } from "lucide-react";
 import { UnifiedStudentRegistration } from "@/services/studentService";
 import {
@@ -27,7 +28,6 @@ import {
   FeeReceiptData,
   getWhatsAppFeeReceiptUrl,
 } from "@/services/receiptService";
-import HanoonLogo from "@/components/brand/HanoonLogo";
 
 interface FeeReceiptsManagerSectionProps {
   registrations: UnifiedStudentRegistration[];
@@ -289,8 +289,8 @@ export default function FeeReceiptsManagerSection({
 
       {/* Official Admission Pass & Fee Receipt Modal */}
       {activeReceiptModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-xl w-full shadow-2xl border border-slate-200 overflow-hidden relative animate-scale-in my-8">
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto print:bg-transparent print:p-0 print:static print:overflow-visible">
+          <div className="bg-white rounded-3xl max-w-xl w-full shadow-2xl border border-slate-200 overflow-hidden relative animate-scale-in my-8 print:shadow-none print:border-none print:m-0 print:max-w-none print:rounded-none">
             {/* Modal Controls Header (Hidden in Print) */}
             <div className="p-4 bg-slate-900 text-white flex items-center justify-between print:hidden">
               <div className="flex items-center gap-2">
@@ -331,33 +331,28 @@ export default function FeeReceiptsManagerSection({
             </div>
 
             {/* Printable Receipt Paper Body */}
-            <div className="p-6 sm:p-8 space-y-6 text-slate-800 bg-white" id="printable-receipt">
-              {/* Receipt Header */}
-              <div className="border-b-2 border-purple-900/20 pb-5 flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-2.5">
-                    <HanoonLogo className="w-9 h-9" />
-                    <div>
-                      <h1 className="text-xl font-black text-slate-900 tracking-tight">
-                        HANOON ACADEMY
-                      </h1>
-                      <p className="text-[11px] font-bold text-purple-800 italic">
-                        വിജ്ഞാന വെളിച്ചം • Centre for Islamic EdTech & Skills
-                      </p>
-                    </div>
+            <div className="p-6 sm:p-8 space-y-6 text-slate-800 bg-white print:p-0 print:border-none print:shadow-none" id="printable-receipt">
+              {/* Clean Receipt Header */}
+              <div className="border-b-2 border-purple-900/20 pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                    <GraduationCap className="w-6 h-6 text-white stroke-[2.2]" />
                   </div>
-                  <p className="text-[10px] text-slate-500 font-medium mt-2 leading-relaxed">
-                    Main Campus • Kerala, India • Reg. Under Academic Trust Act
-                    <br />
-                    Web: https://hanoonacademy.com • Tel: +91 98460 12345
-                  </p>
+                  <div>
+                    <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-tight">
+                      HANOON ACADEMY
+                    </h1>
+                    <p className="text-[10px] text-slate-500 font-medium mt-1">
+                      Main Campus • Kerala, India • Reg. Under Academic Trust Act
+                    </p>
+                  </div>
                 </div>
 
-                <div className="text-right">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 bg-purple-50 px-3 py-1 rounded-full border border-purple-200 block w-fit ml-auto">
+                <div className="text-left sm:text-right shrink-0">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 bg-purple-50 px-3 py-1 rounded-full border border-purple-200 inline-block">
                     ADMISSION PASS & RECEIPT
                   </span>
-                  <p className="text-xs font-mono font-black text-slate-900 mt-2">
+                  <p className="text-xs font-mono font-black text-slate-900 mt-1.5">
                     {activeReceiptModal.receiptNo}
                   </p>
                   <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
@@ -367,7 +362,7 @@ export default function FeeReceiptsManagerSection({
               </div>
 
               {/* Student Details Grid */}
-              <div className="grid grid-cols-2 gap-4 bg-purple-50/40 p-4 rounded-2xl border border-purple-100 text-xs">
+              <div className="grid grid-cols-2 gap-4 bg-slate-50/80 p-5 rounded-2xl border border-slate-200 text-xs">
                 <div>
                   <span className="text-[10px] uppercase font-bold text-slate-400 block">
                     Student Full Name
@@ -479,9 +474,9 @@ export default function FeeReceiptsManagerSection({
                 </div>
 
                 <div className="text-right space-y-1">
-                  <div className="w-32 h-10 border-b-2 border-slate-800 mx-auto border-dashed flex items-end justify-center pb-1">
+                  <div className="w-36 h-10 border-b-2 border-slate-800 mx-auto border-dashed flex items-end justify-center pb-1">
                     <span className="text-[11px] font-serif italic text-purple-900 font-bold">
-                      Faisal Al-Hanoon
+                      Irshad Shamil Irfani
                     </span>
                   </div>
                   <p className="text-[10px] font-black text-slate-800 uppercase tracking-wider">

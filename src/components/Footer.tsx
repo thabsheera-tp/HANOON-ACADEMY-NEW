@@ -90,7 +90,7 @@ export default function Footer() {
               </li>
               <li>
                 <a
-                  href="https://wa.me/919846012345?text=Assalamu%20Alaikum%20Admin,%20I%20need%20help%20with%20admission."
+                  href="https://wa.me/919656294203?text=Assalamu%20Alaikum%20Admin,%20I%20need%20help%20with%20admission."
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-emerald-400 transition-colors inline-flex items-center gap-1.5"
@@ -101,11 +101,11 @@ export default function Footer() {
               </li>
               <li>
                 <a
-                  href="tel:+919846012345"
+                  href="tel:+919656294203"
                   className="hover:text-emerald-400 transition-colors inline-flex items-center gap-1.5"
                 >
                   <Phone className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Call Admin: +91 98460 12345</span>
+                  <span>Call Admin: +91 96562 94203</span>
                 </a>
               </li>
             </ul>
@@ -125,7 +125,7 @@ export default function Footer() {
               </li>
               <li className="flex items-center gap-2.5">
                 <Phone className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span className="text-xs">+91 98460 12345</span>
+                <span className="text-xs">+91 96562 94203</span>
               </li>
               <li className="flex items-center gap-2.5">
                 <Mail className="w-4 h-4 text-emerald-400 shrink-0" />

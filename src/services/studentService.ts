@@ -138,7 +138,9 @@ export async function saveOrUpdateStudentInSupabase(params: {
 }): Promise<DbStudent | null> {
   if (!isSupabaseConfigured || !supabase) return null;
 
-  const cleanPhone = (params.whatsappNum || "").replace(/\D/g, "");
+  const exactPhone = (params.whatsappNum || "").trim();
+  const cleanPhone = exactPhone.replace(/\D/g, "");
+  const storedPhone = exactPhone || cleanPhone;
   const cleanName = (params.fullName || "").trim();
   const cleanDistrict = (params.district || "Kerala").trim();
   let userId = params.userId || null;
@@ -167,23 +169,30 @@ export async function saveOrUpdateStudentInSupabase(params: {
     }
 
     if (!existingStudent && cleanPhone) {
-      const { data: byNum, error: errNum } = await supabase
-        .from("students")
-        .select("*")
-        .eq("whatsapp_num", cleanPhone)
-        .limit(1)
-        .maybeSingle();
-
-      if (!errNum && byNum) {
-        existingStudent = byNum;
-      } else {
-        const { data: byNumber } = await supabase
+      const searchTerms = Array.from(new Set([exactPhone, cleanPhone].filter(Boolean)));
+      for (const term of searchTerms) {
+        const { data: byNum, error: errNum } = await supabase
           .from("students")
           .select("*")
-          .eq("whatsapp_number", cleanPhone)
+          .eq("whatsapp_num", term)
           .limit(1)
           .maybeSingle();
-        if (byNumber) existingStudent = byNumber;
+
+        if (!errNum && byNum) {
+          existingStudent = byNum;
+          break;
+        } else {
+          const { data: byNumber } = await supabase
+            .from("students")
+            .select("*")
+            .eq("whatsapp_number", term)
+            .limit(1)
+            .maybeSingle();
+          if (byNumber) {
+            existingStudent = byNumber;
+            break;
+          }
+        }
       }
     }
 
@@ -192,21 +201,21 @@ export async function saveOrUpdateStudentInSupabase(params: {
       const updateAttempts = [
         {
           full_name: cleanName,
-          whatsapp_num: cleanPhone,
-          whatsapp_number: cleanPhone,
+          whatsapp_num: storedPhone,
+          whatsapp_number: storedPhone,
           district: cleanDistrict,
           place: cleanDistrict,
           ...(userId ? { user_id: userId } : {}),
         },
         {
           full_name: cleanName,
-          whatsapp_num: cleanPhone,
+          whatsapp_num: storedPhone,
           district: cleanDistrict,
           ...(userId ? { user_id: userId } : {}),
         },
         {
           full_name: cleanName,
-          whatsapp_number: cleanPhone,
+          whatsapp_number: storedPhone,
           district: cleanDistrict,
           place: cleanDistrict,
           ...(userId ? { user_id: userId } : {}),
@@ -236,7 +245,7 @@ export async function saveOrUpdateStudentInSupabase(params: {
           await supabase.from("profiles").upsert({
             id: userId,
             full_name: cleanName,
-            whatsapp_num: cleanPhone,
+            whatsapp_num: storedPhone,
             district: cleanDistrict,
           });
         } catch {}
@@ -246,7 +255,7 @@ export async function saveOrUpdateStudentInSupabase(params: {
         id: existingStudent.id,
         user_id: existingStudent.user_id || userId || undefined,
         full_name: existingStudent.full_name || cleanName,
-        whatsapp_num: existingStudent.whatsapp_num || existingStudent.whatsapp_number || cleanPhone,
+        whatsapp_num: existingStudent.whatsapp_num || existingStudent.whatsapp_number || storedPhone,
         district: existingStudent.district || existingStudent.place || cleanDistrict,
         created_at: existingStudent.created_at || new Date().toISOString(),
       };
@@ -256,40 +265,40 @@ export async function saveOrUpdateStudentInSupabase(params: {
     const insertAttempts = [
       {
         full_name: cleanName,
-        whatsapp_num: cleanPhone,
-        whatsapp_number: cleanPhone,
+        whatsapp_num: storedPhone,
+        whatsapp_number: storedPhone,
         district: cleanDistrict,
         place: cleanDistrict,
         ...(userId ? { user_id: userId } : {}),
       },
       {
         full_name: cleanName,
-        whatsapp_num: cleanPhone,
+        whatsapp_num: storedPhone,
         district: cleanDistrict,
         ...(userId ? { user_id: userId } : {}),
       },
       {
         full_name: cleanName,
-        whatsapp_number: cleanPhone,
+        whatsapp_number: storedPhone,
         district: cleanDistrict,
         place: cleanDistrict,
         ...(userId ? { user_id: userId } : {}),
       },
       {
         full_name: cleanName,
-        whatsapp_number: cleanPhone,
+        whatsapp_number: storedPhone,
         district: cleanDistrict,
         ...(userId ? { user_id: userId } : {}),
       },
       {
         full_name: cleanName,
-        whatsapp_num: cleanPhone,
+        whatsapp_num: storedPhone,
         place: cleanDistrict,
         ...(userId ? { user_id: userId } : {}),
       },
       {
         full_name: cleanName,
-        whatsapp_num: cleanPhone,
+        whatsapp_num: storedPhone,
       },
     ];
 
@@ -306,7 +315,7 @@ export async function saveOrUpdateStudentInSupabase(params: {
             await supabase.from("profiles").upsert({
               id: userId,
               full_name: cleanName,
-              whatsapp_num: cleanPhone,
+              whatsapp_num: storedPhone,
               district: cleanDistrict,
             });
           } catch {}
@@ -316,7 +325,7 @@ export async function saveOrUpdateStudentInSupabase(params: {
           id: inserted.id,
           user_id: inserted.user_id || userId || undefined,
           full_name: inserted.full_name || cleanName,
-          whatsapp_num: inserted.whatsapp_num || inserted.whatsapp_number || cleanPhone,
+          whatsapp_num: inserted.whatsapp_num || inserted.whatsapp_number || storedPhone,
           district: inserted.district || inserted.place || cleanDistrict,
           created_at: inserted.created_at || new Date().toISOString(),
         };
@@ -358,7 +367,7 @@ async function executeRegisterStudentAndPayment(
       // Step A: Always resolve or insert real student record in Supabase to get real database UUID
       let studentData: DbStudent | null = await saveOrUpdateStudentInSupabase({
         fullName: cleanName,
-        whatsappNum: cleanPhone,
+        whatsappNum: (whatsappNum || "").trim() || cleanPhone,
         district: cleanDistrict,
       });
 
@@ -483,7 +492,7 @@ async function executeRegisterStudentAndPayment(
   const fallbackStudent: DbStudent = {
     id: generatedStudentId,
     full_name: fullName.trim(),
-    whatsapp_num: whatsappNum.replace(/\D/g, ""),
+    whatsapp_num: (whatsappNum || "").trim() || cleanPhone,
     district: district.trim(),
     created_at: now,
   };

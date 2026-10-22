@@ -72,7 +72,7 @@ export default function Navbar({ onOpenEnrollModal }: NavbarProps) {
           {/* Desktop Right Actions */}
           <div className="hidden md:flex items-center gap-4">
             <a
-              href="https://wa.me/919846012345?text=Assalamu%20Alaikum%20Admin,%20I%20need%20help%20with%20admission."
+              href="https://wa.me/919656294203?text=Assalamu%20Alaikum%20Admin,%20I%20need%20help%20with%20admission."
               target="_blank"
               rel="noopener noreferrer"
               className="px-4 py-2.5 text-xs font-bold text-[#047857] bg-white border border-[#047857]/20 rounded-xl hover:bg-[#047857]/5 hover:border-[#047857] transition-all shadow-xs inline-flex items-center gap-1.5"
@@ -91,7 +91,7 @@ export default function Navbar({ onOpenEnrollModal }: NavbarProps) {
           {/* Mobile Menu Button */}
           <div className="flex md:hidden items-center gap-2">
             <a
-              href="https://wa.me/919846012345?text=Assalamu%20Alaikum%20Admin,%20I%20need%20help%20with%20admission."
+              href="https://wa.me/919656294203?text=Assalamu%20Alaikum%20Admin,%20I%20need%20help%20with%20admission."
               target="_blank"
               rel="noopener noreferrer"
               className="px-3 py-1.5 text-xs font-bold text-[#047857] bg-white border border-[#047857]/25 rounded-lg hover:bg-[#047857]/5"
@@ -141,13 +141,13 @@ export default function Navbar({ onOpenEnrollModal }: NavbarProps) {
             </Link>
             <div className="pt-2 px-4 flex flex-col gap-2">
               <a
-                href="https://wa.me/919846012345?text=Assalamu%20Alaikum%20Admin,%20I%20need%20help%20with%20admission."
+                href="https://wa.me/919656294203?text=Assalamu%20Alaikum%20Admin,%20I%20need%20help%20with%20admission."
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setMobileMenuOpen(false)}
                 className="w-full text-center py-2.5 text-xs font-bold text-[#047857] bg-white border border-[#047857]/30 rounded-xl block"
               >
-                💬 Need Help? Contact Admin (+91 98460 12345)
+                💬 Need Help? Contact Admin (+91 96562 94203)
               </a>
               <button
                 onClick={() => {

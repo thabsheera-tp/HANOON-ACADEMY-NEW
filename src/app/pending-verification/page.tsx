@@ -120,7 +120,7 @@ export default function PendingVerificationPage() {
         {/* Action Buttons */}
         <div className="w-full space-y-2.5 pt-2">
           <a
-            href={`https://wa.me/919846012345?text=${encodeURIComponent(
+            href={`https://wa.me/919656294203?text=${encodeURIComponent(
               `Assalamu Alaikum Admin, I have submitted my payment for verification. Student: ${studentName}${txId ? ` (TxID: ${txId})` : ""}. Please check and approve my enrollment.`
             )}`}
             target="_blank"

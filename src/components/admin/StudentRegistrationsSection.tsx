@@ -26,7 +26,12 @@ import {
   Trash2,
   Sparkles,
   AlertCircle,
+  BarChart3,
 } from "lucide-react";
+import AdminMetricsChart from "@/components/charts/AdminMetricsChart";
+import EngagementAreaChart from "@/components/charts/EngagementAreaChart";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import {
   UnifiedStudentRegistration,
   fetchUnifiedRegistrations,
@@ -369,6 +374,140 @@ export default function StudentRegistrationsSection({
     .filter((r) => r.paymentStatus === "APPROVED")
     .reduce((acc, r) => acc + (r.amount || 0), 0);
 
+  // PDF Export for paid / verified students using jspdf and jspdf-autotable
+  const handleExportPaidPDF = () => {
+    const listToExport = registrations.filter((r) => r.paymentStatus === "APPROVED");
+
+    if (listToExport.length === 0) {
+      alert("No verified / paid students found to export.");
+      return;
+    }
+
+    try {
+      // 1. Initialize jsPDF in portrait A4 orientation
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+
+      const dateStr = new Date().toLocaleDateString("en-IN", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+      const generatedAt = new Date().toLocaleTimeString("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+      // 2. Add Header: "Hanoon Academy - Verified Student Registrations"
+      doc.setFillColor(147, 51, 234); // purple-600 accent bar
+      doc.rect(14, 12, 4, 18, "F");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(15);
+      doc.setTextColor(30, 41, 59); // slate-900
+      doc.text("Hanoon Academy - Verified Student Registrations", 22, 19);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(100, 116, 139); // slate-500
+      doc.text(`Official Academic Registry Report • Generated on: ${dateStr} at ${generatedAt}`, 22, 26);
+
+      // Summary KPI Badge on the right
+      doc.setFillColor(243, 232, 255); // purple-100
+      doc.roundedRect(144, 12, 52, 18, 3, 3, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8.5);
+      doc.setTextColor(126, 34, 206); // purple-800
+      doc.text("Total Verified:", 148, 19);
+      doc.setFontSize(11);
+      doc.text(`${listToExport.length} Students`, 148, 26);
+
+      // 3. Format structured table rows: Sl No., Student Name, WhatsApp Number, Registration Date, Status
+      const tableData = listToExport.map((item, index) => {
+        let formattedDate = item.registrationDate || "—";
+        if (formattedDate && formattedDate.includes("T")) {
+          try {
+            formattedDate = new Date(formattedDate).toLocaleDateString("en-IN", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            });
+          } catch {}
+        }
+
+        return [
+          (index + 1).toString(),
+          item.fullName || "Student",
+          item.whatsappNum || "N/A",
+          formattedDate,
+          "Verified",
+        ];
+      });
+
+      // 4. Construct clean, professional table with borders and readable fonts
+      autoTable(doc, {
+        startY: 36,
+        head: [["Sl No.", "Student Name", "WhatsApp Number", "Registration Date", "Status"]],
+        body: tableData,
+        theme: "grid",
+        styles: {
+          font: "helvetica",
+          fontSize: 9,
+          cellPadding: { top: 3.5, right: 3, bottom: 3.5, left: 3 },
+          textColor: [30, 41, 59],
+          lineColor: [226, 232, 240], // slate-200 clear border
+          lineWidth: 0.15,
+          valign: "middle",
+        },
+        headStyles: {
+          fillColor: [126, 34, 206], // purple-700
+          textColor: [255, 255, 255],
+          fontStyle: "bold",
+          fontSize: 9.5,
+          halign: "left",
+          lineColor: [107, 33, 168],
+          lineWidth: 0.2,
+        },
+        columnStyles: {
+          0: { cellWidth: 16, halign: "center", fontStyle: "bold" },
+          1: { cellWidth: "auto", fontStyle: "bold" },
+          2: { cellWidth: 42, halign: "center" },
+          3: { cellWidth: 38, halign: "center" },
+          4: {
+            cellWidth: 26,
+            halign: "center",
+            fontStyle: "bold",
+            textColor: [16, 185, 129], // emerald-600
+          },
+        },
+        alternateRowStyles: {
+          fillColor: [250, 245, 255], // purple-50/40 soft alternating fill
+        },
+        margin: { left: 14, right: 14, bottom: 18 },
+        didDrawPage: (data) => {
+          const pageCount = (doc as any).internal.getNumberOfPages();
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(8);
+          doc.setTextColor(148, 163, 184);
+          const pageStr = `Page ${data.pageNumber} of ${pageCount}`;
+          doc.text("Hanoon Academy • Verified Student Registrations • Confidential", 14, doc.internal.pageSize.height - 10);
+          doc.text(pageStr, doc.internal.pageSize.width - 14 - doc.getTextWidth(pageStr), doc.internal.pageSize.height - 10);
+        },
+      });
+
+      // 5. Save and trigger direct browser download
+      const isoDate = new Date().toISOString().slice(0, 10);
+      doc.save(`Hanoon_Academy_Verified_Students_${isoDate}.pdf`);
+    } catch (err) {
+      console.error("PDF export generation failed:", err);
+      alert("PDF generation encountered an error. Falling back to CSV export.");
+      handleExportCSV(true);
+    }
+  };
+
   // CSV Export for paid / verified or filtered students
   const handleExportCSV = (onlyPaid: boolean = false) => {
     const listToExport = onlyPaid
@@ -639,6 +778,47 @@ export default function StudentRegistrationsSection({
         </div>
       </div>
 
+      {/* 1.1 Executive Visual Intelligence & Analytics Suite */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Graph 1: Weekly Student Engagement & Participation Flow */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-white border border-purple-100/90 shadow-md space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                <BarChart3 className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 tracking-tight">Student Engagement Flow</h4>
+                <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium">Daily attendance & interactive Q&A activity</p>
+              </div>
+            </div>
+            <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200 shrink-0">
+              Weekly Trend
+            </span>
+          </div>
+          <EngagementAreaChart />
+        </div>
+
+        {/* Graph 2: Class-Wise Average Attendance & Course Completion */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-white border border-purple-100/90 shadow-md space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                <BarChart3 className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 tracking-tight">Class-Wise Attendance & Completion</h4>
+                <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium">Program benchmark across active batches</p>
+              </div>
+            </div>
+            <span className="text-[10px] font-bold text-violet-700 bg-violet-50 px-2 py-0.5 rounded-full border border-violet-200 shrink-0">
+              Batch Averages
+            </span>
+          </div>
+          <AdminMetricsChart />
+        </div>
+      </div>
+
       {/* 2. WhatsApp Post-Approval Prompt Banner */}
       {approvedNotification && (
         <div className="p-4 rounded-2xl bg-emerald-50 border-2 border-emerald-300 text-emerald-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in shadow-md">
@@ -803,10 +983,10 @@ export default function StudentRegistrationsSection({
             <div className="flex items-center justify-between sm:justify-start gap-1.5 w-full sm:w-auto">
               <button
                 type="button"
-                onClick={() => handleExportCSV(true)}
+                onClick={handleExportPaidPDF}
                 disabled={loading || approvedCount === 0}
                 className="flex-1 sm:flex-initial py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                title="Download spreadsheet of all verified / paid students"
+                title="Download verified student registrations as a structured PDF table"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>Export Paid</span>

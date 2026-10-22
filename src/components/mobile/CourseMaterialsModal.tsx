@@ -228,61 +228,100 @@ export default function CourseMaterialsModal({
               <>
                 {/* Embedded Player Canvas */}
                 {activeLesson && (
-                  <div className="rounded-2xl bg-slate-900 text-white p-4 aspect-video flex flex-col justify-between shadow-inner">
-                    <div className="flex items-center justify-between text-[11px] text-purple-300">
-                      <span>{activeLesson.courseName}</span>
-                      <span className="font-mono text-emerald-400">1080p HD</span>
+                  <div className="space-y-2">
+                    <div className="rounded-2xl bg-slate-900 text-white p-4 aspect-video flex flex-col justify-between shadow-inner">
+                      <div className="flex items-center justify-between text-[11px] text-purple-300">
+                        <span>{activeLesson.courseName}</span>
+                        <span className="font-mono text-emerald-400">1080p HD</span>
+                      </div>
+
+                      <div className="text-center my-auto space-y-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const link = activeLesson.recordingUrl || activeLesson.fileOrUrl;
+                            if (link && link.startsWith("http")) {
+                              window.open(link, "_blank", "noopener,noreferrer");
+                            } else {
+                              setIsPlaying(!isPlaying);
+                            }
+                          }}
+                          className="w-12 h-12 rounded-full bg-purple-600 hover:bg-purple-700 text-white flex items-center justify-center mx-auto shadow-md cursor-pointer transition-transform active:scale-95"
+                        >
+                          {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5 fill-white" />}
+                        </button>
+                        <p className="text-xs font-bold text-white pt-1">{activeLesson.title}</p>
+                        <p className="text-[10px] text-purple-200">{activeLesson.teacherName || "Faculty Instructor"}</p>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] text-slate-400">
+                        <span>Duration: {activeLesson.sizeOrDuration}</span>
+                        {activeLesson.sessionDate && <span>Date: {activeLesson.sessionDate}</span>}
+                      </div>
                     </div>
 
-                    <div className="text-center my-auto space-y-1">
-                      <button
-                        type="button"
-                        onClick={() => setIsPlaying(!isPlaying)}
-                        className="w-12 h-12 rounded-full bg-purple-600 hover:bg-purple-700 text-white flex items-center justify-center mx-auto shadow-md cursor-pointer transition-transform active:scale-95"
+                    {/* Prominent Watch Recorded Class Button */}
+                    {(activeLesson.recordingUrl || (activeLesson.fileOrUrl && activeLesson.fileOrUrl.startsWith("http"))) && (
+                      <a
+                        href={activeLesson.recordingUrl || activeLesson.fileOrUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full py-2.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-[0.98] text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                        title="Open Google Drive or YouTube recorded class link"
                       >
-                        {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
-                      </button>
-                      <p className="text-xs font-bold text-white pt-1">{activeLesson.title}</p>
-                      <p className="text-[10px] text-purple-200">{activeLesson.teacherName || "Faculty Instructor"}</p>
-                    </div>
-
-                    <div className="flex items-center justify-between text-[10px] text-slate-400">
-                      <span>Duration: {activeLesson.sizeOrDuration}</span>
-                      <span>Speed: 1.0x</span>
-                    </div>
+                        <Play className="w-3.5 h-3.5 fill-white" />
+                        <span>▶️ Watch Recorded Class</span>
+                      </a>
+                    )}
                   </div>
                 )}
 
                 {/* Playlist */}
                 <div className="space-y-2">
-                  {videoMaterials.map((ch, idx) => (
-                    <div
-                      key={ch.id}
-                      onClick={() => {
-                        setActiveVideoId(ch.id);
-                        setIsPlaying(true);
-                      }}
-                      className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
-                        activeVideoId === ch.id
-                          ? "bg-purple-50 border-purple-300"
-                          : "bg-white border-purple-100 hover:bg-purple-50/40"
-                      }`}
-                    >
-                      <div className="space-y-0.5">
-                        <span className="text-[10px] font-bold text-purple-700 uppercase">
-                          Lesson {idx + 1}
-                        </span>
-                        <h5 className="text-xs font-bold text-slate-900 leading-snug">
-                          {ch.title}
-                        </h5>
-                        <p className="text-[10px] text-slate-500">
-                          {ch.teacherName || "Faculty"} • {ch.sizeOrDuration}
-                        </p>
-                      </div>
+                  {videoMaterials.map((ch, idx) => {
+                    const videoLink = ch.recordingUrl || (ch.fileOrUrl?.startsWith("http") ? ch.fileOrUrl : undefined);
+                    return (
+                      <div
+                        key={ch.id}
+                        onClick={() => {
+                          setActiveVideoId(ch.id);
+                          setIsPlaying(true);
+                        }}
+                        className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
+                          activeVideoId === ch.id
+                            ? "bg-purple-50 border-purple-300"
+                            : "bg-white border-purple-100 hover:bg-purple-50/40"
+                        }`}
+                      >
+                        <div className="space-y-0.5 flex-1 min-w-0">
+                          <span className="text-[10px] font-bold text-purple-700 uppercase">
+                            Lesson {idx + 1}
+                          </span>
+                          <h5 className="text-xs font-bold text-slate-900 leading-snug truncate">
+                            {ch.title}
+                          </h5>
+                          <p className="text-[10px] text-slate-500">
+                            {ch.teacherName || "Faculty"} • {ch.sizeOrDuration} {ch.sessionDate ? `• ${ch.sessionDate}` : ""}
+                          </p>
+                        </div>
 
-                      <PlayCircle className="w-5 h-5 text-purple-600 shrink-0" />
-                    </div>
-                  ))}
+                        {videoLink ? (
+                          <a
+                            href={videoLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="py-1 px-2.5 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-800 font-extrabold text-[10.5px] flex items-center gap-1 shrink-0 transition-colors cursor-pointer"
+                          >
+                            <Play className="w-2.5 h-2.5 fill-purple-800" />
+                            <span>Watch</span>
+                          </a>
+                        ) : (
+                          <PlayCircle className="w-5 h-5 text-purple-600 shrink-0" />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </>
             )}

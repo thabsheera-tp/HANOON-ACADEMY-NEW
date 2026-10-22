@@ -34,11 +34,8 @@ export function formatWhatsAppPhone(rawPhone: string): string {
   if (clean.length === 10) {
     return `91${clean}`;
   }
-  if (clean.startsWith("91") && clean.length === 12) {
-    return clean;
-  }
-  if (!clean.startsWith("91")) {
-    return `91${clean}`;
+  if (clean.length === 11 && clean.startsWith("0")) {
+    return `91${clean.slice(1)}`;
   }
   return clean;
 }
@@ -217,7 +214,7 @@ export async function getLiveClassEnrolledRecipients(
 
   // Fallback demo students if database is empty
   const fallbackStudents = [
-    { name: "Fathima Zahra", phone: "9846012345" },
+    { name: "Fathima Zahra", phone: "9656294203" },
     { name: "Amina Beevi", phone: "9847123456" },
     { name: "Khadija Mariyam", phone: "9848234567" },
   ];

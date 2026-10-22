@@ -8,6 +8,8 @@ export interface SubjectChapter {
   pdfSize: string;
   pdfUrl?: string;
   videoUrl?: string;
+  recordedLink?: string;
+  date?: string;
 }
 
 export interface AdaviyyaSubject {
@@ -213,26 +215,33 @@ export function saveTeacherWhatsApp(instructorName: string, whatsapp: string): v
 }
 
 /**
- * Adds a new chapter with attached PDF study notes to a specific Adaviyya subject.
+ * Adds a new chapter with attached PDF study notes and/or recorded class video link to a specific Adaviyya subject.
  */
 export function addChapterToSubject(
   subjectId: "seerah" | "haddad" | "fiqh" | "hadith",
   chapterData: {
     title: string;
     duration?: string;
-    pdfTitle: string;
+    pdfTitle?: string;
     pdfSize?: string;
     pdfUrl?: string;
+    videoUrl?: string;
+    recordedLink?: string;
+    date?: string;
   }
 ): SubjectChapter {
   const current = getAdaviyyaSubjects();
+  const finalVideo = chapterData.recordedLink || chapterData.videoUrl;
   const newChapter: SubjectChapter = {
     id: `${subjectId}-ch-${Date.now()}`,
     title: chapterData.title.trim(),
     duration: chapterData.duration || "45 mins",
-    pdfTitle: chapterData.pdfTitle.trim(),
-    pdfSize: chapterData.pdfSize || "3.5 MB",
+    pdfTitle: (chapterData.pdfTitle || (chapterData.pdfUrl ? `${chapterData.title.trim()}.pdf` : "")).trim(),
+    pdfSize: chapterData.pdfSize || (chapterData.pdfUrl ? "3.5 MB" : ""),
     pdfUrl: chapterData.pdfUrl,
+    videoUrl: finalVideo,
+    recordedLink: finalVideo,
+    date: chapterData.date || new Date().toISOString().split("T")[0],
   };
 
   const updated = current.map((s) => {
@@ -246,11 +255,30 @@ export function addChapterToSubject(
   });
 
   saveAdaviyyaSubjects(updated);
+
+  // Sync with Supabase course_subjects table
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const subjectToUpdate = updated.find((s) => s.id === subjectId);
+      if (subjectToUpdate) {
+        supabase
+          .from("course_subjects")
+          .update({ chapters: subjectToUpdate.chapters })
+          .eq("id", subjectId)
+          .then(({ error }) => {
+            if (error) console.warn("Could not sync chapters to Supabase course_subjects:", error);
+          });
+      }
+    } catch (e) {
+      console.warn("Exception syncing chapter to Supabase:", e);
+    }
+  }
+
   return newChapter;
 }
 
 /**
- * Removes a chapter from a specific Adaviyya subject.
+ * Removes a chapter from a specific Adaviyya subject and syncs to Supabase.
  */
 export function deleteChapterFromSubject(
   subjectId: string,
@@ -268,4 +296,21 @@ export function deleteChapterFromSubject(
   });
 
   saveAdaviyyaSubjects(updated);
+
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const subjectToUpdate = updated.find((s) => s.id === subjectId);
+      if (subjectToUpdate) {
+        supabase
+          .from("course_subjects")
+          .update({ chapters: subjectToUpdate.chapters })
+          .eq("id", subjectId)
+          .then(({ error }) => {
+            if (error) console.warn("Could not sync deleted chapter to Supabase course_subjects:", error);
+          });
+      }
+    } catch (e) {
+      console.warn("Exception syncing deleted chapter to Supabase:", e);
+    }
+  }
 }

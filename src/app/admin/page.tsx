@@ -102,7 +102,7 @@ export const FACULTY_MEMBERS = [
     shortName: "Faisal",
     department: "Executive Dean & Lead Instructor",
     course: "Adaviyya (Seerah & Ethics)",
-    phone: "919846012345",
+    phone: "919656294203",
     ratePerClass: 800,
   },
   {
@@ -138,7 +138,7 @@ export function getWhatsAppPayrollAdviceUrl(pay: DbPayroll): string {
   const teacher = FACULTY_MEMBERS.find(
     (f) => f.name.toLowerCase() === (pay.teacher_name || "").toLowerCase() || f.id === pay.teacher_id
   );
-  const rawPhone = teacher?.phone || "919846012345";
+  const rawPhone = teacher?.phone || "919656294203";
   const message = `*HANOON ACADEMY | വിജ്ഞാന വെളിച്ചം* 🎓
 *FACULTY REMUNERATION ADVICE*
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -156,7 +156,7 @@ Jazakallahu Khairan for your dedication to Hanoon Academy students.
 
 _Office of Finance & Human Resources_
 🌐 https://hanoonacademy.com
-📞 Admin Desk: +91 98460 12345`;
+📞 Admin Desk: +91 96562 94203`;
 
   return `https://wa.me/${rawPhone}?text=${encodeURIComponent(message)}`;
 }
@@ -790,7 +790,7 @@ export default function AdminDashboardPage() {
     const formattedWhatsApp =
       cleanWhatsApp.length === 10
         ? `91${cleanWhatsApp}`
-        : cleanWhatsApp || "919846012345";
+        : cleanWhatsApp || "919656294203";
 
     const payload = {
       ...settingsForm,
@@ -1392,7 +1392,7 @@ export default function AdminDashboardPage() {
                         type="text"
                         value={settingsForm.contactWhatsApp}
                         onChange={(e) => setSettingsForm({ ...settingsForm, contactWhatsApp: e.target.value })}
-                        placeholder="e.g. 9846012345 or 919846012345"
+                        placeholder="e.g. 9656294203 or 919656294203"
                         className="w-full px-4 py-3 rounded-2xl bg-purple-50/50 border border-purple-200 focus:border-purple-600 focus:bg-white text-xs font-medium text-slate-900 outline-none transition-all"
                       />
                       <p className="text-[11px] text-slate-500 font-medium">

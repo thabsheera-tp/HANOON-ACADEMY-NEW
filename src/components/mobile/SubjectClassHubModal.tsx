@@ -313,6 +313,20 @@ export default function SubjectClassHubModal({
                     </div>
                   )}
 
+                  {/* Prominent Recorded Class Link (Google Drive / YouTube) */}
+                  {(chapter.recordedLink || chapter.videoUrl) && (
+                    <a
+                      href={chapter.recordedLink || chapter.videoUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-95 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                      title="Watch Recorded Class Link (Google Drive / YouTube)"
+                    >
+                      <PlayCircle className="w-3.5 h-3.5" />
+                      <span>▶️ Watch Recorded Class</span>
+                    </a>
+                  )}
+
                   {/* PDF Download Button - Locked when unpaid */}
                   <div className="pt-1.5 border-t border-purple-100/60 flex items-center justify-between">
                     <span className="text-[10px] text-slate-500 font-medium truncate max-w-[190px]">

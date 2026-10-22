@@ -33,7 +33,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   qrCodeUrl: "",
   merchantName: "Hanoon Academy",
   autoApprovalEnabled: false,
-  contactWhatsApp: "919846012345",
+  contactWhatsApp: "919656294203",
   notificationAlerts: true,
   compactMobileMode: false,
   coursePricing: {
@@ -57,7 +57,7 @@ export function formatWhatsAppLink(phone?: string, text?: string): string {
   const raw = phone ? String(phone).replace(/\D/g, "") : "";
   let formattedPhone = raw;
   if (!formattedPhone) {
-    formattedPhone = "919846012345";
+    formattedPhone = "919656294203";
   } else if (formattedPhone.length === 10) {
     formattedPhone = `91${formattedPhone}`;
   } else if (!formattedPhone.startsWith("91") && formattedPhone.length === 11 && formattedPhone.startsWith("0")) {

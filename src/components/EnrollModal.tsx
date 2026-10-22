@@ -119,8 +119,9 @@ export default function EnrollModal({
       setUpiError("Please enter your Student Full Name.");
       return;
     }
-    if (!upiData.phone.trim() || upiData.phone.trim().length < 10) {
-      setUpiError("Please enter a valid 10-digit WhatsApp phone number.");
+    const cleanPhone = upiData.phone.trim().replace(/\D/g, "");
+    if (!cleanPhone || cleanPhone.length < 10 || cleanPhone.length > 15) {
+      setUpiError("Please enter a valid WhatsApp phone number (10 to 15 digits).");
       return;
     }
     if (!cleanTx) {
@@ -383,9 +384,15 @@ export default function EnrollModal({
                     <input
                       type="tel"
                       required
-                      placeholder="10-digit WhatsApp number"
+                      placeholder="e.g. 9656294203 or +971XXXXXXXXX"
                       value={upiData.phone}
-                      onChange={(e) => setUpiData({ ...upiData, phone: e.target.value })}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const hasPlus = val.startsWith("+");
+                        const digitsOnly = val.replace(/\D/g, "").slice(0, 15);
+                        setUpiData({ ...upiData, phone: hasPlus ? `+${digitsOnly}` : digitsOnly });
+                      }}
+                      maxLength={16}
                       className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-purple-200 text-xs sm:text-sm text-slate-900 focus:outline-none focus:border-purple-600"
                     />
                   </div>

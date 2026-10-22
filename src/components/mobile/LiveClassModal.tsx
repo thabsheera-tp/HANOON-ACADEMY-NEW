@@ -286,25 +286,39 @@ export default function LiveClassModal({
             </button>
           )}
 
-          {activeClass?.meetingLink ? (
-            <a
-              href={activeClass.meetingLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="py-1.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold flex items-center gap-1 transition-all shadow-xs"
-            >
-              <span>Open in {activeClass.platform || "Meeting"}</span>
-              <ExternalLink className="w-3 h-3" />
-            </a>
-          ) : (
-            <button
-              type="button"
-              disabled
-              className="py-1.5 px-3 rounded-xl bg-slate-100 text-slate-400 text-xs font-bold cursor-not-allowed"
-            >
-              <span>No Active Meeting Link</span>
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {(activeClass?.recordingUrl || (activeClass as any)?.recording_url) && (
+              <a
+                href={activeClass?.recordingUrl || (activeClass as any)?.recording_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="py-1.5 px-3 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-900 border border-purple-200 text-xs font-extrabold flex items-center gap-1 transition-all shadow-2xs"
+                title="Watch Recorded Class Link (Google Drive / YouTube)"
+              >
+                <span>▶️ Watch Recorded Class</span>
+              </a>
+            )}
+
+            {activeClass?.meetingLink ? (
+              <a
+                href={activeClass.meetingLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="py-1.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold flex items-center gap-1 transition-all shadow-xs"
+              >
+                <span>Open in {activeClass.platform || "Meeting"}</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="py-1.5 px-3 rounded-xl bg-slate-100 text-slate-400 text-xs font-bold cursor-not-allowed"
+              >
+                <span>No Active Meeting Link</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

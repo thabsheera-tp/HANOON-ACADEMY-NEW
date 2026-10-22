@@ -20,6 +20,10 @@ import {
   Scale,
   ScrollText,
   Lock,
+  Check,
+  Play,
+  Video,
+  ExternalLink,
 } from "lucide-react";
 import { UserProfile, SelectedCourse, PaymentDetails } from "@/types/app";
 import { SpecialClass, getSpecialClasses, fetchSpecialClassesFromSupabase } from "@/services/specialClassService";
@@ -37,8 +41,13 @@ import ProgressScoreBarChart from "@/components/charts/ProgressScoreBarChart";
 import { getAppSettings, formatWhatsAppLink } from "@/services/settingsService";
 import { getNotifications, markAllNotificationsAsRead, AppNotification } from "@/services/notificationService";
 import StudentNoticeBoard from "@/components/mobile/StudentNoticeBoard";
-import { getLocalAttendanceRecords } from "@/services/attendanceService";
-import { LiveClassSession, fetchLiveClassesFromSupabase, getTeacherClasses } from "@/services/teacherService";
+import { getLocalAttendanceRecords, fetchStudentAttendanceMetrics } from "@/services/attendanceService";
+import {
+  fetchStudentModuleScores,
+  calculateCourseCompletionMetrics,
+  CourseCompletionProgress,
+} from "@/services/progressService";
+import { LiveClassSession, fetchLiveClassesFromSupabase, fetchCourseMaterialsFromSupabase, getTeacherClasses } from "@/services/teacherService";
 
 interface ScreenDashboardProps {
   userProfile: UserProfile;
@@ -74,6 +83,17 @@ export default function ScreenDashboard({
 
   // Dynamic Live Classes fetched directly from Supabase
   const [liveClasses, setLiveClasses] = useState<LiveClassSession[]>(() => getTeacherClasses());
+
+  // Dynamic Recorded Classes (Google Drive / YouTube)
+  const [recordedClassesList, setRecordedClassesList] = useState<{
+    id: string;
+    title: string;
+    url: string;
+    date?: string;
+    subjectName?: string;
+    teacherName?: string;
+    duration?: string;
+  }[]>([]);
 
   // Dynamic Subjects based on Enrolled Course
   const subjects: AdaviyyaSubject[] = React.useMemo(() => {
@@ -262,7 +282,54 @@ export default function ScreenDashboard({
     window.addEventListener("hanoon_certificates_updated", handleCertUpdate as EventListener);
     window.addEventListener("hanoon_classes_updated", handleClassesUpdate as EventListener);
     window.addEventListener("hanoon_notifications_updated", updateNotifs);
-    window.addEventListener("hanoon_new_notification", updateNotifs);
+    // 4b. Dynamic Recorded Classes Loader
+    const loadRecordedClasses = async () => {
+      try {
+        const [materials, cls] = await Promise.all([
+          fetchCourseMaterialsFromSupabase(selectedCourse.id),
+          fetchLiveClassesFromSupabase(selectedCourse.id),
+        ]);
+
+        const recordedFromMaterials = (materials || [])
+          .filter((m) => (m.type === "VIDEO" || Boolean(m.recordingUrl)) && Boolean(m.recordingUrl || m.fileOrUrl))
+          .map((m) => ({
+            id: m.id,
+            title: m.title,
+            url: (m.recordingUrl || m.fileOrUrl)!,
+            date: m.sessionDate,
+            subjectName: m.courseName,
+            teacherName: m.teacherName,
+            duration: m.sizeOrDuration,
+          }));
+
+        const recordedFromClasses = (cls || [])
+          .filter((c) => Boolean(c.recordingUrl || (c as any).recording_url))
+          .map((c) => ({
+            id: c.id,
+            title: c.title,
+            url: (c.recordingUrl || (c as any).recording_url)!,
+            date: c.date,
+            subjectName: c.courseName,
+            teacherName: c.teacherName,
+            duration: c.duration,
+          }));
+
+        const combinedMap = new Map<string, (typeof recordedFromMaterials)[0]>();
+        [...recordedFromClasses, ...recordedFromMaterials].forEach((item) => {
+          if (item.url && !combinedMap.has(item.url)) {
+            combinedMap.set(item.url, item);
+          }
+        });
+
+        setRecordedClassesList(Array.from(combinedMap.values()));
+      } catch (err) {
+        console.warn("Could not load recorded classes in student dashboard:", err);
+      }
+    };
+
+    loadRecordedClasses();
+
+    window.addEventListener("hanoon_material_uploaded", loadRecordedClasses);
 
     // Dynamic timer ticker
     const timer = setInterval(() => {
@@ -303,6 +370,7 @@ export default function ScreenDashboard({
       window.removeEventListener("hanoon_classes_updated", handleClassesUpdate as EventListener);
       window.removeEventListener("hanoon_notifications_updated", updateNotifs);
       window.removeEventListener("hanoon_new_notification", updateNotifs);
+      window.removeEventListener("hanoon_material_uploaded", loadRecordedClasses);
       clearInterval(timer);
     };
   }, [selectedCourse.id, studentName, userProfile.id]);
@@ -416,7 +484,12 @@ export default function ScreenDashboard({
     }
   };
 
-  const attendanceStats = React.useMemo(() => {
+  // Dynamic Attendance Stats fetched directly from Supabase
+  const [attendanceStats, setAttendanceStats] = useState<{
+    present: number;
+    leave: number;
+    absent: number;
+  }>(() => {
     try {
       const records = getLocalAttendanceRecords();
       const phoneDigits = (userProfile.phone || "").replace(/\D/g, "");
@@ -438,12 +511,79 @@ export default function ScreenDashboard({
     } catch {
       return { present: 0, leave: 0, absent: 0 };
     }
-  }, [userProfile.phone, userProfile.id, studentName]);
+  });
 
-  // Assessment scores: No hardcoded dummy scores. Assessment scores appear once evaluations are recorded.
-  const progressData: { module: string; score: number }[] = React.useMemo(() => {
-    return [];
-  }, []);
+  // Dynamic Assessment and Module Completion Scores fetched directly from Supabase
+  const [progressData, setProgressData] = useState<{ module: string; score: number }[]>([]);
+
+  // Dynamic Course Completion Progress for long-term tracks (e.g. Adaviyya 6-month course)
+  const [courseCompletion, setCourseCompletion] = useState<CourseCompletionProgress | null>(null);
+
+  // Fetch student attendance, progress, and course completion metrics directly from Supabase
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadDynamicMetrics = async () => {
+      try {
+        // 1. Fetch live attendance metrics from Supabase
+        const attendanceMetrics = await fetchStudentAttendanceMetrics({
+          studentId: userProfile.id,
+          phone: userProfile.phone,
+          studentName,
+          courseId: selectedCourse.id,
+          isApproved,
+        });
+
+        if (isMounted && attendanceMetrics.total > 0) {
+          setAttendanceStats({
+            present: attendanceMetrics.present,
+            leave: attendanceMetrics.leave,
+            absent: attendanceMetrics.absent,
+          });
+        }
+
+        // 2. Fetch module completion scores directly from Supabase course_subjects & evaluations
+        const scores = await fetchStudentModuleScores({
+          studentId: userProfile.id,
+          phone: userProfile.phone,
+          studentName,
+          courseId: selectedCourse.id,
+          isApproved,
+        });
+
+        if (isMounted) {
+          setProgressData(scores);
+        }
+
+        // 3. Calculate dynamic course progress bar for long-term courses (e.g. Adaviyya 6-month course)
+        const progressMetrics = await calculateCourseCompletionMetrics({
+          courseId: selectedCourse.id,
+          isApproved,
+          studentId: userProfile.id,
+          phone: userProfile.phone,
+        });
+
+        if (isMounted) {
+          setCourseCompletion(progressMetrics);
+        }
+      } catch (err) {
+        console.warn("Could not load dynamic student metrics from Supabase:", err);
+      }
+    };
+
+    loadDynamicMetrics();
+
+    const handleAttendanceUpdate = () => {
+      loadDynamicMetrics();
+    };
+
+    window.addEventListener("hanoon_attendance_updated", handleAttendanceUpdate);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener("hanoon_attendance_updated", handleAttendanceUpdate);
+    };
+  }, [userProfile.id, userProfile.phone, studentName, selectedCourse.id, isApproved]);
 
   const liveNowClass = liveClasses.find((c) => c.status === "LIVE_NOW");
   const upcomingClass = liveClasses.find((c) => c.status === "SCHEDULED");
@@ -692,57 +832,73 @@ export default function ScreenDashboard({
               </span>
             </div>
           </button>
-        </div>
-      </div>
 
-      {/* 3. DATA VISUALIZATION (RECHARTS): ATTENDANCE DONUT & COURSE PROGRESS BAR */}
-      <div className="space-y-2.5">
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-1.5">
-            <BarChart3 className="w-3.5 h-3.5 text-purple-600" />
-            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-              Academic Performance & Attendance
-            </h3>
-          </div>
-          <span className="text-[10px] font-bold text-slate-400">
-            Real-time Metrics
-          </span>
-        </div>
-
-        <div className="space-y-2.5">
-          {/* Card A: Attendance Donut Chart */}
-          <div className="bg-white p-3.5 rounded-2xl border border-purple-100 shadow-sm space-y-2">
+          {/* Widget A: Neumorphic Square Card containing Modern Donut Chart (Attendance Record) */}
+          <div className="col-span-1 bg-white rounded-3xl p-3 border border-purple-100/90 shadow-[5px_5px_15px_rgba(147,51,234,0.06),-5px_-5px_15px_rgba(255,255,255,0.95)] flex flex-col justify-between hover:border-purple-200 transition-all">
             <div className="flex items-center justify-between">
-              <div>
-                <span className="text-xs font-extrabold text-slate-800 block">
-                  Attendance Record
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-purple-600 animate-pulse" />
+                <span className="text-[11px] font-extrabold text-slate-800">
+                  Attendance
                 </span>
-                <span className="text-[10px] text-slate-400">Class presence and session compliance</span>
               </div>
-              <span className="text-[10px] font-extrabold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100">
-                Live Attendance
+              <span className="text-[9px] font-black uppercase text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded-full border border-purple-100">
+                Donut
               </span>
             </div>
-            <AttendanceDonutChart
-              presentCount={attendanceStats.present}
-              leaveCount={attendanceStats.leave}
-              absentCount={attendanceStats.absent}
-            />
+
+            <div className="my-auto py-1">
+              <AttendanceDonutChart
+                compact={true}
+                presentCount={attendanceStats.present}
+                leaveCount={attendanceStats.leave}
+                absentCount={attendanceStats.absent}
+              />
+            </div>
           </div>
 
-          {/* Card B: Course Progress Bar Graph */}
-          <div className="bg-white p-3.5 rounded-2xl border border-purple-100 shadow-sm space-y-2">
+          {/* Widget B: Companion Neumorphic Square Card - Attendance Health & Compliance */}
+          <div className="col-span-1 bg-white rounded-3xl p-3 border border-purple-100/90 shadow-[5px_5px_15px_rgba(147,51,234,0.06),-5px_-5px_15px_rgba(255,255,255,0.95)] flex flex-col justify-between hover:border-purple-200 transition-all">
             <div className="flex items-center justify-between">
-              <div>
-                <span className="text-xs font-extrabold text-slate-800 block">
-                  Course Progress & Scores
+              <div className="flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="text-[11px] font-extrabold text-slate-800">
+                  Health & Streak
                 </span>
-                <span className="text-[10px] text-slate-400">Module completion and assessment scores</span>
               </div>
-              <span className="text-[10px] font-extrabold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100">
-                Core Units
+              <span className="text-[9px] font-black uppercase text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded-full border border-emerald-100">
+                Good Standing
               </span>
             </div>
+
+            <div className="my-auto space-y-1.5 py-1">
+              <div className="p-2 rounded-xl bg-purple-50/60 border border-purple-100/60">
+                <span className="text-[9px] uppercase font-bold text-slate-400 block leading-none">
+                  Compliance Status
+                </span>
+                <span className="text-sm font-black text-purple-900 block mt-0.5">
+                  {attendanceStats.absent === 0 ? "100% Verified" : `${attendanceStats.present} Attended`}
+                </span>
+              </div>
+              <p className="text-[9.5px] text-slate-500 font-medium leading-tight">
+                {attendanceStats.absent === 0
+                  ? "Zero unexcused absences recorded. Full exam eligibility active."
+                  : `${attendanceStats.absent} absences on record. Maintain >80% for certification.`}
+              </p>
+            </div>
+
+            <div className="pt-1.5 border-t border-purple-50 flex items-center justify-between text-[9.5px] text-purple-700 font-bold">
+              <span>Term Presence</span>
+              <span className="text-emerald-600 font-black">
+                {attendanceStats.present + attendanceStats.leave + attendanceStats.absent > 0
+                  ? `${Math.round((attendanceStats.present / (attendanceStats.present + attendanceStats.leave + attendanceStats.absent)) * 100)}%`
+                  : "100%"}
+              </span>
+            </div>
+          </div>
+
+          {/* Widget C: Minimalist Bar Chart / Line Graph in a Wider Card (col-span-2) */}
+          <div className="col-span-2 bg-white rounded-3xl p-4 border border-purple-100/90 shadow-[5px_5px_15px_rgba(147,51,234,0.06),-5px_-5px_15px_rgba(255,255,255,0.95)] hover:border-purple-200 transition-all">
             <ProgressScoreBarChart data={progressData} />
           </div>
         </div>
@@ -830,17 +986,126 @@ export default function ScreenDashboard({
           </button>
         </div>
 
-        {/* Minimal Progress Line */}
-        <div className="space-y-1 pt-0.5">
+        {/* Dynamic Course Progress Bar for Long-Term Tracks (e.g. Adaviyya 6-Month Course) */}
+        <div className="space-y-1.5 pt-1.5 border-t border-purple-50">
           <div className="flex items-center justify-between text-[10.5px]">
-            <span className="font-semibold text-slate-500">Progress</span>
-            <span className="font-bold text-purple-700">{isApproved ? "100% Enrolled" : "Pending Approval"}</span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-extrabold text-slate-700">Course Progress</span>
+              <span className="text-[9.5px] font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
+                {courseCompletion?.statusLabel || (isApproved ? "Active Track" : "Pending Approval")}
+              </span>
+            </div>
+            <span className="font-black text-purple-700 text-xs">
+              {isApproved && courseCompletion
+                ? `${courseCompletion.percentage}% Completed`
+                : isApproved
+                ? "100% Enrolled"
+                : "Pending Approval"}
+            </span>
           </div>
-          <div className="w-full h-1.5 rounded-full bg-purple-100 overflow-hidden">
-            <div className="h-full rounded-full bg-purple-600 transition-all duration-500" style={{ width: isApproved ? "100%" : "5%" }} />
+
+          <div className="relative w-full h-2 rounded-full bg-purple-100 overflow-hidden shadow-inner">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-500 transition-all duration-700 shadow-xs"
+              style={{
+                width: `${
+                  isApproved && courseCompletion
+                    ? courseCompletion.percentage
+                    : isApproved
+                    ? 100
+                    : 5
+                }%`,
+              }}
+            />
           </div>
+
+          {/* Timeline Milestones for 6-Month Adaviyya / Long-Term Tracks */}
+          {courseCompletion && courseCompletion.isLongTermCourse && isApproved && (
+            <div className="pt-1 flex items-center justify-between text-[9px] text-slate-400 font-semibold border-t border-dashed border-purple-100/80">
+              <span className="text-purple-700 font-bold flex items-center gap-0.5">
+                <Check className="w-2.5 h-2.5 text-purple-600" />
+                <span>Month 1: Basics</span>
+              </span>
+              <span className={courseCompletion.currentMonth >= 3 ? "text-purple-700 font-bold" : "text-slate-400"}>
+                Month 3: Mid-Term
+              </span>
+              <span className={courseCompletion.currentMonth >= 6 ? "text-purple-700 font-bold" : "text-slate-400"}>
+                Month 6: Graduation
+              </span>
+            </div>
+          )}
+
+          {courseCompletion && isApproved && (
+            <p className="text-[10px] text-slate-500 font-medium line-clamp-1">
+              <span className="font-bold text-slate-700">{courseCompletion.stageTitle}</span> • Next: {courseCompletion.nextMilestone}
+            </p>
+          )}
         </div>
       </div>
+
+      {/* 5b. RECORDED CLASSES & REPLAYS (Google Drive / YouTube) */}
+      {recordedClassesList.length > 0 && (
+        <div className="bg-white p-3.5 rounded-2xl border border-purple-100 shadow-sm space-y-3 animate-fade-in">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+                <Video className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                  Recorded Classes
+                </h3>
+                <p className="text-[10px] text-slate-500 font-medium">
+                  Watch recorded sessions on Google Drive / YouTube
+                </p>
+              </div>
+            </div>
+            <span className="text-[10px] font-bold text-purple-700 bg-purple-50 border border-purple-100 px-2 py-0.5 rounded-full">
+              {recordedClassesList.length} Available
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            {recordedClassesList.slice(0, 3).map((rec) => (
+              <div
+                key={rec.id}
+                className="p-3 rounded-xl bg-purple-50/40 border border-purple-100 hover:border-purple-200 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+              >
+                <div className="space-y-0.5">
+                  <h4 className="text-xs font-extrabold text-slate-900 leading-snug">
+                    {rec.title}
+                  </h4>
+                  <div className="flex items-center gap-2 text-[10px] text-slate-500 flex-wrap">
+                    {rec.date && (
+                      <span className="flex items-center gap-1 font-medium">
+                        <Calendar className="w-3 h-3 text-slate-400" />
+                        {rec.date}
+                      </span>
+                    )}
+                    {rec.teacherName && (
+                      <span className="font-medium">• Faculty: {rec.teacherName}</span>
+                    )}
+                    {rec.duration && (
+                      <span className="font-medium">• {rec.duration}</span>
+                    )}
+                  </div>
+                </div>
+
+                <a
+                  href={rec.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="py-1.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-95 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer shrink-0"
+                  title="Watch Recorded Class Link"
+                >
+                  <Play className="w-3 h-3 fill-white text-white" />
+                  <span>▶️ Watch Recorded Class</span>
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 6. ENROLLED SUBJECTS: 2x2 GRID (Real-time Unlock) */}
       <div id="enrolled-subjects" className="space-y-2">
@@ -964,27 +1229,38 @@ export default function ScreenDashboard({
         </div>
       )}
 
-      {/* 8. COMPACT ACTION UTILITIES: MENTOR WHATSAPP & FEE RECEIPT */}
-      <div className="grid grid-cols-2 gap-2.5 pt-0.5">
+      {/* 8. COMPACT ACTION UTILITIES: CONTACT ADMIN & MENTOR WHATSAPP & FEE RECEIPT */}
+      <div className="space-y-2 pt-0.5">
         <a
-          href={formatWhatsAppLink(
-            getAppSettings().contactWhatsApp,
-            `Assalamu Alaikum Usthad, I am ${studentName}, enrolled in ${selectedCourse.title}. I need academic assistance.`
-          )}
+          href="https://wa.me/919656294203?text=Assalamu%20Alaikum%20Admin,%20I%20need%20help%20with%20my%20Student%20Portal."
           target="_blank"
           rel="noopener noreferrer"
-          className="p-2.5 rounded-2xl bg-white border border-purple-100 hover:border-purple-300 shadow-xs flex items-center gap-2 transition-all cursor-pointer group active:scale-[0.98]"
+          className="w-full py-2.5 px-3.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/90 text-emerald-800 text-xs font-extrabold flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer group active:scale-[0.98]"
         >
-          <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-colors">
-            <MessageCircle className="w-3.5 h-3.5" />
-          </div>
-          <div>
-            <span className="text-xs font-bold text-slate-900 block leading-tight">
-              Mentor Chat
-            </span>
-            <span className="text-[9.5px] text-slate-500 font-medium">WhatsApp</span>
-          </div>
+          <MessageCircle className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
+          <span>Need Help? Contact Admin on WhatsApp</span>
         </a>
+
+        <div className="grid grid-cols-2 gap-2.5">
+          <a
+            href={formatWhatsAppLink(
+              "919656294203",
+              `Assalamu Alaikum Usthad, I am ${studentName}, enrolled in ${selectedCourse.title}. I need academic assistance.`
+            )}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-2.5 rounded-2xl bg-white border border-purple-100 hover:border-purple-300 shadow-xs flex items-center gap-2 transition-all cursor-pointer group active:scale-[0.98]"
+          >
+            <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-colors">
+              <MessageCircle className="w-3.5 h-3.5" />
+            </div>
+            <div>
+              <span className="text-xs font-bold text-slate-900 block leading-tight">
+                Mentor Chat
+              </span>
+              <span className="text-[9.5px] text-slate-500 font-medium">WhatsApp</span>
+            </div>
+          </a>
 
         {onOpenReceipt ? (
           <button
@@ -1019,6 +1295,7 @@ export default function ScreenDashboard({
             </div>
           </button>
         )}
+      </div>
       </div>
 
       {/* DIGITAL CERTIFICATES VIEW (Dynamic with Clean Empty State) */}

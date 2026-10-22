@@ -48,7 +48,7 @@ export default function ScreenWelcome({
 
   const handleDemoFill = () => {
     setName("Student");
-    setPhone("+91 98460 00000");
+    setPhone("+91 96562 94203");
     setPlace("Malappuram, Kerala");
     setError(null);
   };
@@ -155,7 +155,7 @@ export default function ScreenWelcome({
                 required
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                placeholder="e.g. +91 98460 12345"
+                placeholder="e.g. +91 96562 94203"
                 className="w-full pl-10 pr-4 py-3 rounded-2xl border border-slate-200 text-sm text-[#0F172A] placeholder:text-slate-400 focus:outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/20 transition-all bg-[#F0FDF4]/30"
               />
             </div>

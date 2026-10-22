@@ -271,8 +271,8 @@ export default function ScreenPayment({
       return;
     }
     const cleanPhone = studentPhone.trim().replace(/\D/g, "");
-    if (!cleanPhone || cleanPhone.length < 10) {
-      setError("Please enter a valid 10-digit WhatsApp number.");
+    if (!cleanPhone || cleanPhone.length < 10 || cleanPhone.length > 15) {
+      setError("Please enter a valid WhatsApp number (10 to 15 digits).");
       return;
     }
 
@@ -743,9 +743,15 @@ export default function ScreenPayment({
                     <Phone className="w-4 h-4 text-purple-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
                       type="tel"
-                      placeholder="Enter 10-digit WhatsApp number"
+                      placeholder="e.g. 9656294203 or +971XXXXXXXXX"
                       value={studentPhone}
-                      onChange={(e) => setStudentPhone(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const hasPlus = val.startsWith("+");
+                        const digitsOnly = val.replace(/\D/g, "").slice(0, 15);
+                        setStudentPhone(hasPlus ? `+${digitsOnly}` : digitsOnly);
+                      }}
+                      maxLength={16}
                       className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-purple-200/80 focus:border-purple-600 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-medium"
                     />
                   </div>

@@ -256,6 +256,28 @@ export default function SpecialClassModal({
                 )}
               </div>
 
+              {/* Recorded Session Replay Link */}
+              {Boolean((specialClass as any).recordingUrl || (specialClass as any).recording_url) && (
+                <div className="p-3.5 rounded-2xl bg-purple-50 border border-purple-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-900">Recorded Class Replay</span>
+                    <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
+                      Full Recording
+                    </span>
+                  </div>
+                  <a
+                    href={(specialClass as any).recordingUrl || (specialClass as any).recording_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-2.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                    title="Watch Recorded Class Link (Google Drive / YouTube)"
+                  >
+                    <PlayCircle className="w-3.5 h-3.5" />
+                    <span>▶️ Watch Recorded Class</span>
+                  </a>
+                </div>
+              )}
+
               {downloadSuccess && (
                 <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
