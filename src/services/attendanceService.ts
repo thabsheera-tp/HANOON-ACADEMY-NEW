@@ -269,94 +269,70 @@ export async function fetchStudentAttendanceMetrics(params: {
   courseId?: string;
   isApproved?: boolean;
 }): Promise<StudentAttendanceMetrics> {
-  const { studentId, phone, studentName, courseId, isApproved } = params;
+  const { studentId, phone, studentName, courseId } = params;
   const cleanPhone = (phone || "").replace(/\D/g, "");
-  const cleanName = (studentName || "").trim().toLowerCase();
 
   let dbRecords: AttendanceRecord[] = [];
 
-  // 1. Query Supabase 'attendance' table directly
+  // 1. Query Supabase 'attendance' table strictly filtered by student_id or student_phone
   if (isSupabaseConfigured && supabase) {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("attendance")
-        .select("*")
-        .order("attendance_date", { ascending: false });
+        .select("*");
+
+      if (studentId) {
+        query = query.eq("student_id", studentId);
+      } else if (cleanPhone) {
+        query = query.eq("student_phone", cleanPhone);
+      } else {
+        // Without student identity, strictly return 0 records
+        return { present: 0, leave: 0, absent: 0, total: 0, attendanceRate: 0, records: [] };
+      }
+
+      if (courseId) {
+        query = query.eq("course_id", courseId);
+      }
+
+      const { data, error } = await query.order("attendance_date", { ascending: false });
 
       if (!error && Array.isArray(data) && data.length > 0) {
-        dbRecords = data
-          .filter((row: any) => {
-            const rowPhone = (row.student_phone || "").replace(/\D/g, "");
-            const rowName = (row.student_name || "").trim().toLowerCase();
-            const rowId = row.student_id;
-            const rowCourse = (row.course_id || "").toLowerCase();
-            const targetCourse = (courseId || "").toLowerCase();
-
-            const courseMatch =
-              !targetCourse ||
-              !rowCourse ||
-              rowCourse.includes(targetCourse) ||
-              targetCourse.includes(rowCourse);
-            const studentMatch =
-              (cleanPhone &&
-                rowPhone &&
-                (rowPhone === cleanPhone ||
-                  rowPhone.endsWith(cleanPhone) ||
-                  cleanPhone.endsWith(rowPhone))) ||
-              (cleanName &&
-                rowName &&
-                (rowName === cleanName ||
-                  rowName.includes(cleanName) ||
-                  cleanName.includes(rowName))) ||
-              (studentId && rowId && rowId === studentId);
-
-            return courseMatch && studentMatch;
-          })
-          .map((row: any) => ({
-            id: row.id,
-            studentId: row.student_id || studentId || "std-live",
-            studentName: row.student_name || studentName || "Student",
-            studentPhone: row.student_phone || phone || "",
-            courseId: row.course_id || courseId || "adaviyya",
-            subjectId: row.subject_id || "core",
-            date: row.attendance_date,
-            status: row.status as AttendanceStatus,
-            notes: row.notes || undefined,
-            markedAt: row.marked_at || new Date().toISOString(),
-          }));
+        dbRecords = data.map((row: any) => ({
+          id: row.id,
+          studentId: row.student_id || studentId || "",
+          studentName: row.student_name || studentName || "Student",
+          studentPhone: row.student_phone || phone || "",
+          courseId: row.course_id || courseId || "adaviyya",
+          subjectId: row.subject_id || "core",
+          date: row.attendance_date,
+          status: row.status as AttendanceStatus,
+          notes: row.notes || undefined,
+          markedAt: row.marked_at || new Date().toISOString(),
+        }));
       }
     } catch (e) {
       console.warn("Could not query Supabase attendance:", e);
     }
   }
 
-  // 2. Merge with local attendance records
+  // 2. Merge with local attendance records strictly matching this student
   const localRecords = getLocalAttendanceRecords().filter((r) => {
     if (!r) return false;
     const rPhone = (r.studentPhone || "").replace(/\D/g, "");
-    const rName = (r.studentName || "").trim().toLowerCase();
-    const rCourse = (r.courseId || "").toLowerCase();
-    const targetCourse = (courseId || "").toLowerCase();
+    const rId = r.studentId;
 
-    const courseMatch =
-      !targetCourse ||
-      !rCourse ||
-      rCourse.includes(targetCourse) ||
-      targetCourse.includes(rCourse);
     const studentMatch =
-      (cleanPhone &&
-        rPhone &&
-        (rPhone === cleanPhone ||
-          rPhone.endsWith(cleanPhone) ||
-          cleanPhone.endsWith(rPhone))) ||
-      (cleanName &&
-        rName &&
-        (rName === cleanName ||
-          rName.includes(cleanName) ||
-          cleanName.includes(rName))) ||
-      (studentId && r.studentId && r.studentId === studentId);
+      (studentId && rId && rId === studentId) ||
+      (cleanPhone && rPhone && rPhone === cleanPhone);
 
-    return courseMatch && studentMatch;
+    if (!studentMatch) return false;
+
+    if (courseId) {
+      const rCourse = (r.courseId || "").toLowerCase();
+      const targetCourse = courseId.toLowerCase();
+      return !rCourse || rCourse.includes(targetCourse) || targetCourse.includes(rCourse);
+    }
+    return true;
   });
 
   // Combine and deduplicate
@@ -385,38 +361,8 @@ export async function fetchStudentAttendanceMetrics(params: {
     return { present, leave, absent, total, attendanceRate, records: allRecords };
   }
 
-  // 3. Fallback: If student is approved/enrolled, query live sessions held in Supabase
-  if (isApproved && isSupabaseConfigured && supabase) {
-    try {
-      const { data: liveClasses, error: liveErr } = await supabase
-        .from("live_classes")
-        .select("*")
-        .order("scheduled_at", { ascending: false });
-
-      if (!liveErr && Array.isArray(liveClasses) && liveClasses.length > 0) {
-        const targetCourse = (courseId || "adaviyya").toLowerCase();
-        const relevantClasses = liveClasses.filter((c: any) => {
-          const cCourse = (c.course_id || "").toLowerCase();
-          return !cCourse || cCourse.includes(targetCourse) || targetCourse.includes(cCourse);
-        });
-
-        if (relevantClasses.length > 0) {
-          const totalSessions = relevantClasses.length;
-          // Standard active attendance calculation based on live sessions
-          const present = Math.max(1, Math.round(totalSessions * 0.85));
-          const leave = Math.max(0, Math.round(totalSessions * 0.1));
-          const absent = Math.max(0, totalSessions - present - leave);
-          const total = present + leave + absent;
-          const attendanceRate =
-            total > 0 ? Math.round(((present + leave * 0.8) / total) * 100) : 90;
-          return { present, leave, absent, total, attendanceRate, records: [] };
-        }
-      }
-    } catch {
-      // Graceful fallback
-    }
-  }
-
+  // Strictly return empty state when database returns no records (No fake dummy data)
   return { present: 0, leave: 0, absent: 0, total: 0, attendanceRate: 0, records: [] };
 }
+
 

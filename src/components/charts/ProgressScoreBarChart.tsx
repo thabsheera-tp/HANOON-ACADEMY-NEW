@@ -20,13 +20,6 @@ interface ProgressScoreBarChartProps {
   title?: string;
 }
 
-const DEFAULT_SCORES: { module: string; score: number }[] = [
-  { module: "Unit 1", score: 92 },
-  { module: "Unit 2", score: 88 },
-  { module: "Unit 3", score: 95 },
-  { module: "Unit 4", score: 90 },
-];
-
 export default function ProgressScoreBarChart({
   data,
   initialMode = "bar",
@@ -39,14 +32,36 @@ export default function ProgressScoreBarChart({
     setIsMounted(true);
   }, []);
 
-  const activeData = data && data.length > 0 ? data : DEFAULT_SCORES;
-
   if (!isMounted) {
     return (
       <div className="h-40 w-full flex items-center justify-center bg-purple-50/40 rounded-2xl animate-pulse" />
     );
   }
 
+  // Clean empty state if database has no assessment records for student
+  if (!data || data.length === 0) {
+    return (
+      <div className="w-full space-y-2">
+        <div className="flex items-center justify-between text-xs">
+          <span className="font-extrabold text-slate-800">{title}</span>
+          <span className="text-[10px] font-bold text-slate-400 bg-purple-50/50 px-2 py-0.5 rounded-full border border-purple-100">
+            No evaluations yet
+          </span>
+        </div>
+        <div className="h-32 w-full flex flex-col items-center justify-center bg-purple-50/20 rounded-2xl border border-dashed border-purple-200 p-4 text-center space-y-1.5">
+          <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-400 flex items-center justify-center">
+            <BarChart3 className="w-4 h-4 text-purple-400" />
+          </div>
+          <p className="text-xs font-bold text-slate-700">No assessment records yet</p>
+          <p className="text-[10.5px] text-slate-400 max-w-[260px] leading-snug">
+            Unit test scores, oral recitations, and progress evaluations will be plotted here once graded by faculty.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const activeData = data;
   const averageScore = Math.round(
     activeData.reduce((acc, curr) => acc + curr.score, 0) / activeData.length
   );

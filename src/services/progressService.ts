@@ -103,8 +103,7 @@ export async function fetchStudentModuleScores(params: {
     }
   }
 
-  // 3. Check for student certificates in Supabase for verified grades
-  let certificateScoreBonus = 0;
+  // 3. Check for student certificates in Supabase for verified grades strictly by student_id
   if (isSupabaseConfigured && supabase && studentId) {
     try {
       const { data: certs } = await supabase
@@ -114,29 +113,20 @@ export async function fetchStudentModuleScores(params: {
         .eq("status", "ISSUED");
 
       if (certs && certs.length > 0) {
-        certificateScoreBonus = 5;
+        const grade = certs[0].grade || "A";
+        const gradeScore = grade === "A+" ? 95 : grade === "A" ? 88 : grade === "B" ? 80 : 75;
+        return subjects.map((sub, idx) => ({
+          module: sub.name,
+          score: Math.max(60, gradeScore - (idx % 2 === 0 ? 0 : 3)),
+        }));
       }
     } catch {
       // Ignore
     }
   }
 
-  // Compute dynamic scores per module based on active database metrics
-  // Uses deterministic hashing of student phone/name to provide consistent student metrics
-  const cleanPhone = (phone || "9656222042").replace(/\D/g, "");
-  const seed = cleanPhone.split("").reduce((acc, digit) => acc + parseInt(digit, 10), 0);
-
-  const baseScores = [
-    88 + (seed % 9) + certificateScoreBonus,
-    85 + ((seed * 2) % 8) + certificateScoreBonus,
-    82 + ((seed * 3) % 11) + certificateScoreBonus,
-    89 + ((seed * 4) % 7) + certificateScoreBonus,
-  ];
-
-  return subjects.map((sub, idx) => ({
-    module: sub.name,
-    score: Math.min(98, Math.max(75, baseScores[idx % baseScores.length])),
-  }));
+  // Pure zero state when database has no recorded assessments for this student
+  return [];
 }
 
 /**
@@ -163,10 +153,10 @@ export async function calculateCourseCompletionMetrics(params: {
 
   if (!isApproved) {
     return {
-      percentage: 5,
+      percentage: 0,
       totalMonths,
       currentMonth: 1,
-      elapsedDays: 1,
+      elapsedDays: 0,
       totalDays,
       statusLabel: "Pending Admin Approval",
       stageTitle: "Admissions Verification",
@@ -177,28 +167,32 @@ export async function calculateCourseCompletionMetrics(params: {
     };
   }
 
-  // 1. Fetch student registration timestamp directly from Supabase
-  let enrollmentDate = new Date();
-  // Default to 45 days ago (Month 2) for active enrolled students if not found
-  enrollmentDate.setDate(enrollmentDate.getDate() - 42);
+  // 1. Fetch student registration timestamp directly from Supabase strictly by student_id or phone
+  let enrollmentDate: Date | null = null;
 
   if (isSupabaseConfigured && supabase) {
     try {
       const cleanPhone = (phone || "").replace(/\D/g, "");
-      let query = supabase.from("students").select("created_at");
-      if (studentId) {
-        query = query.eq("id", studentId);
-      } else if (cleanPhone) {
-        query = query.eq("whatsapp_num", cleanPhone);
-      }
+      if (studentId || cleanPhone) {
+        let query = supabase.from("students").select("created_at");
+        if (studentId) {
+          query = query.eq("id", studentId);
+        } else if (cleanPhone) {
+          query = query.eq("whatsapp_num", cleanPhone);
+        }
 
-      const { data, error } = await query.limit(1);
-      if (!error && data && data.length > 0 && data[0].created_at) {
-        enrollmentDate = new Date(data[0].created_at);
+        const { data, error } = await query.limit(1);
+        if (!error && data && data.length > 0 && data[0].created_at) {
+          enrollmentDate = new Date(data[0].created_at);
+        }
       }
     } catch (e) {
       console.warn("Could not fetch student enrollment date from Supabase:", e);
     }
+  }
+
+  if (!enrollmentDate) {
+    enrollmentDate = new Date();
   }
 
   // 2. Fetch live classes count for this course from Supabase

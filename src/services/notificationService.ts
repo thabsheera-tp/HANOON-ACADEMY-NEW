@@ -311,3 +311,31 @@ export function triggerNotesUploadedNotification(params: {
     priority: "normal",
   });
 }
+
+/**
+ * Trigger: When Staff or Teacher uploads a recorded class link (Google Drive / YouTube).
+ * Sends instant in-app and browser alert to all enrolled students with direct watch link.
+ */
+export function triggerRecordedClassNotification(params: {
+  title: string;
+  courseName: string;
+  courseId: string;
+  recordingUrl: string;
+  teacherName?: string;
+  senderName?: string;
+}): AppNotification {
+  const { title, courseName, courseId, recordingUrl, teacherName, senderName } = params;
+
+  return createNotification({
+    title: `▶️ New Recorded Class: ${courseName}`,
+    message: `"${title}" is now available to watch on Google Drive / YouTube${teacherName ? ` (Faculty: ${teacherName})` : ""}. Click to access the recording.`,
+    type: "BROADCAST",
+    targetRole: "students",
+    targetCourseId: courseId,
+    targetCourseName: courseName,
+    meetingLink: recordingUrl,
+    senderName: senderName || teacherName || "Academic Faculty",
+    priority: "high",
+  });
+}
+

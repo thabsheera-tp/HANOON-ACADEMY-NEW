@@ -20,6 +20,7 @@ import {
   Play,
   PlayCircle,
   Calendar,
+  Bell,
 } from "lucide-react";
 import {
   getAdaviyyaSubjects,
@@ -35,7 +36,7 @@ import {
   saveRecordedClassToSupabase,
   CourseMaterial,
 } from "@/services/teacherService";
-import { triggerNotesUploadedNotification } from "@/services/notificationService";
+import { triggerNotesUploadedNotification, triggerRecordedClassNotification } from "@/services/notificationService";
 import { SHOWCASE_COURSES } from "@/components/mobile/ScreenCoursesList";
 
 interface PdfNotesUploadSectionProps {
@@ -214,6 +215,31 @@ export default function PdfNotesUploadSection({
     }
   };
 
+  const handleNotifyRecordedClass = (item?: { title: string; courseId: string; courseName?: string; recordingUrl?: string }) => {
+    const title = item?.title || chapterTitle.trim();
+    const courseId = item?.courseId || selectedCourseId;
+    const course = SHOWCASE_COURSES.find((c) => c.id === courseId);
+    const courseName = item?.courseName || course?.title || "Adaviyya";
+    const recordingUrl = item?.recordingUrl || recordedClassLink.trim();
+
+    if (!recordingUrl) {
+      alert("Please provide a valid recorded class link first.");
+      return;
+    }
+
+    triggerRecordedClassNotification({
+      title: title || "New Class Recording",
+      courseName,
+      courseId,
+      recordingUrl,
+      teacherName: "Academic Faculty",
+      senderName: "Administration",
+    });
+
+    setSuccessMessage(`Notification broadcasted: Enrolled students have been alerted for "${title || "Recorded Class"}"!`);
+    setTimeout(() => setSuccessMessage(null), 4000);
+  };
+
   // Delete note
   const handleDeleteMaterial = (materialId: string, subjectId?: string) => {
     if (confirm("Are you sure you want to remove this PDF note?")) {
@@ -379,10 +405,21 @@ export default function PdfNotesUploadSection({
 
             {/* 5. DEDICATED FIELD: Recorded Class Link (Google Drive / YouTube) */}
             <div className="space-y-1.5 p-3.5 rounded-2xl bg-purple-50/50 border border-purple-200/80">
-              <label className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
-                <Video className="w-4 h-4 text-purple-600" />
-                <span>Recorded Class Link (Google Drive / YouTube)</span>
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+                  <Video className="w-4 h-4 text-purple-600" />
+                  <span>Recorded Class Link (Google Drive / YouTube)</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => handleNotifyRecordedClass()}
+                  className="py-1 px-2.5 rounded-lg bg-purple-600 hover:bg-purple-700 active:scale-95 text-white text-[10.5px] font-extrabold flex items-center gap-1 shadow-2xs transition-all cursor-pointer"
+                  title="Notify all enrolled students immediately about this recording"
+                >
+                  <Bell className="w-3 h-3 text-white" />
+                  <span>Notify All Students</span>
+                </button>
+              </div>
               <input
                 type="url"
                 value={recordedClassLink}
@@ -604,16 +641,32 @@ export default function PdfNotesUploadSection({
                       {/* Actions: Watch Recorded Class / Download PDF & Delete */}
                       <div className="flex items-center gap-2 shrink-0 self-end sm:self-center flex-wrap">
                         {videoLink && (
-                          <a
-                            href={videoLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="py-1.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
-                            title="Watch Recorded Class (Opens Drive / YouTube)"
-                          >
-                            <Play className="w-3.5 h-3.5 fill-current" />
-                            <span>▶️ Watch Recorded Class</span>
-                          </a>
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleNotifyRecordedClass({
+                                title: item.title,
+                                courseId: item.courseId,
+                                courseName: item.courseName,
+                                recordingUrl: videoLink,
+                              })}
+                              className="py-1 px-2.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                              title="Broadcast alert to all students"
+                            >
+                              <Bell className="w-3 h-3 text-purple-600" />
+                              <span>Notify Students</span>
+                            </button>
+                            <a
+                              href={videoLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="py-1.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
+                              title="Watch Recorded Class (Opens Drive / YouTube)"
+                            >
+                              <Play className="w-3.5 h-3.5 fill-current" />
+                              <span>▶️ Watch Recorded Class</span>
+                            </a>
+                          </>
                         )}
 
                         {item.pdfUrl && (

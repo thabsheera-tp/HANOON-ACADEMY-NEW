@@ -287,18 +287,6 @@ export default function LiveClassModal({
           )}
 
           <div className="flex items-center gap-2">
-            {(activeClass?.recordingUrl || (activeClass as any)?.recording_url) && (
-              <a
-                href={activeClass?.recordingUrl || (activeClass as any)?.recording_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="py-1.5 px-3 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-900 border border-purple-200 text-xs font-extrabold flex items-center gap-1 transition-all shadow-2xs"
-                title="Watch Recorded Class Link (Google Drive / YouTube)"
-              >
-                <span>▶️ Watch Recorded Class</span>
-              </a>
-            )}
-
             {activeClass?.meetingLink ? (
               <a
                 href={activeClass.meetingLink}

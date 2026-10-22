@@ -24,10 +24,10 @@ export default function AttendanceDonutChart({
 
   const total = presentCount + leaveCount + absentCount;
   const isZeroState = total === 0;
-  const presentPct = isZeroState ? 100 : Math.round((presentCount / total) * 100);
+  const presentPct = isZeroState ? 0 : Math.round((presentCount / total) * 100);
 
   const data = isZeroState
-    ? [{ name: "Good Standing", value: 1, color: "#9333ea" }]
+    ? [{ name: "No Records Yet", value: 1, color: "#f3e8ff" }]
     : [
         { name: "Present", value: presentCount, color: "#9333ea" }, // purple-600
         { name: "Leave / Excused", value: leaveCount, color: "#c084fc" }, // violet-400
@@ -63,7 +63,7 @@ export default function AttendanceDonutChart({
                       <span className="text-purple-600">{item.name}: </span>
                       <span>
                         {isZeroState
-                          ? "100% (No absences)"
+                          ? "No attendance records yet"
                           : `${item.value} classes (${Math.round(
                               ((item.value as number) / total) * 100
                             )}%)`}
@@ -101,14 +101,14 @@ export default function AttendanceDonutChart({
               compact ? "text-sm" : "text-base"
             } font-black text-slate-900 leading-none`}
           >
-            {presentPct}%
+            {isZeroState ? "—" : `${presentPct}%`}
           </span>
           <span
             className={`${
               compact ? "text-[8px]" : "text-[9px]"
             } font-bold text-purple-600 uppercase tracking-wider mt-0.5`}
           >
-            {isZeroState ? "Standby" : "Present"}
+            {isZeroState ? "No Records" : "Present"}
           </span>
         </div>
       </div>
@@ -120,9 +120,9 @@ export default function AttendanceDonutChart({
         }`}
       >
         {isZeroState ? (
-          <div className="flex items-center gap-1 text-purple-700 font-extrabold text-[9.5px]">
-            <span className="w-2 h-2 rounded-full bg-purple-600" />
-            <span>100% Standing • 0 Absences</span>
+          <div className="flex items-center gap-1 text-slate-400 font-semibold text-[9.5px]">
+            <span className="w-2 h-2 rounded-full bg-purple-200" />
+            <span>No attendance records yet</span>
           </div>
         ) : (
           <>

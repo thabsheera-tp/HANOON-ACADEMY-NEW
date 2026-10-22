@@ -218,16 +218,18 @@ export default function ScreenDashboard({
   const [countdownString, setCountdownString] = useState<string>("Calculating...");
 
   useEffect(() => {
-    // 1. Fetch Certificates from Supabase
+    // 1. Fetch Certificates from Supabase strictly for current student
     fetchCertificates().then((data) => {
       if (data && data.length > 0) {
+        const cleanPhone = (userProfile.phone || "").replace(/\D/g, "");
+        const cleanName = studentName.trim().toLowerCase();
         const filtered = data.filter((c) => {
-          if (!studentName || studentName === "Student") return true;
-          return (
-            c.student_name.toLowerCase().includes(studentName.toLowerCase()) ||
-            studentName.toLowerCase().includes(c.student_name.toLowerCase()) ||
-            (userProfile.id && c.student_id === userProfile.id)
-          );
+          if (userProfile.id && c.student_id === userProfile.id) return true;
+          if (cleanPhone && (c as any).student_phone && (c as any).student_phone.includes(cleanPhone)) return true;
+          if (cleanName && cleanName !== "student" && (c.student_name.toLowerCase().includes(cleanName) || cleanName.includes(c.student_name.toLowerCase()))) {
+            return true;
+          }
+          return false;
         });
         setCertificates(filtered);
       } else {
@@ -489,29 +491,7 @@ export default function ScreenDashboard({
     present: number;
     leave: number;
     absent: number;
-  }>(() => {
-    try {
-      const records = getLocalAttendanceRecords();
-      const phoneDigits = (userProfile.phone || "").replace(/\D/g, "");
-      const sName = studentName.toLowerCase();
-      const studentRecords = records.filter((r) => {
-        if (!r) return false;
-        const rPhone = (r.studentPhone || "").replace(/\D/g, "");
-        const rName = (r.studentName || "").trim().toLowerCase();
-        return (
-          (phoneDigits && rPhone && rPhone === phoneDigits) ||
-          (rName && rName === sName) ||
-          (r.studentId && r.studentId === userProfile.id)
-        );
-      });
-      const present = studentRecords.filter((r) => r.status === "PRESENT").length;
-      const leave = studentRecords.filter((r) => r.status === "EXCUSED" || r.status === "LATE").length;
-      const absent = studentRecords.filter((r) => r.status === "ABSENT").length;
-      return { present, leave, absent };
-    } catch {
-      return { present: 0, leave: 0, absent: 0 };
-    }
-  });
+  }>({ present: 0, leave: 0, absent: 0 });
 
   // Dynamic Assessment and Module Completion Scores fetched directly from Supabase
   const [progressData, setProgressData] = useState<{ module: string; score: number }[]>([]);
@@ -525,7 +505,7 @@ export default function ScreenDashboard({
 
     const loadDynamicMetrics = async () => {
       try {
-        // 1. Fetch live attendance metrics from Supabase
+        // 1. Fetch live attendance metrics from Supabase strictly for this student
         const attendanceMetrics = await fetchStudentAttendanceMetrics({
           studentId: userProfile.id,
           phone: userProfile.phone,
@@ -534,7 +514,7 @@ export default function ScreenDashboard({
           isApproved,
         });
 
-        if (isMounted && attendanceMetrics.total > 0) {
+        if (isMounted) {
           setAttendanceStats({
             present: attendanceMetrics.present,
             leave: attendanceMetrics.leave,
@@ -866,8 +846,12 @@ export default function ScreenDashboard({
                   Health & Streak
                 </span>
               </div>
-              <span className="text-[9px] font-black uppercase text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded-full border border-emerald-100">
-                Good Standing
+              <span className={`text-[9px] font-black uppercase px-1.5 py-0.2 rounded-full border ${
+                attendanceStats.present + attendanceStats.leave + attendanceStats.absent === 0
+                  ? "text-slate-500 bg-slate-50 border-slate-200"
+                  : "text-emerald-700 bg-emerald-50 border-emerald-100"
+              }`}>
+                {attendanceStats.present + attendanceStats.leave + attendanceStats.absent === 0 ? "Standby" : "Good Standing"}
               </span>
             </div>
 
@@ -877,11 +861,17 @@ export default function ScreenDashboard({
                   Compliance Status
                 </span>
                 <span className="text-sm font-black text-purple-900 block mt-0.5">
-                  {attendanceStats.absent === 0 ? "100% Verified" : `${attendanceStats.present} Attended`}
+                  {attendanceStats.present + attendanceStats.leave + attendanceStats.absent === 0
+                    ? "No records yet"
+                    : attendanceStats.absent === 0
+                    ? "100% Verified"
+                    : `${attendanceStats.present} Attended`}
                 </span>
               </div>
               <p className="text-[9.5px] text-slate-500 font-medium leading-tight">
-                {attendanceStats.absent === 0
+                {attendanceStats.present + attendanceStats.leave + attendanceStats.absent === 0
+                  ? "Attendance will be logged automatically when live lectures begin."
+                  : attendanceStats.absent === 0
                   ? "Zero unexcused absences recorded. Full exam eligibility active."
                   : `${attendanceStats.absent} absences on record. Maintain >80% for certification.`}
               </p>
@@ -892,7 +882,7 @@ export default function ScreenDashboard({
               <span className="text-emerald-600 font-black">
                 {attendanceStats.present + attendanceStats.leave + attendanceStats.absent > 0
                   ? `${Math.round((attendanceStats.present / (attendanceStats.present + attendanceStats.leave + attendanceStats.absent)) * 100)}%`
-                  : "100%"}
+                  : "—"}
               </span>
             </div>
           </div>
@@ -1043,30 +1033,40 @@ export default function ScreenDashboard({
         </div>
       </div>
 
-      {/* 5b. RECORDED CLASSES & REPLAYS (Google Drive / YouTube) */}
-      {recordedClassesList.length > 0 && (
-        <div className="bg-white p-3.5 rounded-2xl border border-purple-100 shadow-sm space-y-3 animate-fade-in">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
-                <Video className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                  Recorded Classes
-                </h3>
-                <p className="text-[10px] text-slate-500 font-medium">
-                  Watch recorded sessions on Google Drive / YouTube
-                </p>
-              </div>
+      {/* 5b. DEDICATED RECORDED CLASSES & STUDY LIBRARY (Google Drive / YouTube) */}
+      <div className="bg-white p-3.5 rounded-2xl border border-purple-100 shadow-sm space-y-3 animate-fade-in">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+              <Video className="w-4 h-4" />
             </div>
-            <span className="text-[10px] font-bold text-purple-700 bg-purple-50 border border-purple-100 px-2 py-0.5 rounded-full">
-              {recordedClassesList.length} Available
-            </span>
+            <div>
+              <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                Recorded Classes & Replays
+              </h3>
+              <p className="text-[10px] text-slate-500 font-medium">
+                Watch uploaded lectures on Google Drive / YouTube
+              </p>
+            </div>
           </div>
+          <span className="text-[10px] font-bold text-purple-700 bg-purple-50 border border-purple-100 px-2 py-0.5 rounded-full">
+            {recordedClassesList.length} Available
+          </span>
+        </div>
 
+        {recordedClassesList.length === 0 ? (
+          <div className="py-6 px-4 text-center rounded-xl bg-purple-50/20 border border-dashed border-purple-200/80 space-y-1.5">
+            <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-400 flex items-center justify-center mx-auto">
+              <Video className="w-4 h-4 text-purple-400" />
+            </div>
+            <p className="text-xs font-bold text-slate-700">No recorded classes uploaded yet</p>
+            <p className="text-[10px] text-slate-400 max-w-[260px] mx-auto leading-relaxed">
+              When faculty uploads recorded video lessons (Google Drive / YouTube), they will appear here for revision.
+            </p>
+          </div>
+        ) : (
           <div className="space-y-2">
-            {recordedClassesList.slice(0, 3).map((rec) => (
+            {recordedClassesList.map((rec) => (
               <div
                 key={rec.id}
                 className="p-3 rounded-xl bg-purple-50/40 border border-purple-100 hover:border-purple-200 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
@@ -1104,8 +1104,8 @@ export default function ScreenDashboard({
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* 6. ENROLLED SUBJECTS: 2x2 GRID (Real-time Unlock) */}
       <div id="enrolled-subjects" className="space-y-2">

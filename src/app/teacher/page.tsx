@@ -30,9 +30,11 @@ import {
   Edit3,
   GraduationCap,
   Play,
+  Bell,
 } from "lucide-react";
 import { getCurrentSession, logoutUser, setAuthSession, UserProfileRecord } from "@/services/authService";
 import { addSpecialClass } from "@/services/specialClassService";
+import { triggerRecordedClassNotification } from "@/services/notificationService";
 import HanoonLogo from "@/components/brand/HanoonLogo";
 import TeacherEngagementDonut from "@/components/charts/TeacherEngagementDonut";
 import AdminMetricsChart from "@/components/charts/AdminMetricsChart";
@@ -426,6 +428,36 @@ export default function TeacherDashboardPage() {
       pdfSize: "5.4 MB",
       videoDuration: "45 mins",
     });
+    setTimeout(() => setUploadSuccessMsg(null), 4000);
+  };
+
+  const handleNotifyRecordedClass = (material?: { title: string; courseId: string; courseName?: string; recordingUrl?: string }) => {
+    const courseMap: Record<string, string> = {
+      adaviyya: "Adaviyya",
+      shamail: "الشمائل المحمدية",
+      hometuition: "Home Tuition",
+      fashion: "Fashion Designing",
+    };
+    const title = material?.title || newUploadForm.title.trim();
+    const courseId = material?.courseId || newUploadForm.courseId;
+    const courseName = material?.courseName || courseMap[courseId] || "Adaviyya";
+    const recordingUrl = material?.recordingUrl || newUploadForm.fileOrUrl.trim();
+
+    if (!recordingUrl) {
+      alert("Please enter a valid recorded class link first.");
+      return;
+    }
+
+    triggerRecordedClassNotification({
+      title: title || "New Class Recording",
+      courseName,
+      courseId,
+      recordingUrl,
+      teacherName: currentUser?.full_name || "Faculty",
+      senderName: currentUser?.full_name || "Teacher Faculty",
+    });
+
+    setUploadSuccessMsg(`Notification sent to all enrolled students for recorded class: "${title || "New Recording"}"!`);
     setTimeout(() => setUploadSuccessMsg(null), 4000);
   };
 
@@ -1352,9 +1384,20 @@ export default function TeacherDashboardPage() {
                 ) : (
                   <>
                     <div>
-                      <label className="font-bold text-slate-700 block mb-1">
-                        Recorded Class Link (Google Drive / YouTube) *
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="font-bold text-slate-700 block text-xs">
+                          Recorded Class Link (Google Drive / YouTube) *
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => handleNotifyRecordedClass()}
+                          className="py-1 px-2.5 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-800 text-[10.5px] font-extrabold flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+                          title="Send In-App & Browser Notification to all enrolled students"
+                        >
+                          <Bell className="w-3 h-3 text-purple-700" />
+                          <span>Notify All Students</span>
+                        </button>
+                      </div>
                       <input
                         type="url"
                         required
@@ -1467,16 +1510,32 @@ export default function TeacherDashboardPage() {
 
                         <div className="flex items-center gap-1.5 shrink-0">
                           {videoLink ? (
-                            <a
-                              href={videoLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="py-1 px-2.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-[11px] flex items-center gap-1 transition-all cursor-pointer shadow-2xs active:scale-95"
-                              title="Watch Recorded Class (Drive / YouTube)"
-                            >
-                              <Play className="w-3 h-3 fill-current" />
-                              <span>▶️ Watch</span>
-                            </a>
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleNotifyRecordedClass({
+                                  title: mat.title,
+                                  courseId: mat.courseId,
+                                  courseName: mat.courseName,
+                                  recordingUrl: videoLink,
+                                })}
+                                className="py-1 px-2 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 text-[10.5px] font-bold flex items-center gap-1 border border-purple-200 cursor-pointer transition-colors"
+                                title="Broadcast alert to enrolled students"
+                              >
+                                <Bell className="w-2.5 h-2.5 text-purple-600" />
+                                <span>Notify</span>
+                              </button>
+                              <a
+                                href={videoLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="py-1 px-2.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-[11px] flex items-center gap-1 transition-all cursor-pointer shadow-2xs active:scale-95"
+                                title="Watch Recorded Class (Drive / YouTube)"
+                              >
+                                <Play className="w-3 h-3 fill-current" />
+                                <span>▶️ Watch</span>
+                              </a>
+                            </>
                           ) : (
                             <button
                               type="button"

@@ -129,7 +129,7 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
       place = "";
     }
 
-    return { name, phone, place, age };
+    return { id: initialUser?.id, name, phone, place, age };
   });
 
   // Selected Course (Defaults to Adaviyya or pending course)
@@ -334,7 +334,9 @@ export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}
             if (studentRecord) {
               if (studentRecord.full_name && !isStaffOrOfficer(studentRecord.full_name)) {
                 studentName = studentRecord.full_name.trim();
-                setUserProfile((prev) => ({ ...prev, name: studentName }));
+                setUserProfile((prev) => ({ ...prev, id: studentRecord.id || prev.id, name: studentName }));
+              } else if (studentRecord.id) {
+                setUserProfile((prev) => ({ ...prev, id: studentRecord.id || prev.id }));
               }
 
               if (studentRecord.payments && Array.isArray(studentRecord.payments) && studentRecord.payments.length > 0) {
