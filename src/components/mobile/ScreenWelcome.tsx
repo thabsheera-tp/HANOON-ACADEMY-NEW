@@ -39,6 +39,14 @@ export default function ScreenWelcome({
       setError("Please fill in Name, Phone, and Place to continue.");
       return;
     }
+    const trimmedPhone = phone.trim();
+    const cleanDigits = trimmedPhone.replace(/\D/g, "");
+    // Support international (GCC) mobile numbers: 10 to 15 digits with optional '+' prefix
+    const phoneRegex = /^\+?[0-9]{10,15}$/;
+    if (!trimmedPhone || !phoneRegex.test(trimmedPhone) || cleanDigits.length < 10 || cleanDigits.length > 15) {
+      setError("Please enter a valid WhatsApp or mobile number (10 to 15 digits).");
+      return;
+    }
     setError(null);
     isSubmittingRef.current = true;
     setIsSubmitting(true);
@@ -154,9 +162,15 @@ export default function ScreenWelcome({
                 type="tel"
                 required
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="e.g. +91 96562 94203"
-                className="w-full pl-10 pr-4 py-3 rounded-2xl border border-slate-200 text-sm text-[#0F172A] placeholder:text-slate-400 focus:outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/20 transition-all bg-[#F0FDF4]/30"
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const hasPlus = val.trimStart().startsWith("+");
+                  const digitsOnly = val.replace(/\D/g, "").slice(0, 15);
+                  setPhone(hasPlus ? `+${digitsOnly}` : digitsOnly);
+                }}
+                maxLength={20}
+                placeholder="e.g. 9656294203 or +971XXXXXXXXX"
+                className="w-full pl-10 pr-4 py-3 rounded-2xl border border-slate-200 text-sm text-[#0F172A] placeholder:text-slate-400 focus:outline-none focus:border-[#047857] focus:ring-2 focus:ring-[#047857]/20 transition-all bg-[#F0FDF4]/30 font-mono"
               />
             </div>
           </div>

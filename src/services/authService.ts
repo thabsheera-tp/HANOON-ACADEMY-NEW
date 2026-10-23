@@ -455,8 +455,11 @@ export async function loginStudentWithPhone(
   isVerified?: boolean;
   error?: string;
 }> {
-  const cleanPhone = phone.replace(/\D/g, "");
-  if (!cleanPhone || cleanPhone.length < 10 || cleanPhone.length > 15) {
+  const trimmedPhone = phone.trim();
+  const cleanPhone = trimmedPhone.replace(/\D/g, "");
+  // Support international (GCC) mobile numbers: 10 to 15 digits with optional '+' prefix
+  const phoneRegex = /^\+?[0-9]{10,15}$/;
+  if (!trimmedPhone || !phoneRegex.test(trimmedPhone) || cleanPhone.length < 10 || cleanPhone.length > 15) {
     return {
       success: false,
       error: "Please enter a valid mobile or WhatsApp number (10 to 15 digits).",
@@ -524,7 +527,7 @@ export async function loginStudentWithPhone(
         email: `${cleanPhone}@student.hanoon.academy`,
         full_name: resolvedName,
         role: "student",
-        whatsapp_num: cleanPhone,
+        whatsapp_num: phone.trim() || cleanPhone,
         district: resolvedDistrict,
       };
 
@@ -544,7 +547,7 @@ export async function loginStudentWithPhone(
     email: `${cleanPhone}@student.hanoon.academy`,
     full_name: fallbackName,
     role: "student",
-    whatsapp_num: cleanPhone,
+    whatsapp_num: phone.trim() || cleanPhone,
     district: fallbackDistrict,
   };
 

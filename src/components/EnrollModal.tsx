@@ -119,8 +119,11 @@ export default function EnrollModal({
       setUpiError("Please enter your Student Full Name.");
       return;
     }
-    const cleanPhone = upiData.phone.trim().replace(/\D/g, "");
-    if (!cleanPhone || cleanPhone.length < 10 || cleanPhone.length > 15) {
+    const trimmedPhone = upiData.phone.trim();
+    const cleanPhone = trimmedPhone.replace(/\D/g, "");
+    // Support international (GCC) mobile numbers: 10 to 15 digits with optional '+' prefix
+    const phoneRegex = /^\+?[0-9]{10,15}$/;
+    if (!trimmedPhone || !phoneRegex.test(trimmedPhone) || cleanPhone.length < 10 || cleanPhone.length > 15) {
       setUpiError("Please enter a valid WhatsApp phone number (10 to 15 digits).");
       return;
     }
@@ -388,12 +391,12 @@ export default function EnrollModal({
                       value={upiData.phone}
                       onChange={(e) => {
                         const val = e.target.value;
-                        const hasPlus = val.startsWith("+");
+                        const hasPlus = val.trimStart().startsWith("+");
                         const digitsOnly = val.replace(/\D/g, "").slice(0, 15);
                         setUpiData({ ...upiData, phone: hasPlus ? `+${digitsOnly}` : digitsOnly });
                       }}
-                      maxLength={16}
-                      className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-purple-200 text-xs sm:text-sm text-slate-900 focus:outline-none focus:border-purple-600"
+                      maxLength={20}
+                      className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-purple-200 text-xs sm:text-sm text-slate-900 focus:outline-none focus:border-purple-600 font-mono"
                     />
                   </div>
                 </div>

@@ -109,8 +109,11 @@ export default function StudentRegisterModal({
       setError("Please enter a valid age between 3 and 100.");
       return;
     }
-    const cleanDigits = phone.replace(/\D/g, "");
-    if (!cleanDigits || cleanDigits.length < 10 || cleanDigits.length > 15) {
+    const trimmedPhone = phone.trim();
+    const cleanDigits = trimmedPhone.replace(/\D/g, "");
+    // Support international (GCC) mobile numbers: 10 to 15 digits with optional '+' prefix (e.g., 971XXXXXXXXX or +971XXXXXXXXX)
+    const phoneRegex = /^\+?[0-9]{10,15}$/;
+    if (!trimmedPhone || !phoneRegex.test(trimmedPhone) || cleanDigits.length < 10 || cleanDigits.length > 15) {
       setError("Please enter a valid WhatsApp or mobile number (10 to 15 digits).");
       return;
     }
@@ -218,11 +221,11 @@ export default function StudentRegisterModal({
                 value={phone}
                 onChange={(e) => {
                   const val = e.target.value;
-                  const hasPlus = val.startsWith("+");
+                  const hasPlus = val.trimStart().startsWith("+");
                   const digitsOnly = val.replace(/\D/g, "").slice(0, 15);
                   setPhone(hasPlus ? `+${digitsOnly}` : digitsOnly);
                 }}
-                maxLength={16}
+                maxLength={20}
                 className="w-full pl-11 pr-4 py-3 min-h-[46px] rounded-2xl bg-white border border-purple-200/90 focus:border-purple-600 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-medium focus:ring-3 focus:ring-purple-500/10 font-mono"
               />
             </div>

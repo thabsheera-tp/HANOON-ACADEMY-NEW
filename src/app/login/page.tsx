@@ -143,7 +143,10 @@ function LoginFormContent() {
       return;
     }
 
-    if (!cleanPhone || cleanPhone.length < 10 || cleanPhone.length > 15) {
+    const trimmedPhone = studentPhone.trim();
+    // Support international (GCC) mobile numbers: 10 to 15 digits with optional '+' prefix (e.g., 971XXXXXXXXX or +971XXXXXXXXX)
+    const phoneRegex = /^\+?[0-9]{10,15}$/;
+    if (!trimmedPhone || !phoneRegex.test(trimmedPhone) || cleanPhone.length < 10 || cleanPhone.length > 15) {
       setErrorMessage("Please enter a valid WhatsApp or mobile number (10 to 15 digits).");
       return;
     }
@@ -332,12 +335,12 @@ function LoginFormContent() {
                   value={studentPhone}
                   onChange={(e) => {
                     const val = e.target.value;
-                    const hasPlus = val.startsWith("+");
+                    const hasPlus = val.trimStart().startsWith("+");
                     const digitsOnly = val.replace(/\D/g, "").slice(0, 15);
                     setStudentPhone(hasPlus ? `+${digitsOnly}` : digitsOnly);
                   }}
-                  maxLength={16}
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-semibold"
+                  maxLength={20}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 font-semibold font-mono"
                 />
               </div>
             </div>

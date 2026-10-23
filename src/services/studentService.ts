@@ -727,7 +727,7 @@ async function executeSaveStudentLead(profile: {
     try {
       savedStudent = await saveOrUpdateStudentInSupabase({
         fullName: cleanName,
-        whatsappNum: cleanPhone,
+        whatsappNum: (profile.whatsappNum || "").trim() || cleanPhone,
         district: cleanDistrict,
       });
     } catch (e) {
@@ -739,7 +739,7 @@ async function executeSaveStudentLead(profile: {
     savedStudent = {
       id: `stu-${Date.now()}`,
       full_name: cleanName,
-      whatsapp_num: cleanPhone,
+      whatsapp_num: (profile.whatsappNum || "").trim() || cleanPhone,
       district: cleanDistrict,
       created_at: new Date().toISOString(),
     };
