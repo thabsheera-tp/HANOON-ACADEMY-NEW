@@ -34,7 +34,7 @@ import {
 } from "lucide-react";
 import { getCurrentSession, logoutUser, setAuthSession, UserProfileRecord } from "@/services/authService";
 import { addSpecialClass } from "@/services/specialClassService";
-import { triggerRecordedClassNotification } from "@/services/notificationService";
+import { triggerNotesUploadedNotification, triggerRecordedClassNotification } from "@/services/notificationService";
 import HanoonLogo from "@/components/brand/HanoonLogo";
 import TeacherEngagementDonut from "@/components/charts/TeacherEngagementDonut";
 import AdminMetricsChart from "@/components/charts/AdminMetricsChart";
@@ -110,19 +110,37 @@ export default function TeacherDashboardPage() {
     specialClassLiveUrl: "",
   });
 
-  // State for Course Content / Uploads
+  // State for Course Content / Decoupled Actions (PDF Notes & Recorded Class)
   const [materials, setMaterials] = useState<CourseMaterial[]>([]);
   const [uploadSuccessMsg, setUploadSuccessMsg] = useState<string | null>(null);
-  const [uploadContentType, setUploadContentType] = useState<"PDF" | "VIDEO">("PDF");
-  const [newUploadForm, setNewUploadForm] = useState({
-    title: "",
+  const [teacherActionSection, setTeacherActionSection] = useState<"PDF" | "RECORDED">("PDF");
+
+  // Section 1: PDF Notes Upload State
+  const [teacherPdfForm, setTeacherPdfForm] = useState({
     courseId: "adaviyya",
-    courseName: "Adaviyya",
+    title: "",
     sessionDate: new Date().toISOString().split("T")[0],
-    fileOrUrl: "",
-    pdfSize: "5.4 MB",
-    videoDuration: "45 mins",
+    customUrl: "",
+    duration: "25 mins read",
   });
+  const [teacherPdfFile, setTeacherPdfFile] = useState<File | null>(null);
+  const [teacherPdfFileName, setTeacherPdfFileName] = useState("");
+  const [teacherPdfFileSize, setTeacherPdfFileSize] = useState("");
+  const [teacherPdfDataUrl, setTeacherPdfDataUrl] = useState("");
+  const [isSubmittingTeacherPdf, setIsSubmittingTeacherPdf] = useState(false);
+
+  // Section 2: Recorded Class Link State
+  const [teacherRecForm, setTeacherRecForm] = useState({
+    courseId: "adaviyya",
+    title: "",
+    sessionDate: new Date().toISOString().split("T")[0],
+    recordedLink: "",
+    duration: "45 mins",
+  });
+  const [isSavingTeacherRec, setIsSavingTeacherRec] = useState(false);
+  const uploadContentType = teacherActionSection === "RECORDED" ? "VIDEO" : "PDF";
+  const setUploadContentType = (type: "PDF" | "VIDEO") =>
+    setTeacherActionSection(type === "VIDEO" ? "RECORDED" : "PDF");
 
   // State for Students
   const [students, setStudents] = useState<TeacherStudentItem[]>(DEFAULT_STUDENTS);
@@ -360,77 +378,214 @@ export default function TeacherDashboardPage() {
     setTimeout(() => setScheduleSuccessMsg(null), 4000);
   };
 
-  // Upload Course Materials (RBAC Enforced: Teacher can only publish to assigned courses)
-  const handleUploadSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newUploadForm.title.trim()) return;
+  // PDF File Selection & Data URL Reader for Teacher Dashboard
+  const handleTeacherPdfFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    if (!canTeacherAccessCourse(newUploadForm.courseId, currentUser)) {
+    if (!file.name.toLowerCase().endsWith(".pdf") && file.type !== "application/pdf") {
+      alert("Please select a valid PDF document (.pdf).");
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      alert("File exceeds 10MB limit. Please upload an optimized PDF under 10MB.");
+      return;
+    }
+
+    setTeacherPdfFile(file);
+    setTeacherPdfFileName(file.name);
+    const sizeInMb = (file.size / (1024 * 1024)).toFixed(1);
+    setTeacherPdfFileSize(`${sizeInMb} MB`);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      if (dataUrl) setTeacherPdfDataUrl(dataUrl);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // =========================================================================
+  // SECTION 1: STANDALONE SUBMIT FOR PDF NOTES (NO VIDEO LINK REQUIRED)
+  // =========================================================================
+  const handleTeacherPdfSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!teacherPdfForm.title.trim()) {
+      alert("Please enter a Chapter or Notes Title.");
+      return;
+    }
+
+    if (!canTeacherAccessCourse(teacherPdfForm.courseId, currentUser)) {
       setUploadSuccessMsg("Access Denied: You can only publish notes for your assigned tracks.");
       setTimeout(() => setUploadSuccessMsg(null), 4000);
       return;
     }
 
+    const finalPdfUrl = teacherPdfDataUrl || teacherPdfForm.customUrl.trim();
+    if (!finalPdfUrl) {
+      alert("Please attach a PDF document file (.pdf) or provide a direct PDF link.");
+      return;
+    }
+
+    setIsSubmittingTeacherPdf(true);
     const courseMap: Record<string, string> = {
       adaviyya: "Adaviyya",
       shamail: "الشمائل المحمدية",
       hometuition: "Home Tuition",
       fashion: "Fashion Designing",
     };
-
+    const courseName = courseMap[teacherPdfForm.courseId] || "Adaviyya";
     const teacherId = resolveTeacherId(currentUser);
-    const cleanRecordedLink = newUploadForm.fileOrUrl.trim();
+    const finalPdfTitle = teacherPdfFileName || `${teacherPdfForm.title.trim()}.pdf`;
+    const finalSize = teacherPdfFileSize || "3.5 MB";
 
-    if (uploadContentType === "VIDEO") {
-      saveRecordedClassToSupabase({
-        title: newUploadForm.title.trim(),
-        courseId: newUploadForm.courseId,
-        courseName: courseMap[newUploadForm.courseId] || "Adaviyya",
-        date: newUploadForm.sessionDate || new Date().toISOString().split("T")[0],
+    try {
+      await saveRecordedClassToSupabase({
+        title: teacherPdfForm.title.trim(),
+        courseId: teacherPdfForm.courseId,
+        courseName,
+        date: teacherPdfForm.sessionDate || new Date().toISOString().split("T")[0],
         time: "19:30",
-        recordedLink: cleanRecordedLink || "https://youtube.com/watch?v=hanoon-rec",
+        pdfUrl: finalPdfUrl,
+        pdfTitle: finalPdfTitle,
+        pdfSize: finalSize,
         teacherId,
         teacherName: currentUser?.full_name || "Faculty",
-        duration: newUploadForm.videoDuration,
-      }).catch((err) => console.warn("saveRecordedClassToSupabase warning in teacher page:", err));
+        duration: teacherPdfForm.duration,
+      });
+
+      uploadCourseMaterial({
+        title: `${teacherPdfForm.title.trim()} - Study Notes`,
+        courseId: teacherPdfForm.courseId,
+        courseName,
+        type: "PDF",
+        fileOrUrl: finalPdfTitle,
+        pdfUrl: finalPdfUrl,
+        sessionDate: teacherPdfForm.sessionDate || new Date().toISOString().split("T")[0],
+        sizeOrDuration: finalSize,
+        teacher_id: teacherId,
+        teacherName: currentUser?.full_name || "Faculty",
+      });
+
+      triggerNotesUploadedNotification({
+        chapterTitle: teacherPdfForm.title.trim(),
+        courseName,
+        courseId: teacherPdfForm.courseId,
+        pdfTitle: finalPdfTitle,
+        pdfSize: finalSize,
+        pdfUrl: finalPdfUrl,
+        senderName: currentUser?.full_name || "Faculty Instructor",
+      });
+
+      setMaterials(getCourseMaterials());
+      setUploadSuccessMsg(`📚 PDF Notes "${finalPdfTitle}" published successfully! Enrolled students notified.`);
+      setTeacherPdfForm({
+        courseId: availableTracks[0]?.id || "adaviyya",
+        title: "",
+        sessionDate: new Date().toISOString().split("T")[0],
+        customUrl: "",
+        duration: "25 mins read",
+      });
+      setTeacherPdfFile(null);
+      setTeacherPdfFileName("");
+      setTeacherPdfFileSize("");
+      setTeacherPdfDataUrl("");
+    } catch (err) {
+      console.error("Failed to upload PDF notes:", err);
+      setUploadSuccessMsg("Failed to upload PDF notes. Please try again.");
+    } finally {
+      setIsSubmittingTeacherPdf(false);
+      setTimeout(() => setUploadSuccessMsg(null), 4000);
     }
-
-    const uploaded = uploadCourseMaterial({
-      title: newUploadForm.title.trim(),
-      courseId: newUploadForm.courseId,
-      courseName: courseMap[newUploadForm.courseId] || "Adaviyya",
-      type: uploadContentType,
-      fileOrUrl:
-        newUploadForm.fileOrUrl.trim() ||
-        (uploadContentType === "PDF"
-          ? `/notes/${newUploadForm.title.toLowerCase().replace(/[^a-z0-9]/g, "-")}.pdf`
-          : "https://youtube.com/watch?v=hanoon-rec"),
-      recordingUrl: uploadContentType === "VIDEO" ? cleanRecordedLink : undefined,
-      sessionDate: newUploadForm.sessionDate || new Date().toISOString().split("T")[0],
-      sizeOrDuration:
-        uploadContentType === "PDF" ? newUploadForm.pdfSize : newUploadForm.videoDuration,
-      teacher_id: teacherId,
-      teacherName: currentUser?.full_name || "Faculty",
-    });
-
-    setMaterials(getCourseMaterials());
-    setUploadSuccessMsg(
-      uploadContentType === "VIDEO"
-        ? `Recorded Class Link for "${uploaded.title}" saved to Supabase and published for students!`
-        : `"${uploaded.title}" uploaded! Synced to student portal for offline access.`
-    );
-    setNewUploadForm({
-      title: "",
-      courseId: availableTracks[0]?.id || "adaviyya",
-      courseName: availableTracks[0]?.name || "Adaviyya",
-      sessionDate: new Date().toISOString().split("T")[0],
-      fileOrUrl: "",
-      pdfSize: "5.4 MB",
-      videoDuration: "45 mins",
-    });
-    setTimeout(() => setUploadSuccessMsg(null), 4000);
   };
 
+  // =========================================================================
+  // SECTION 2: STANDALONE SUBMIT FOR RECORDED CLASS LINK (NO PDF REQUIRED)
+  // =========================================================================
+  const handleTeacherRecordedSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!teacherRecForm.title.trim()) {
+      alert("Please enter a Class or Lecture Title.");
+      return;
+    }
+
+    if (!canTeacherAccessCourse(teacherRecForm.courseId, currentUser)) {
+      setUploadSuccessMsg("Access Denied: You can only publish recorded classes for your assigned tracks.");
+      setTimeout(() => setUploadSuccessMsg(null), 4000);
+      return;
+    }
+
+    const cleanLink = teacherRecForm.recordedLink.trim();
+    if (!cleanLink) {
+      alert("Please enter a valid recorded class link (Google Drive / YouTube).");
+      return;
+    }
+
+    setIsSavingTeacherRec(true);
+    const courseMap: Record<string, string> = {
+      adaviyya: "Adaviyya",
+      shamail: "الشمائل المحمدية",
+      hometuition: "Home Tuition",
+      fashion: "Fashion Designing",
+    };
+    const courseName = courseMap[teacherRecForm.courseId] || "Adaviyya";
+    const teacherId = resolveTeacherId(currentUser);
+
+    try {
+      await saveRecordedClassToSupabase({
+        title: teacherRecForm.title.trim(),
+        courseId: teacherRecForm.courseId,
+        courseName,
+        date: teacherRecForm.sessionDate || new Date().toISOString().split("T")[0],
+        time: "19:30",
+        recordedLink: cleanLink,
+        teacherId,
+        teacherName: currentUser?.full_name || "Faculty",
+        duration: teacherRecForm.duration,
+      });
+
+      uploadCourseMaterial({
+        title: `${teacherRecForm.title.trim()} - Recorded Class`,
+        courseId: teacherRecForm.courseId,
+        courseName,
+        type: "VIDEO",
+        fileOrUrl: cleanLink,
+        recordingUrl: cleanLink,
+        sessionDate: teacherRecForm.sessionDate || new Date().toISOString().split("T")[0],
+        sizeOrDuration: teacherRecForm.duration,
+        teacher_id: teacherId,
+        teacherName: currentUser?.full_name || "Faculty",
+      });
+
+      triggerRecordedClassNotification({
+        title: teacherRecForm.title.trim(),
+        courseName,
+        courseId: teacherRecForm.courseId,
+        recordingUrl: cleanLink,
+        teacherName: currentUser?.full_name || "Faculty",
+        senderName: currentUser?.full_name || "Teacher Faculty",
+      });
+
+      setMaterials(getCourseMaterials());
+      setUploadSuccessMsg(`▶️ Recorded Class "${teacherRecForm.title.trim()}" saved to Supabase and students successfully alerted!`);
+      setTeacherRecForm({
+        courseId: availableTracks[0]?.id || "adaviyya",
+        title: "",
+        sessionDate: new Date().toISOString().split("T")[0],
+        recordedLink: "",
+        duration: "45 mins",
+      });
+    } catch (err) {
+      console.error("Failed to save recorded class link:", err);
+      setUploadSuccessMsg("Failed to save recorded class. Please try again.");
+    } finally {
+      setIsSavingTeacherRec(false);
+      setTimeout(() => setUploadSuccessMsg(null), 4000);
+    }
+  };
+
+  // INDEPENDENT NOTIFICATION: Triggers without requiring any PDF
   const handleNotifyRecordedClass = (material?: { title: string; courseId: string; courseName?: string; recordingUrl?: string }) => {
     const courseMap: Record<string, string> = {
       adaviyya: "Adaviyya",
@@ -438,10 +593,10 @@ export default function TeacherDashboardPage() {
       hometuition: "Home Tuition",
       fashion: "Fashion Designing",
     };
-    const title = material?.title || newUploadForm.title.trim();
-    const courseId = material?.courseId || newUploadForm.courseId;
+    const title = material?.title || teacherRecForm.title.trim();
+    const courseId = material?.courseId || teacherRecForm.courseId;
     const courseName = material?.courseName || courseMap[courseId] || "Adaviyya";
-    const recordingUrl = material?.recordingUrl || newUploadForm.fileOrUrl.trim();
+    const recordingUrl = material?.recordingUrl || teacherRecForm.recordedLink.trim();
 
     if (!recordingUrl) {
       alert("Please enter a valid recorded class link first.");
@@ -1250,103 +1405,105 @@ export default function TeacherDashboardPage() {
         {/* TAB 3: COURSE CONTENT UPLOAD (OFFLINE ACCESS) */}
         {activeTab === "materials" && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Upload Form (Left Column / 5 cols) */}
-            <div className="lg:col-span-5 bg-white p-5 sm:p-6 rounded-2xl border border-purple-100 shadow-md space-y-4">
-              <div className="pb-3 border-b border-purple-50">
-                <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                  <Upload className="w-4 h-4 text-purple-600" />
-                  <span>Upload Course Material</span>
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Publish PDF handbooks or recorded lecture videos for offline student access.
-                </p>
-              </div>
-
-              {/* Type Switcher */}
-              <div className="grid grid-cols-2 gap-2 p-1 bg-purple-50/70 rounded-xl">
+            {/* Upload Action Panel (Left Column / 5 cols) */}
+            <div className="lg:col-span-5 space-y-4">
+              {/* Decoupled Action Switcher */}
+              <div className="grid grid-cols-2 gap-2 p-1.5 bg-purple-50/80 rounded-2xl border border-purple-100 shadow-2xs">
                 <button
                   type="button"
-                  onClick={() => setUploadContentType("PDF")}
-                  className={`py-2 text-xs font-extrabold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                    uploadContentType === "PDF"
-                      ? "bg-white text-purple-700 shadow-xs"
+                  onClick={() => setTeacherActionSection("PDF")}
+                  className={`py-2.5 px-3 rounded-xl font-extrabold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    teacherActionSection === "PDF"
+                      ? "bg-white text-purple-700 shadow-sm border border-purple-200/80"
                       : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
-                  <FileText className="w-3.5 h-3.5" />
-                  <span>PDF Study Notes</span>
+                  <FileText className="w-3.5 h-3.5 text-purple-600" />
+                  <span>1. Upload PDF Notes</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => setUploadContentType("VIDEO")}
-                  className={`py-2 text-xs font-extrabold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                    uploadContentType === "VIDEO"
-                      ? "bg-white text-purple-700 shadow-xs"
+                  onClick={() => setTeacherActionSection("RECORDED")}
+                  className={`py-2.5 px-3 rounded-xl font-extrabold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    teacherActionSection === "RECORDED"
+                      ? "bg-white text-rose-700 shadow-sm border border-rose-200/80"
                       : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
-                  <Video className="w-3.5 h-3.5" />
-                  <span>Recorded Video</span>
+                  <Video className="w-3.5 h-3.5 text-rose-600" />
+                  <span>2. Add Recorded Class</span>
                 </button>
               </div>
 
-              <form onSubmit={handleUploadSubmit} className="space-y-3.5 text-xs">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">
-                    Select Academic Track *
-                  </label>
-                  <select
-                    value={newUploadForm.courseId}
-                    onChange={(e) =>
-                      setNewUploadForm({ ...newUploadForm, courseId: e.target.value })
-                    }
-                    className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-semibold outline-none focus:border-purple-400"
-                  >
-                    {availableTracks.map((trk) => (
-                      <option key={trk.id} value={trk.id}>
-                        {trk.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              {/* SECTION 1: UPLOAD PDF NOTES (STANDALONE SUBMIT) */}
+              {teacherActionSection === "PDF" && (
+                <div className="bg-white p-5 sm:p-6 rounded-2xl border border-purple-100 shadow-md space-y-4 animate-fade-in">
+                  <div className="pb-3 border-b border-purple-50 flex items-center justify-between">
+                    <div>
+                      <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-purple-600" />
+                        <span>Section 1: Upload PDF Notes</span>
+                      </h2>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Publish official syllabus PDF handbooks with independent student alerts.
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-black text-purple-700 bg-purple-50 border border-purple-200 px-2.5 py-1 rounded-full uppercase tracking-wider shrink-0">
+                      PDF Only
+                    </span>
+                  </div>
 
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">
-                    Material / Lesson Title *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder={
-                      uploadContentType === "PDF"
-                        ? "e.g. Fiqh Chapter 4: Taharah & Water Rulings"
-                        : "e.g. Live Class Recording: Seerah Chapter 3"
-                    }
-                    value={newUploadForm.title}
-                    onChange={(e) =>
-                      setNewUploadForm({ ...newUploadForm, title: e.target.value })
-                    }
-                    className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none focus:border-purple-400"
-                  />
-                </div>
+                  <form onSubmit={handleTeacherPdfSubmit} className="space-y-3.5 text-xs">
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">
+                        Select Academic Track *
+                      </label>
+                      <select
+                        value={teacherPdfForm.courseId}
+                        onChange={(e) =>
+                          setTeacherPdfForm({ ...teacherPdfForm, courseId: e.target.value })
+                        }
+                        className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-semibold outline-none focus:border-purple-400 cursor-pointer"
+                      >
+                        {availableTracks.map((trk) => (
+                          <option key={trk.id} value={trk.id}>
+                            {trk.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">
-                    Class Session Date *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={newUploadForm.sessionDate}
-                    onChange={(e) =>
-                      setNewUploadForm({ ...newUploadForm, sessionDate: e.target.value })
-                    }
-                    className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none focus:border-purple-400 cursor-pointer"
-                  />
-                </div>
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">
+                        Chapter / Notes Title *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Fiqh Chapter 4: Taharah & Water Rulings"
+                        value={teacherPdfForm.title}
+                        onChange={(e) =>
+                          setTeacherPdfForm({ ...teacherPdfForm, title: e.target.value })
+                        }
+                        className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none focus:border-purple-400"
+                      />
+                    </div>
 
-                {uploadContentType === "PDF" ? (
-                  <>
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">
+                        Class Session Date *
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={teacherPdfForm.sessionDate}
+                        onChange={(e) =>
+                          setTeacherPdfForm({ ...teacherPdfForm, sessionDate: e.target.value })
+                        }
+                        className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none focus:border-purple-400 cursor-pointer"
+                      />
+                    </div>
+
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <label className="font-bold text-slate-700">
@@ -1356,58 +1513,187 @@ export default function TeacherDashboardPage() {
                           PDF Only (Max 10MB)
                         </span>
                       </div>
-                      <div className="p-4 rounded-xl border-2 border-dashed border-purple-200 bg-purple-50/30 text-center cursor-pointer hover:bg-purple-50 transition-colors">
-                        <FileText className="w-6 h-6 text-purple-600 mx-auto mb-1" />
-                        <span className="text-slate-600 font-semibold block">
-                          Click to select PDF handbook
-                        </span>
-                        <span className="text-[10px] text-slate-400">
-                          Direct file upload reserved strictly for PDF study notes under 10MB
-                        </span>
+                      <div className="border-2 border-dashed border-purple-200 hover:border-purple-400 rounded-xl p-4 text-center bg-purple-50/30 hover:bg-purple-50/60 transition-all cursor-pointer relative">
+                        <input
+                          type="file"
+                          accept=".pdf,application/pdf"
+                          onChange={handleTeacherPdfFileChange}
+                          className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
+                        />
+                        <div className="flex flex-col items-center gap-1.5 pointer-events-none">
+                          <FileText className="w-6 h-6 text-purple-600" />
+                          {teacherPdfFileName ? (
+                            <div>
+                              <span className="text-xs font-black text-purple-700 block">
+                                {teacherPdfFileName}
+                              </span>
+                              <span className="text-[10px] text-slate-500 font-semibold">
+                                Size: {teacherPdfFileSize} • Attached
+                              </span>
+                            </div>
+                          ) : (
+                            <div>
+                              <span className="text-slate-700 font-semibold block text-xs">
+                                Click or drag PDF handbook here
+                              </span>
+                              <span className="text-[10px] text-slate-400">
+                                Direct file upload reserved strictly for PDF notes under 10MB
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
 
                     <div>
                       <label className="font-bold text-slate-700 block mb-1">
-                        Simulated File Size
+                        Or Direct PDF Document URL (Optional)
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://example.com/notes.pdf"
+                        value={teacherPdfForm.customUrl}
+                        onChange={(e) =>
+                          setTeacherPdfForm({ ...teacherPdfForm, customUrl: e.target.value })
+                        }
+                        className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none focus:border-purple-400"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">
+                        Estimated Reading Duration
                       </label>
                       <input
                         type="text"
-                        value={newUploadForm.pdfSize}
+                        value={teacherPdfForm.duration}
                         onChange={(e) =>
-                          setNewUploadForm({ ...newUploadForm, pdfSize: e.target.value })
+                          setTeacherPdfForm({ ...teacherPdfForm, duration: e.target.value })
                         }
+                        placeholder="e.g. 25 mins read"
                         className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none"
                       />
                     </div>
-                  </>
-                ) : (
-                  <>
+
+                    <button
+                      type="submit"
+                      disabled={isSubmittingTeacherPdf}
+                      className="w-full py-3 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-[0.98] text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer mt-2 disabled:opacity-60"
+                    >
+                      {isSubmittingTeacherPdf ? (
+                        <span className="inline-flex items-center gap-2">
+                          <span className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-white" />
+                          <span>Publishing PDF Notes...</span>
+                        </span>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4" />
+                          <span>Upload & Publish PDF Notes</span>
+                        </>
+                      )}
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {/* SECTION 2: ADD RECORDED CLASS LINK (STANDALONE SUBMIT) */}
+              {teacherActionSection === "RECORDED" && (
+                <div className="bg-white p-5 sm:p-6 rounded-2xl border border-rose-100 shadow-md space-y-4 animate-fade-in">
+                  <div className="pb-3 border-b border-rose-50 flex items-center justify-between">
                     <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="font-bold text-slate-700 block text-xs">
-                          Recorded Class Link (Google Drive / YouTube) *
+                      <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                        <Video className="w-4 h-4 text-rose-600" />
+                        <span>Section 2: Add Recorded Class Link</span>
+                      </h2>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Save lecture replay link and broadcast alert to enrolled students.
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-black text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-full uppercase tracking-wider shrink-0">
+                      Replay Link
+                    </span>
+                  </div>
+
+                  <form onSubmit={handleTeacherRecordedSubmit} className="space-y-3.5 text-xs">
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">
+                        Select Academic Track *
+                      </label>
+                      <select
+                        value={teacherRecForm.courseId}
+                        onChange={(e) =>
+                          setTeacherRecForm({ ...teacherRecForm, courseId: e.target.value })
+                        }
+                        className="w-full p-2.5 rounded-xl bg-rose-50/40 border border-rose-100 text-slate-900 font-semibold outline-none focus:border-rose-400 cursor-pointer"
+                      >
+                        {availableTracks.map((trk) => (
+                          <option key={trk.id} value={trk.id}>
+                            {trk.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">
+                        Class / Lecture Title *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Live Class Recording: Seerah Chapter 3"
+                        value={teacherRecForm.title}
+                        onChange={(e) =>
+                          setTeacherRecForm({ ...teacherRecForm, title: e.target.value })
+                        }
+                        className="w-full p-2.5 rounded-xl bg-rose-50/40 border border-rose-100 text-slate-900 font-medium outline-none focus:border-rose-400"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">
+                        Class Session Date *
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={teacherRecForm.sessionDate}
+                        onChange={(e) =>
+                          setTeacherRecForm({ ...teacherRecForm, sessionDate: e.target.value })
+                        }
+                        className="w-full p-2.5 rounded-xl bg-rose-50/40 border border-rose-100 text-slate-900 font-medium outline-none focus:border-rose-400 cursor-pointer"
+                      />
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-rose-50/50 border border-rose-200/80 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="font-bold text-slate-900 block text-xs flex items-center gap-1.5">
+                          <Video className="w-3.5 h-3.5 text-rose-600" />
+                          <span>Recorded Class Link (Google Drive / YouTube) *</span>
                         </label>
                         <button
                           type="button"
                           onClick={() => handleNotifyRecordedClass()}
-                          className="py-1 px-2.5 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-800 text-[10.5px] font-extrabold flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
-                          title="Send In-App & Browser Notification to all enrolled students"
+                          className="py-1 px-2.5 rounded-lg bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-[10.5px] font-extrabold flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+                          title="Instant Alert: Send notification to all enrolled students"
                         >
-                          <Bell className="w-3 h-3 text-purple-700" />
-                          <span>Notify All Students</span>
+                          <Bell className="w-3 h-3 text-white" />
+                          <span>Notify Students</span>
                         </button>
                       </div>
                       <input
                         type="url"
                         required
                         placeholder="https://drive.google.com/file/d/... or https://youtube.com/watch?v=..."
-                        value={newUploadForm.fileOrUrl}
+                        value={teacherRecForm.recordedLink}
                         onChange={(e) =>
-                          setNewUploadForm({ ...newUploadForm, fileOrUrl: e.target.value })
+                          setTeacherRecForm({ ...teacherRecForm, recordedLink: e.target.value })
                         }
-                        className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none focus:border-purple-400"
+                        className="w-full p-2.5 rounded-xl bg-white border border-rose-200 text-slate-900 font-medium outline-none focus:border-rose-500 shadow-2xs"
                       />
+                      <span className="text-[10.5px] text-rose-600 font-medium block">
+                        Direct video stream or Drive replay URL for enrolled students.
+                      </span>
                     </div>
 
                     <div>
@@ -1416,24 +1702,35 @@ export default function TeacherDashboardPage() {
                       </label>
                       <input
                         type="text"
-                        value={newUploadForm.videoDuration}
+                        value={teacherRecForm.duration}
                         onChange={(e) =>
-                          setNewUploadForm({ ...newUploadForm, videoDuration: e.target.value })
+                          setTeacherRecForm({ ...teacherRecForm, duration: e.target.value })
                         }
-                        className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none"
+                        placeholder="e.g. 45 mins"
+                        className="w-full p-2.5 rounded-xl bg-rose-50/40 border border-rose-100 text-slate-900 font-medium outline-none"
                       />
                     </div>
-                  </>
-                )}
 
-                <button
-                  type="submit"
-                  className="w-full py-3 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer mt-2"
-                >
-                  <Upload className="w-4 h-4" />
-                  <span>Publish Content & Sync to Supabase</span>
-                </button>
-              </form>
+                    <button
+                      type="submit"
+                      disabled={isSavingTeacherRec}
+                      className="w-full py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer mt-2 disabled:opacity-60"
+                    >
+                      {isSavingTeacherRec ? (
+                        <span className="inline-flex items-center gap-2">
+                          <span className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-white" />
+                          <span>Saving & Notifying Students...</span>
+                        </span>
+                      ) : (
+                        <>
+                          <Play className="w-4 h-4 fill-current" />
+                          <span>Save & Notify Students</span>
+                        </>
+                      )}
+                    </button>
+                  </form>
+                </div>
+              )}
             </div>
 
             {/* Offline Materials Library (Right Column / 7 cols) */}
@@ -1537,14 +1834,17 @@ export default function TeacherDashboardPage() {
                               </a>
                             </>
                           ) : (
-                            <button
-                              type="button"
-                              onClick={() => alert(`Simulating download / preview of "${mat.title}"`)}
-                              title="Preview or Download"
-                              className="p-2 rounded-lg text-purple-700 hover:bg-purple-100 transition-colors cursor-pointer"
+                            <a
+                              href={mat.pdfUrl || mat.fileOrUrl}
+                              download={mat.fileOrUrl || "notes.pdf"}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Download or View PDF"
+                              className="py-1 px-2.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
                             >
-                              <Download className="w-4 h-4" />
-                            </button>
+                              <Download className="w-3.5 h-3.5" />
+                              <span>PDF Notes</span>
+                            </a>
                           )}
                           <button
                             type="button"

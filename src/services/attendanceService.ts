@@ -120,23 +120,69 @@ export async function recordStudentAttendance(
   // Background sync to Supabase if table exists
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase.from("attendance").upsert({
+      const isUuid = (val?: string) =>
+        Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val));
+
+      const upsertPayload: Record<string, any> = {
         id: updatedRecord.id,
-        student_id: updatedRecord.studentId,
+        student_id: isUuid(updatedRecord.studentId) ? updatedRecord.studentId : null,
+        student_phone: updatedRecord.studentPhone || null,
+        student_name: updatedRecord.studentName || null,
         course_id: updatedRecord.courseId,
         subject_id: updatedRecord.subjectId,
         attendance_date: updatedRecord.date,
         status: updatedRecord.status,
         notes: updatedRecord.notes || null,
         marked_at: updatedRecord.markedAt,
-      });
-    } catch {
-      // Gracefully continue with local storage
+      };
+
+      await supabase.from("attendance").upsert(upsertPayload);
+    } catch (err) {
+      console.warn("Could not sync attendance record to Supabase:", err);
     }
+  }
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("hanoon_attendance_updated"));
   }
 
   return updatedRecord;
 }
+
+/**
+ * Click-based attendance tracking for Google Meet / Live Classes.
+ * Immediately fires an API call to Supabase to mark the student's attendance as 'PRESENT' ('P')
+ * with the exact timestamp when the "Join Live Class" button is clicked.
+ */
+export async function recordLiveClassJoinAttendance(params: {
+  studentId?: string;
+  studentName?: string;
+  studentPhone?: string;
+  courseId: string;
+  classTitle: string;
+  subjectId?: string;
+  meetingLink?: string;
+}): Promise<AttendanceRecord> {
+  const today = new Date().toISOString().split("T")[0];
+  const subjectId = params.subjectId || "live-session";
+  const rawId = params.studentId || "";
+  const studentPhone = (params.studentPhone || "").replace(/\D/g, "");
+  const studentId = rawId || (studentPhone ? `std-${studentPhone}` : "std-active-student");
+
+  const record = await recordStudentAttendance({
+    studentId,
+    studentName: params.studentName || "Student",
+    studentPhone: params.studentPhone || "",
+    courseId: params.courseId || "adaviyya",
+    subjectId,
+    date: today,
+    status: "PRESENT",
+    notes: `Google Meet Joined: ${params.classTitle}`,
+  });
+
+  return record;
+}
+
 
 /**
  * Mark multiple students at once (e.g. Mark All Present)

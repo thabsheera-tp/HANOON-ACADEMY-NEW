@@ -19,6 +19,7 @@ export interface LiveClassSession {
   specialClassTitle?: string;
   isCustomCourse?: boolean;
   subjectName?: string;
+  subjectId?: string;
   recordingUrl?: string;
   recording_url?: string;
   notesPdfUrl?: string;

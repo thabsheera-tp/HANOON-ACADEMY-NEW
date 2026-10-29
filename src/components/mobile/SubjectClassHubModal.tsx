@@ -19,17 +19,24 @@ import {
   Video,
   Lock,
   ArrowRight,
+  ExternalLink,
 } from "lucide-react";
 import { AdaviyyaSubject, getTeacherWhatsApp } from "@/services/subjectService";
 import { getAppSettings, formatWhatsAppLink } from "@/services/settingsService";
+import { recordLiveClassJoinAttendance } from "@/services/attendanceService";
 
 interface SubjectClassHubModalProps {
   isOpen: boolean;
   onClose: () => void;
   subject: AdaviyyaSubject | null;
   studentName?: string;
+  studentId?: string;
+  studentPhone?: string;
+  courseId?: string;
   isPaid?: boolean;
   onEnroll?: () => void;
+  onJoinSession?: (session: any) => void;
+  onSessionCompleted?: () => void;
 }
 
 export default function SubjectClassHubModal({
@@ -37,12 +44,20 @@ export default function SubjectClassHubModal({
   onClose,
   subject,
   studentName = "Student",
+  studentId,
+  studentPhone,
+  courseId,
   isPaid: isPaidProp,
   onEnroll,
+  onJoinSession,
+  onSessionCompleted,
 }: SubjectClassHubModalProps) {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadedChapters, setDownloadedChapters] = useState<Record<string, boolean>>({});
   const [activePlayingId, setActivePlayingId] = useState<string | null>(null);
+  const [isClassInProgress, setIsClassInProgress] = useState(false);
+  const [isMarkingAttendance, setIsMarkingAttendance] = useState(false);
+  const [attendanceMarkedAt, setAttendanceMarkedAt] = useState<string | null>(null);
   const isPaid = Boolean(isPaidProp);
 
   if (!isOpen || !subject) return null;
@@ -184,6 +199,64 @@ export default function SubjectClassHubModal({
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
+        ) : isClassInProgress ? (
+          /* ========================================================
+             CLASS IN PROGRESS RETURN FLOW STATE (POST-CLICK)
+             ======================================================== */
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 via-purple-950 to-slate-900 text-white shadow-xl border border-rose-500/40 space-y-3 mb-3 animate-fade-in relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+                <span className="text-[10px] font-black uppercase tracking-wider text-rose-300">
+                  Class in Progress...
+                </span>
+              </div>
+              <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 px-2 py-0.5 rounded-full flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                <span>Present (P) Marked</span>
+              </span>
+            </div>
+
+            <div className="space-y-0.5">
+              <h4 className="text-xs font-extrabold text-white leading-tight">
+                {subject.name} — Live Lecture
+              </h4>
+              <p className="text-[11px] text-purple-200">
+                Google Meet is active with {subject.instructor}
+                {attendanceMarkedAt ? ` • Attendance logged at ${attendanceMarkedAt}` : ""}
+              </p>
+            </div>
+
+            <div className="p-2.5 rounded-xl bg-white/10 backdrop-blur-md text-[11px] text-purple-100 flex items-center justify-between border border-white/10">
+              <span className="leading-snug">Google Meet opened in a new tab.</span>
+              {subject.liveClassUrl && (
+                <a
+                  href={subject.liveClassUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] text-rose-300 hover:text-white font-bold underline shrink-0"
+                >
+                  <span>Reopen Meet</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </div>
+
+            {/* PROMINENT RETURN BUTTON */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsClassInProgress(false);
+                setAttendanceMarkedAt(null);
+                onSessionCompleted?.();
+                onClose();
+              }}
+              className="w-full py-3 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 active:scale-[0.98] text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 transition-all cursor-pointer"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Mark as Completed & Return to Dashboard</span>
+            </button>
+          </div>
         ) : (
           <div className="p-3.5 rounded-2xl bg-purple-600 text-white shadow-xs space-y-2.5 mb-3">
             <div className="flex items-center justify-between">
@@ -194,7 +267,7 @@ export default function SubjectClassHubModal({
                 </span>
               </div>
               <span className="text-[10px] font-bold bg-white/20 px-2 py-0.5 rounded-full">
-                Live Zoom
+                Live Class
               </span>
             </div>
 
@@ -203,15 +276,49 @@ export default function SubjectClassHubModal({
             </p>
 
             {subject.liveClassUrl ? (
-              <a
-                href={subject.liveClassUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full py-2.5 px-3 rounded-xl bg-white text-purple-700 hover:bg-purple-50 font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+              <button
+                type="button"
+                disabled={isMarkingAttendance}
+                onClick={async () => {
+                  if (!subject.liveClassUrl) return;
+
+                  setIsMarkingAttendance(true);
+                  const nowTime = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                  setAttendanceMarkedAt(nowTime);
+
+                  try {
+                    await recordLiveClassJoinAttendance({
+                      studentId,
+                      studentName,
+                      studentPhone,
+                      courseId: courseId || "adaviyya",
+                      classTitle: `${subject.name} - Live Lecture`,
+                      subjectId: subject.id,
+                      meetingLink: subject.liveClassUrl,
+                    });
+                  } catch (err) {
+                    console.warn("Could not log live attendance:", err);
+                  } finally {
+                    setIsMarkingAttendance(false);
+                  }
+
+                  // Open Google Meet link in NEW tab
+                  window.open(subject.liveClassUrl, "_blank", "noopener,noreferrer");
+
+                  // Transition to Class in Progress UI
+                  setIsClassInProgress(true);
+                  onJoinSession?.({
+                    title: `${subject.name} - Live Lecture`,
+                    teacherName: subject.instructor,
+                    meetingLink: subject.liveClassUrl,
+                    subjectId: subject.id,
+                  });
+                }}
+                className="w-full py-2.5 px-3 rounded-xl bg-white text-purple-700 hover:bg-purple-50 active:scale-[0.98] font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
               >
                 <Radio className="w-3.5 h-3.5 animate-pulse text-purple-600" />
                 <span>Join Live Class</span>
-              </a>
+              </button>
             ) : (
               <div className="w-full py-2 px-3 rounded-xl bg-purple-700/60 text-purple-100 text-xs font-semibold text-center">
                 Class will be broadcast at scheduled time

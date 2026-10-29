@@ -41,7 +41,11 @@ import ProgressScoreBarChart from "@/components/charts/ProgressScoreBarChart";
 import { getAppSettings, formatWhatsAppLink } from "@/services/settingsService";
 import { getNotifications, markAllNotificationsAsRead, AppNotification } from "@/services/notificationService";
 import StudentNoticeBoard from "@/components/mobile/StudentNoticeBoard";
-import { getLocalAttendanceRecords, fetchStudentAttendanceMetrics } from "@/services/attendanceService";
+import {
+  getLocalAttendanceRecords,
+  fetchStudentAttendanceMetrics,
+  recordLiveClassJoinAttendance,
+} from "@/services/attendanceService";
 import {
   fetchStudentModuleScores,
   calculateCourseCompletionMetrics,
@@ -565,11 +569,105 @@ export default function ScreenDashboard({
     };
   }, [userProfile.id, userProfile.phone, studentName, selectedCourse.id, isApproved]);
 
+  // Active live session tracking for Return flow from Google Meet
+  const [activeLiveSession, setActiveLiveSession] = useState<{
+    title?: string;
+    teacherName?: string;
+    meetingLink?: string;
+    subjectId?: string;
+    startTime?: string;
+  } | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = sessionStorage.getItem("hanoon_live_session_in_progress");
+        return saved ? JSON.parse(saved) : null;
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  });
+  const [liveReturnToast, setLiveReturnToast] = useState<string | null>(null);
+
+  const handleJoinLiveClassSession = async (session: {
+    title?: string;
+    teacherName?: string;
+    meetingLink?: string;
+    subjectId?: string;
+  }) => {
+    if (!session.meetingLink) return;
+
+    const nowTime = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+    // 1. Immediately fire API call to mark attendance as 'PRESENT' ('P') with timestamp
+    try {
+      await recordLiveClassJoinAttendance({
+        studentId: userProfile.id,
+        studentName,
+        studentPhone: userProfile.phone,
+        courseId: selectedCourse.id,
+        classTitle: session.title || "Live Lecture",
+        subjectId: session.subjectId || "live-session",
+        meetingLink: session.meetingLink,
+      });
+    } catch (err) {
+      console.warn("Could not log live attendance:", err);
+    }
+
+    // 2. Open Google Meet link in NEW window/tab (target="_blank")
+    window.open(session.meetingLink, "_blank", "noopener,noreferrer");
+
+    // 3. In original app tab, change the UI to "Class in Progress..."
+    const activeData = {
+      title: session.title || "Live Lecture",
+      teacherName: session.teacherName || "Faculty Instructor",
+      meetingLink: session.meetingLink,
+      subjectId: session.subjectId,
+      startTime: nowTime,
+    };
+    setActiveLiveSession(activeData);
+    try {
+      sessionStorage.setItem("hanoon_live_session_in_progress", JSON.stringify(activeData));
+    } catch (e) {}
+  };
+
+  const handleCompleteLiveSession = () => {
+    setActiveLiveSession(null);
+    try {
+      sessionStorage.removeItem("hanoon_live_session_in_progress");
+    } catch (e) {}
+
+    // Dispatch attendance updated event to dynamically recalculate attendance donut & metrics
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("hanoon_attendance_updated"));
+    }
+
+    setLiveReturnToast("Class completed! Attendance marked as Present (P). Welcome back to dashboard.");
+    setTimeout(() => setLiveReturnToast(null), 6000);
+  };
+
   const liveNowClass = liveClasses.find((c) => c.status === "LIVE_NOW");
   const upcomingClass = liveClasses.find((c) => c.status === "SCHEDULED");
 
   return (
     <div className="w-full max-w-md mx-auto overflow-x-hidden px-4 py-3 flex-1 flex flex-col justify-start space-y-4 select-none font-['Plus_Jakarta_Sans'] bg-purple-50/30 text-slate-900">
+      {/* Toast banner when returning from Google Meet session */}
+      {liveReturnToast && (
+        <div className="p-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold text-xs flex items-center justify-between shadow-md animate-fade-in border border-emerald-400/40">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-200" />
+            <span className="leading-snug">{liveReturnToast}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setLiveReturnToast(null)}
+            className="p-1 rounded-md hover:bg-white/20 text-white font-black text-xs cursor-pointer shrink-0 ml-2"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* 1. TOP PROFILE BAR & GREETING */}
       <div className="flex items-center justify-between pt-0.5">
         <div className="flex items-center gap-2.5">
@@ -908,73 +1006,136 @@ export default function ScreenDashboard({
         }}
       />
 
-      {/* 5. COMPACT ENROLLED PROGRAM & LIVE COUNTDOWN HERO CARD */}
-      <div className="bg-white p-3.5 rounded-2xl border border-purple-100 shadow-sm space-y-2.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-[9.5px] font-extrabold uppercase tracking-wider text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100">
-              Active Enrolled Track
+      {/* 5. COMPACT ENROLLED PROGRAM & LIVE COUNTDOWN HERO CARD / ACTIVE LIVE SESSION CARD */}
+      {activeLiveSession ? (
+        /* ========================================================
+           RETURN TO APP FLOW: CLASS IN PROGRESS ON DASHBOARD
+           ======================================================== */
+        <div className="rounded-2xl bg-gradient-to-br from-slate-900 via-purple-950 to-slate-900 text-white p-4 space-y-3.5 shadow-xl border border-rose-500/40 animate-fade-in relative overflow-hidden">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+              <span className="text-xs font-black uppercase tracking-wider text-rose-300">
+                Class in Progress...
+              </span>
+            </div>
+            <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 px-2 py-0.5 rounded-full flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Present (P) Marked</span>
             </span>
-            {isApproved && (
-              <span className="text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
-                Verified
-              </span>
-            )}
           </div>
 
-          <div className="flex items-center gap-1 text-[10px] font-mono font-bold text-purple-700 bg-purple-50/80 px-2 py-0.5 rounded-md">
-            {liveNowClass ? (
-              <span className="flex items-center gap-1 text-rose-600 font-bold">
-                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
-                LIVE NOW
-              </span>
-            ) : (
-              <>
-                <Clock className="w-3 h-3 text-purple-600" />
-                <span>{countdownString}</span>
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-extrabold text-slate-900 leading-tight">
-              {selectedCourse.title}
-            </h3>
-            <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-              {subjects.length} Core Subjects • {liveNowClass ? `Live with ${liveNowClass.teacherName || "Faculty"}` : upcomingClass?.teacherName ? `Faculty: ${upcomingClass.teacherName}` : "Comprehensive Syllabus Track"}
+          <div className="space-y-1">
+            <h4 className="text-base font-extrabold text-white leading-tight">
+              {activeLiveSession.title || `${selectedCourse.title} Live Class`}
+            </h4>
+            <p className="text-[11.5px] text-purple-200">
+              Google Meet active with {activeLiveSession.teacherName || "Faculty Instructor"}
+              {activeLiveSession.startTime ? ` • Joined at ${activeLiveSession.startTime}` : ""}
             </p>
           </div>
 
+          <div className="p-3 rounded-xl bg-white/10 backdrop-blur-md text-[11px] text-purple-100 flex items-center justify-between border border-white/10">
+            <span className="leading-snug">Google Meet opened in a new tab.</span>
+            {activeLiveSession.meetingLink && (
+              <a
+                href={activeLiveSession.meetingLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] text-rose-300 hover:text-white font-bold underline shrink-0"
+              >
+                <span>Reopen Meet</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+          </div>
+
+          {/* Prominent Mark as Completed & Return Button */}
           <button
             type="button"
-            onClick={() => {
-              if (isApproved) {
-                setShowLiveModal(true);
-              } else {
-                setLockedNoticeSubject("Live Classroom");
-              }
-            }}
-            className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-95 shrink-0 ${
-              isApproved
-                ? "bg-purple-600 hover:bg-purple-700 text-white"
-                : "bg-amber-100 text-amber-800 border border-amber-200"
-            }`}
+            onClick={handleCompleteLiveSession}
+            className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 active:scale-[0.98] text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 transition-all cursor-pointer"
           >
-            {isApproved ? (
-              <>
-                <Radio className={`w-3.5 h-3.5 ${liveNowClass ? "animate-pulse" : ""}`} />
-                <span>{liveNowClass ? "Join Live" : "Classroom"}</span>
-              </>
-            ) : (
-              <>
-                <Lock className="w-3.5 h-3.5 text-amber-700" />
-                <span>Locked</span>
-              </>
-            )}
+            <CheckCircle2 className="w-4 h-4" />
+            <span>Mark as Completed & Return to Dashboard</span>
           </button>
         </div>
+      ) : (
+        <div className="bg-white p-3.5 rounded-2xl border border-purple-100 shadow-sm space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-[9.5px] font-extrabold uppercase tracking-wider text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100">
+                Active Enrolled Track
+              </span>
+              {isApproved && (
+                <span className="text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                  Verified
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1 text-[10px] font-mono font-bold text-purple-700 bg-purple-50/80 px-2 py-0.5 rounded-md">
+              {liveNowClass ? (
+                <span className="flex items-center gap-1 text-rose-600 font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
+                  LIVE NOW
+                </span>
+              ) : (
+                <>
+                  <Clock className="w-3 h-3 text-purple-600" />
+                  <span>{countdownString}</span>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-extrabold text-slate-900 leading-tight">
+                {selectedCourse.title}
+              </h3>
+              <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                {subjects.length} Core Subjects • {liveNowClass ? `Live with ${liveNowClass.teacherName || "Faculty"}` : upcomingClass?.teacherName ? `Faculty: ${upcomingClass.teacherName}` : "Comprehensive Syllabus Track"}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (isApproved) {
+                  if (liveNowClass?.meetingLink) {
+                    handleJoinLiveClassSession({
+                      title: liveNowClass.title,
+                      teacherName: liveNowClass.teacherName,
+                      meetingLink: liveNowClass.meetingLink,
+                      subjectId: liveNowClass.subjectId,
+                    });
+                  } else {
+                    setShowLiveModal(true);
+                  }
+                } else {
+                  setLockedNoticeSubject("Live Classroom");
+                }
+              }}
+              className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-95 shrink-0 ${
+                isApproved
+                  ? "bg-purple-600 hover:bg-purple-700 text-white"
+                  : "bg-amber-100 text-amber-800 border border-amber-200"
+              }`}
+            >
+              {isApproved ? (
+                <>
+                  <Radio className={`w-3.5 h-3.5 ${liveNowClass ? "animate-pulse" : ""}`} />
+                  <span>{liveNowClass ? "Join Live" : "Classroom"}</span>
+                </>
+              ) : (
+                <>
+                  <Lock className="w-3.5 h-3.5 text-amber-700" />
+                  <span>Locked</span>
+                </>
+              )}
+            </button>
+          </div>
 
         {/* Dynamic Course Progress Bar for Long-Term Tracks (e.g. Adaviyya 6-Month Course) */}
         <div className="space-y-1.5 pt-1.5 border-t border-purple-50">
@@ -1032,6 +1193,7 @@ export default function ScreenDashboard({
           )}
         </div>
       </div>
+      )}
 
       {/* 5b. DEDICATED RECORDED CLASSES & STUDY LIBRARY (Google Drive / YouTube) */}
       <div className="bg-white p-3.5 rounded-2xl border border-purple-100 shadow-sm space-y-3 animate-fade-in">
@@ -1367,7 +1529,23 @@ export default function ScreenDashboard({
         onClose={() => setShowLiveModal(false)}
         selectedCourse={selectedCourse}
         userName={studentName}
+        studentId={userProfile.id}
+        studentPhone={userProfile.phone}
         onOpenTimetable={() => setShowTimetableModal(true)}
+        onJoinSession={(session) => {
+          const activeData = {
+            title: session.title,
+            teacherName: session.teacherName,
+            meetingLink: session.meetingLink,
+            subjectId: session.subjectId,
+            startTime: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          };
+          setActiveLiveSession(activeData);
+          try {
+            sessionStorage.setItem("hanoon_live_session_in_progress", JSON.stringify(activeData));
+          } catch (e) {}
+        }}
+        onSessionCompleted={handleCompleteLiveSession}
       />
 
       {/* 2. Course Materials Modal */}
@@ -1404,11 +1582,28 @@ export default function ScreenDashboard({
         onClose={() => setShowSpecialModal(false)}
         specialClass={selectedSpecialClass}
         userName={studentName}
+        studentId={userProfile.id}
+        studentPhone={userProfile.phone}
+        courseId={selectedCourse.id}
         isPaid={isApproved}
         onEnroll={() => {
           setShowSpecialModal(false);
           onChangeCourse();
         }}
+        onJoinSession={(session) => {
+          const activeData = {
+            title: session.title,
+            teacherName: session.teacherName,
+            meetingLink: session.meetingLink,
+            subjectId: session.subjectId,
+            startTime: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          };
+          setActiveLiveSession(activeData);
+          try {
+            sessionStorage.setItem("hanoon_live_session_in_progress", JSON.stringify(activeData));
+          } catch (e) {}
+        }}
+        onSessionCompleted={handleCompleteLiveSession}
       />
 
       {/* 6. Adaviyya Subject Hub Modal */}
@@ -1417,11 +1612,28 @@ export default function ScreenDashboard({
         onClose={() => setActiveSubject(null)}
         subject={activeSubject}
         studentName={studentName}
+        studentId={userProfile.id}
+        studentPhone={userProfile.phone}
+        courseId={selectedCourse.id}
         isPaid={isApproved}
         onEnroll={() => {
           setActiveSubject(null);
           onChangeCourse();
         }}
+        onJoinSession={(session) => {
+          const activeData = {
+            title: session.title,
+            teacherName: session.teacherName,
+            meetingLink: session.meetingLink,
+            subjectId: session.subjectId,
+            startTime: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          };
+          setActiveLiveSession(activeData);
+          try {
+            sessionStorage.setItem("hanoon_live_session_in_progress", JSON.stringify(activeData));
+          } catch (e) {}
+        }}
+        onSessionCompleted={handleCompleteLiveSession}
       />
 
       {/* 7. Certificate View Modal */}

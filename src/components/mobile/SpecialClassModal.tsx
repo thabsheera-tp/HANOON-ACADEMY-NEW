@@ -20,14 +20,20 @@ import {
 } from "lucide-react";
 import { SpecialClass } from "@/services/specialClassService";
 import { getAppSettings, formatWhatsAppLink } from "@/services/settingsService";
+import { recordLiveClassJoinAttendance } from "@/services/attendanceService";
 
 interface SpecialClassModalProps {
   isOpen: boolean;
   onClose: () => void;
   specialClass: SpecialClass | null;
   userName: string;
+  studentId?: string;
+  studentPhone?: string;
+  courseId?: string;
   isPaid?: boolean;
   onEnroll?: () => void;
+  onJoinSession?: (session: any) => void;
+  onSessionCompleted?: () => void;
 }
 
 export default function SpecialClassModal({
@@ -35,11 +41,19 @@ export default function SpecialClassModal({
   onClose,
   specialClass,
   userName,
+  studentId,
+  studentPhone,
+  courseId,
   isPaid: isPaidProp,
   onEnroll,
+  onJoinSession,
+  onSessionCompleted,
 }: SpecialClassModalProps) {
   const [activeTab, setActiveTab] = useState<"live" | "materials" | "about">("live");
   const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [isClassInProgress, setIsClassInProgress] = useState(false);
+  const [isMarkingAttendance, setIsMarkingAttendance] = useState(false);
+  const [attendanceMarkedAt, setAttendanceMarkedAt] = useState<string | null>(null);
 
   const isPaid = Boolean(isPaidProp);
 
@@ -192,6 +206,64 @@ export default function SpecialClassModal({
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
+              ) : isClassInProgress ? (
+                /* ========================================================
+                   CLASS IN PROGRESS RETURN FLOW STATE (POST-CLICK)
+                   ======================================================== */
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 via-purple-950 to-slate-900 text-white shadow-xl border border-rose-500/40 space-y-3 animate-fade-in relative overflow-hidden">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+                      <span className="text-[10px] font-black uppercase tracking-wider text-rose-300">
+                        Class in Progress...
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                      <span>Present (P) Marked</span>
+                    </span>
+                  </div>
+
+                  <div className="space-y-0.5">
+                    <h4 className="text-xs font-extrabold text-white leading-tight">
+                      {specialClass.title}
+                    </h4>
+                    <p className="text-[11px] text-purple-200">
+                      Google Meet is active with {specialClass.instructor}
+                      {attendanceMarkedAt ? ` • Attendance logged at ${attendanceMarkedAt}` : ""}
+                    </p>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-white/10 backdrop-blur-md text-[11px] text-purple-100 flex items-center justify-between border border-white/10">
+                    <span className="leading-snug">Google Meet opened in a new tab.</span>
+                    {specialClass.liveUrl && (
+                      <a
+                        href={specialClass.liveUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] text-rose-300 hover:text-white font-bold underline shrink-0"
+                      >
+                        <span>Reopen Meet</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                  </div>
+
+                  {/* PROMINENT RETURN BUTTON */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsClassInProgress(false);
+                      setAttendanceMarkedAt(null);
+                      onSessionCompleted?.();
+                      onClose();
+                    }}
+                    className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 active:scale-[0.98] text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 transition-all cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Mark as Completed & Return to Dashboard</span>
+                  </button>
+                </div>
               ) : (
                 <div className="p-4 rounded-2xl bg-purple-50 border border-purple-100 space-y-3">
                   <div className="flex items-center gap-2">
@@ -204,15 +276,49 @@ export default function SpecialClassModal({
                     Join Usthad for this specialized live gathering with crystal clear high-fidelity audio and two-way interaction.
                   </p>
 
-                  <a
-                    href={specialClass.liveUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full py-3.5 px-4 rounded-xl font-bold text-xs text-white bg-purple-600 hover:bg-purple-700 shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  <button
+                    type="button"
+                    disabled={isMarkingAttendance}
+                    onClick={async () => {
+                      if (!specialClass.liveUrl) return;
+
+                      setIsMarkingAttendance(true);
+                      const nowTime = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                      setAttendanceMarkedAt(nowTime);
+
+                      try {
+                        await recordLiveClassJoinAttendance({
+                          studentId,
+                          studentName: userName,
+                          studentPhone,
+                          courseId: courseId || "special-sessions",
+                          classTitle: specialClass.title,
+                          subjectId: specialClass.id,
+                          meetingLink: specialClass.liveUrl,
+                        });
+                      } catch (err) {
+                        console.warn("Could not log live attendance:", err);
+                      } finally {
+                        setIsMarkingAttendance(false);
+                      }
+
+                      // Open Google Meet link in NEW window/tab
+                      window.open(specialClass.liveUrl, "_blank", "noopener,noreferrer");
+
+                      // Transition to Class in Progress state
+                      setIsClassInProgress(true);
+                      onJoinSession?.({
+                        title: specialClass.title,
+                        teacherName: specialClass.instructor,
+                        meetingLink: specialClass.liveUrl,
+                        subjectId: specialClass.id,
+                      });
+                    }}
+                    className="w-full py-3.5 px-4 rounded-xl font-bold text-xs text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.98] shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Radio className="w-4 h-4 animate-pulse" />
                     <span>Join Live Class</span>
-                  </a>
+                  </button>
                 </div>
               )}
             </div>
