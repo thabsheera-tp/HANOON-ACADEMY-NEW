@@ -24,11 +24,8 @@ import {
   UserProfileRecord,
 } from "@/services/authService";
 
-interface MobileAppShellProps {
-  initialUser?: UserProfileRecord | null;
-}
-
-export default function MobileAppShell({ initialUser }: MobileAppShellProps = {}) {
+export default function MobileAppShell(props: any) {
+  const initialUser: UserProfileRecord | null | undefined = props?.initialUser;
   const router = useRouter();
   // 5-Screen Sequential Flow:
   // Screen 1: "splash" -> Welcome Landing Page with Hanoon Academy Logo and Get Started button

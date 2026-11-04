@@ -28,10 +28,12 @@ export default function PendingVerificationPage() {
           return;
         }
       } else {
+        const rLower = (session.user.role || "").toLowerCase();
         if (
-          session.user.role === "admin" ||
-          session.user.role === "super_admin" ||
-          session.user.role === "verification_admin"
+          rLower === "admin" ||
+          rLower === "super_admin" ||
+          rLower === "verification_admin" ||
+          rLower === "verifier"
         ) {
           router.replace("/admin");
           return;

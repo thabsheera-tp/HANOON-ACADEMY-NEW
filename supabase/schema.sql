@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     email TEXT UNIQUE NOT NULL,
     full_name TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('student', 'teacher', 'admin', 'super_admin', 'verification_admin')) DEFAULT 'student',
+    role TEXT NOT NULL CHECK (role IN ('student', 'teacher', 'admin', 'super_admin', 'verification_admin', 'verifier', 'VERIFIER')) DEFAULT 'student',
     district TEXT DEFAULT 'Kerala',
     whatsapp_num TEXT,
     avatar_url TEXT,
@@ -25,18 +25,31 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 
 -- Ensure multi-tier role constraint exists if table was created in an earlier migration
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
-ALTER TABLE public.profiles ADD CONSTRAINT profiles_role_check CHECK (role IN ('student', 'teacher', 'admin', 'super_admin', 'verification_admin'));
+ALTER TABLE public.profiles ADD CONSTRAINT profiles_role_check CHECK (role IN ('student', 'teacher', 'admin', 'super_admin', 'verification_admin', 'verifier', 'VERIFIER'));
 
 -- Trigger: Automatically create a profile entry when a user signs up via Supabase Auth
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
+DECLARE
+    raw_role text;
+    assigned_role text;
 BEGIN
+    raw_role := COALESCE(new.raw_user_meta_data->>'role', 'student');
+    -- Normalize verifier roles safely while preserving allowed values
+    IF lower(raw_role) IN ('verifier', 'verification_admin') THEN
+        assigned_role := lower(raw_role);
+    ELSIF lower(raw_role) IN ('student', 'teacher', 'admin', 'super_admin') THEN
+        assigned_role := lower(raw_role);
+    ELSE
+        assigned_role := 'student';
+    END IF;
+
     INSERT INTO public.profiles (id, email, full_name, role, district, whatsapp_num)
     VALUES (
         new.id,
         new.email,
         COALESCE(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
-        COALESCE(new.raw_user_meta_data->>'role', 'student'),
+        assigned_role,
         COALESCE(new.raw_user_meta_data->>'district', 'Kerala'),
         COALESCE(new.raw_user_meta_data->>'whatsapp_num', NULL)
     )
@@ -61,7 +74,7 @@ $$ LANGUAGE sql STABLE SECURITY DEFINER;
 -- Super Admin: Full administrative privileges over curriculum, settings, payroll, and financials
 CREATE OR REPLACE FUNCTION public.is_super_admin()
 RETURNS BOOLEAN AS $$
-    SELECT COALESCE((SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()), false);
+    SELECT COALESCE((SELECT lower(role) IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()), false);
 $$ LANGUAGE sql STABLE SECURITY DEFINER;
 
 -- Legacy alias for Super Admin backward compatibility
@@ -73,7 +86,7 @@ $$ LANGUAGE sql STABLE SECURITY DEFINER;
 -- Verification Admin: Scoped access strictly to UPI payment queue approvals/rejections
 CREATE OR REPLACE FUNCTION public.is_verification_admin()
 RETURNS BOOLEAN AS $$
-    SELECT COALESCE((SELECT role IN ('verification_admin', 'admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()), false);
+    SELECT COALESCE((SELECT lower(role) IN ('verification_admin', 'verifier', 'admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()), false);
 $$ LANGUAGE sql STABLE SECURITY DEFINER;
 
 CREATE OR REPLACE FUNCTION public.is_teacher()

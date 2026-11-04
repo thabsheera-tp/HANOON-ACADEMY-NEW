@@ -1,7 +1,7 @@
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { saveOrUpdateStudentInSupabase } from "@/services/studentService";
 
-export type UserRole = "student" | "teacher" | "admin" | "super_admin" | "verification_admin";
+export type UserRole = "student" | "teacher" | "admin" | "super_admin" | "verification_admin" | "verifier" | "VERIFIER";
 
 export interface UserProfileRecord {
   id: string;
@@ -26,15 +26,18 @@ export const LOCAL_SESSION_KEY = "hanoon_auth_session_v1";
 
 // Role hierarchy helpers
 export function isSuperAdminRole(role?: UserRole | string | null): boolean {
-  return role === "admin" || role === "super_admin";
+  const r = (role || "").toLowerCase();
+  return r === "admin" || r === "super_admin";
 }
 
 export function isVerificationAdminRole(role?: UserRole | string | null): boolean {
-  return role === "verification_admin";
+  const r = (role || "").toLowerCase();
+  return r === "verification_admin" || r === "verifier";
 }
 
 export function isAdminOrStaffRole(role?: UserRole | string | null): boolean {
-  return role === "admin" || role === "super_admin" || role === "verification_admin";
+  const r = (role || "").toLowerCase();
+  return r === "admin" || r === "super_admin" || r === "verification_admin" || r === "verifier";
 }
 
 // Fallback credentials used strictly for local evaluation when Supabase is not configured
@@ -678,11 +681,13 @@ export async function loginAdminWithSupabase(
       console.warn("Notice checking profiles table for admin role:", e);
     }
 
-    // 3. Strict Admin Role Gate: Must be admin, super_admin, or verification_admin
+    // 3. Strict Admin Role Gate: Must be admin, super_admin, verification_admin, or verifier
+    const rLower = (role || "").toLowerCase();
     const isPermittedAdmin =
-      role === "admin" ||
-      role === "super_admin" ||
-      role === "verification_admin";
+      rLower === "admin" ||
+      rLower === "super_admin" ||
+      rLower === "verification_admin" ||
+      rLower === "verifier";
 
     if (!isPermittedAdmin) {
       // Disallow non-admin users
@@ -771,45 +776,84 @@ export async function loginStaffWithCredentials(
           .maybeSingle();
 
         let role = profileData?.role as UserRole | undefined;
+        let fullName = profileData?.full_name || authData.user.user_metadata?.full_name || cleanEmail.split("@")[0];
+        let district = profileData?.district || "Kerala";
+        let whatsappNum = profileData?.whatsapp_num || "";
+
+        if (!role) {
+          const metaRole = authData.user.user_metadata?.role as UserRole | undefined;
+          if (metaRole) {
+            role = metaRole;
+          }
+        }
 
         if (cleanEmail === DEMO_EVALUATION_CREDENTIALS.admin.email.toLowerCase() && (!role || role === "student")) {
           role = "super_admin";
         }
 
-        if (role !== "admin" && role !== "super_admin" && role !== "verification_admin" && role !== "teacher") {
+        // If profile was missing from database, auto-heal and create it if a staff role exists
+        if (!profileData && role) {
+          try {
+            await supabase.from("profiles").upsert({
+              id: authData.user.id,
+              email: cleanEmail,
+              full_name: fullName,
+              role: role,
+              district: district,
+              whatsapp_num: whatsappNum,
+            });
+          } catch (e) {
+            console.warn("Failed to auto-upsert missing profile:", e);
+          }
+        }
+
+        const rLower = (role || "").toLowerCase();
+        if (
+          rLower !== "admin" &&
+          rLower !== "super_admin" &&
+          rLower !== "verification_admin" &&
+          rLower !== "verifier" &&
+          rLower !== "teacher"
+        ) {
           return {
             success: false,
             error: "Access Denied: This portal requires verified Faculty or Administrator credentials.",
           };
         }
 
+        const finalRole = (role || "admin") as UserRole;
         const fallbackTitle =
-          role === "verification_admin"
+          rLower === "verification_admin" || rLower === "verifier"
             ? "Verification Staff Officer"
-            : role === "teacher"
+            : rLower === "teacher"
             ? "Faculty Member"
             : "Academy Administrator";
 
         const userRecord: UserProfileRecord = {
           id: authData.user.id,
           email: authData.user.email || cleanEmail,
-          full_name: profileData?.full_name || authData.user.user_metadata?.full_name || fallbackTitle,
-          role: role,
-          district: profileData?.district || "Kerala",
-          whatsapp_num: profileData?.whatsapp_num || "",
+          full_name: fullName || fallbackTitle,
+          role: finalRole,
+          district: district,
+          whatsapp_num: whatsappNum,
           avatar_url: profileData?.avatar_url,
         };
 
         setAuthSession(userRecord, authData.session?.access_token || "supabase-token");
         if (typeof window !== "undefined") {
           try {
-            if (role === "admin" || role === "super_admin" || role === "verification_admin") {
+            if (
+              rLower === "admin" ||
+              rLower === "super_admin" ||
+              rLower === "verification_admin" ||
+              rLower === "verifier"
+            ) {
               localStorage.setItem("hanoon_admin_authenticated", "true");
             }
-            localStorage.setItem("hanoon_portal_role", role);
+            localStorage.setItem("hanoon_portal_role", finalRole);
           } catch {}
         }
-        return { success: true, user: userRecord, role };
+        return { success: true, user: userRecord, role: finalRole };
       }
     } catch (err: any) {
       console.warn("Supabase staff auth failed:", err);

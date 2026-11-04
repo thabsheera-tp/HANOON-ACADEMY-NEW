@@ -68,17 +68,19 @@ function LoginFormContent() {
       if (!isMounted) return;
 
       if (activeSession && activeSession.user) {
+        const rLower = (activeSession.user.role || "").toLowerCase();
         if (
-          activeSession.user.role === "admin" ||
-          activeSession.user.role === "super_admin" ||
-          activeSession.user.role === "verification_admin"
+          rLower === "admin" ||
+          rLower === "super_admin" ||
+          rLower === "verification_admin" ||
+          rLower === "verifier"
         ) {
           router.replace("/admin");
           return;
-        } else if (activeSession.user.role === "teacher") {
+        } else if (rLower === "teacher") {
           router.replace("/teacher");
           return;
-        } else if (activeSession.user.role === "student") {
+        } else if (rLower === "student") {
           // If staff portal is explicitly requested, allow staff to login without redirecting to student/verification
           if (portalParam === "staff") {
             setPortalCategory("staff");
@@ -211,10 +213,11 @@ function LoginFormContent() {
       const result = await loginStaffWithCredentials(staffEmail, staffPassword);
 
       if (result.success && result.role) {
-        const isVerif = result.role === "verification_admin";
+        const rLower = result.role.toLowerCase();
+        const isVerif = rLower === "verification_admin" || rLower === "verifier";
         const roleLabel = isVerif
           ? "Verification Staff"
-          : result.role === "teacher"
+          : rLower === "teacher"
           ? "Faculty Member"
           : "Administrator";
 
@@ -222,9 +225,10 @@ function LoginFormContent() {
 
         setTimeout(() => {
           if (
-            result.role === "admin" ||
-            result.role === "super_admin" ||
-            result.role === "verification_admin"
+            rLower === "admin" ||
+            rLower === "super_admin" ||
+            rLower === "verification_admin" ||
+            rLower === "verifier"
           ) {
             router.push("/admin");
           } else {

@@ -95,7 +95,7 @@ import { addSpecialClass } from "@/services/specialClassService";
 import { fetchFacultyTeachers, getLocalFacultyTeachers, FacultyTeacher } from "@/services/teacherFacultyService";
 import { DbPayment, DbStudent, DbPayroll, PaymentStatus } from "@/types/supabase";
 
-export const FACULTY_MEMBERS = [
+const FACULTY_MEMBERS = [
   {
     id: "tch-01",
     name: "Usthad Dr. Faisal Al-Hanoon",
@@ -134,7 +134,7 @@ export const FACULTY_MEMBERS = [
   },
 ];
 
-export function getWhatsAppPayrollAdviceUrl(pay: DbPayroll): string {
+function getWhatsAppPayrollAdviceUrl(pay: DbPayroll): string {
   const teacher = FACULTY_MEMBERS.find(
     (f) => f.name.toLowerCase() === (pay.teacher_name || "").toLowerCase() || f.id === pay.teacher_id
   );
@@ -314,8 +314,9 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const isSuperAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
-  const isVerificationAdmin = currentUser?.role === "verification_admin";
+  const userRoleLower = (currentUser?.role || "").toLowerCase();
+  const isSuperAdmin = userRoleLower === "admin" || userRoleLower === "super_admin";
+  const isVerificationAdmin = userRoleLower === "verification_admin" || userRoleLower === "verifier";
 
   const handleCopyUtr = (utr: string) => {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
@@ -329,9 +330,10 @@ export default function AdminDashboardPage() {
     setLoading(true);
     try {
       const session = getCurrentSession();
+      const sessionRoleLower = (session?.user?.role || "").toLowerCase();
       const verif = isVerifAdminOverride !== undefined
         ? isVerifAdminOverride
-        : session?.user?.role === "verification_admin";
+        : (sessionRoleLower === "verification_admin" || sessionRoleLower === "verifier");
 
       if (verif) {
         // Restricted Verification Staff mode: Only load payments and students, hiding financials
@@ -457,10 +459,12 @@ export default function AdminDashboardPage() {
               .maybeSingle();
 
             const role = (profile?.role as any) || (supaSession.user.user_metadata?.role as any) || "admin";
+            const rLower = String(role).toLowerCase();
             const isAuthorized =
-              role === "admin" ||
-              role === "super_admin" ||
-              role === "verification_admin";
+              rLower === "admin" ||
+              rLower === "super_admin" ||
+              rLower === "verification_admin" ||
+              rLower === "verifier";
 
             if (!isAuthorized) {
               if (isMounted) router.replace("/admin/login?error=admin_only");
@@ -485,10 +489,12 @@ export default function AdminDashboardPage() {
       // 2. Fallback to cached cookie / localStorage session
       if (!activeUser) {
         const localSession = getCurrentSession();
+        const localRoleLower = (localSession?.user?.role || "").toLowerCase();
         const isAuthorized =
-          localSession?.user?.role === "admin" ||
-          localSession?.user?.role === "super_admin" ||
-          localSession?.user?.role === "verification_admin";
+          localRoleLower === "admin" ||
+          localRoleLower === "super_admin" ||
+          localRoleLower === "verification_admin" ||
+          localRoleLower === "verifier";
 
         if (localSession?.user && isAuthorized) {
           activeUser = localSession.user;
@@ -503,7 +509,8 @@ export default function AdminDashboardPage() {
 
       if (isMounted) {
         setCurrentUser(activeUser);
-        const isVerif = activeUser.role === "verification_admin";
+        const activeRoleLower = (activeUser.role || "").toLowerCase();
+        const isVerif = activeRoleLower === "verification_admin" || activeRoleLower === "verifier";
         if (isVerif) {
           setActiveTab("overview");
         }
