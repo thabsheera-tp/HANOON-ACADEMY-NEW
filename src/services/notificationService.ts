@@ -339,3 +339,97 @@ export function triggerRecordedClassNotification(params: {
   });
 }
 
+export interface CompactNotificationView {
+  iconType: "video" | "pdf" | "live" | "calendar" | "bell";
+  displayTitle: string;
+  displaySummary: string;
+  actionLabel: string;
+  targetUrl?: string;
+  timeStr: string;
+}
+
+/**
+ * Transforms any AppNotification into an ultra-clean, 1-2 line compact iOS-inspired view model.
+ */
+export function formatCompactNotification(item: AppNotification): CompactNotificationView {
+  const isVideo =
+    item.type === "BROADCAST" ||
+    Boolean(item.meetingLink && (item.meetingLink.includes("drive.google.com") || item.meetingLink.includes("youtube") || item.meetingLink.includes("youtu.be"))) ||
+    item.title.toLowerCase().includes("recorded") ||
+    item.message.toLowerCase().includes("recording") ||
+    item.message.toLowerCase().includes("youtube") ||
+    item.message.toLowerCase().includes("google drive");
+
+  const isPdf =
+    item.type === "NOTES_UPLOADED" ||
+    Boolean(item.pdfUrl) ||
+    item.title.toLowerCase().includes("pdf") ||
+    item.title.toLowerCase().includes("notes");
+
+  const isLive = item.type === "CLASS_LIVE" || item.title.toLowerCase().includes("live now");
+  const isScheduled = item.type === "CLASS_SCHEDULED";
+
+  // Clean time string: HH:mm (e.g., "16:29")
+  let timeStr = "";
+  try {
+    const d = new Date(item.timestamp);
+    if (!isNaN(d.getTime())) {
+      timeStr = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+    }
+  } catch {}
+
+  const targetUrl = item.meetingLink || item.pdfUrl;
+
+  // Extract quoted text if present: e.g. "Haddad class 3"
+  const quoteMatch = item.message.match(/"([^"]+)"/);
+  const quotedName = quoteMatch ? quoteMatch[1].trim() : "";
+
+  let iconType: "video" | "pdf" | "live" | "calendar" | "bell" = "bell";
+  let displayTitle = item.title;
+  let displaySummary = item.message;
+  let actionLabel = "View";
+
+  if (isLive) {
+    iconType = "live";
+    displayTitle = quotedName || item.targetCourseName || item.title.replace(/^🔴\s*LIVE NOW:\s*/i, "").replace(/!$/, "");
+    displaySummary = "Class is live now";
+    actionLabel = "Join";
+  } else if (isVideo) {
+    iconType = "video";
+    displayTitle = quotedName || item.targetCourseName || item.title.replace(/^▶️\s*New Recorded Class:\s*/i, "");
+    displaySummary = quotedName ? `${quotedName} is now available` : "Recorded class is available";
+    actionLabel = "View the record";
+  } else if (isPdf) {
+    iconType = "pdf";
+    displayTitle = item.pdfTitle || quotedName || item.title.replace(/^📚\s*New PDF Notes Uploaded:\s*/i, "");
+    displaySummary = quotedName ? `${quotedName} notes are available` : "Study notes now available";
+    actionLabel = "View";
+  } else if (isScheduled) {
+    iconType = "calendar";
+    displayTitle = quotedName || item.title.replace(/^📅\s*New Class Scheduled:\s*/i, "");
+    displaySummary = item.message.split(". Platform")[0]?.replace(/^"[^"]+"\s*/, "").replace(/^has been\s*/, "") || "Class session scheduled";
+    actionLabel = "View";
+  } else {
+    displayTitle = item.title.replace(/^[^\w\s]+\s*/, "");
+    displaySummary = item.message.split(".")[0] || item.message;
+    actionLabel = "View";
+  }
+
+  // Ensure clean, concise text
+  if (displayTitle.length > 38) {
+    displayTitle = displayTitle.slice(0, 36) + "…";
+  }
+  if (displaySummary.length > 55) {
+    displaySummary = displaySummary.slice(0, 52) + "…";
+  }
+
+  return {
+    iconType,
+    displayTitle,
+    displaySummary,
+    actionLabel,
+    targetUrl,
+    timeStr,
+  };
+}
+

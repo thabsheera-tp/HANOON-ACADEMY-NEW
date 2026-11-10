@@ -4,12 +4,14 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft,
+  ChevronRight,
   LogOut,
   X,
   Bell,
   Calendar,
   Radio,
   FileText,
+  Play,
   ExternalLink,
   Download,
   CheckCircle2,
@@ -23,6 +25,7 @@ import {
   getNotifications,
   markNotificationAsRead,
   markAllNotificationsAsRead,
+  formatCompactNotification,
   AppNotification,
 } from "@/services/notificationService";
 
@@ -259,19 +262,17 @@ export default function MobileHeader({
         <div className="fixed inset-0 z-50 flex items-start justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
           <div className="bg-white rounded-3xl shadow-2xl border border-purple-100 max-w-sm w-full max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             {/* Drawer Header */}
-            <div className="p-4 border-b border-purple-100 flex items-center justify-between bg-purple-50/50">
+            <div className="p-3.5 border-b border-slate-100 flex items-center justify-between bg-white/95">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-purple-600 text-white flex items-center justify-center">
-                  <Bell className="w-3.5 h-3.5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-extrabold text-slate-900">
-                    Notifications
-                  </h3>
-                  <span className="text-[10px] text-slate-500 font-semibold block">
-                    {unreadCount > 0 ? `${unreadCount} unread alert${unreadCount > 1 ? "s" : ""}` : "All caught up"}
+                <Bell className="w-4 h-4 text-purple-600" />
+                <h3 className="text-sm font-extrabold text-slate-900">
+                  Notifications
+                </h3>
+                {unreadCount > 0 && (
+                  <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100">
+                    {unreadCount} unread
                   </span>
-                </div>
+                )}
               </div>
 
               <div className="flex items-center gap-1.5">
@@ -282,7 +283,7 @@ export default function MobileHeader({
                       markAllNotificationsAsRead();
                       setNotifications(getNotifications());
                     }}
-                    className="text-[10px] font-bold text-purple-700 hover:text-purple-900 px-2 py-1 rounded-lg hover:bg-purple-100 transition-colors cursor-pointer"
+                    className="text-[10px] font-bold text-purple-700 hover:text-purple-900 px-2 py-1 rounded-lg hover:bg-purple-50 transition-colors cursor-pointer"
                   >
                     Mark read
                   </button>
@@ -290,7 +291,7 @@ export default function MobileHeader({
                 <button
                   type="button"
                   onClick={() => setIsNotifDrawerOpen(false)}
-                  className="p-1 rounded-full text-slate-400 hover:text-slate-700 bg-slate-100 cursor-pointer"
+                  className="p-1 rounded-full text-slate-400 hover:text-slate-700 bg-slate-100/80 cursor-pointer"
                   aria-label="Close notifications"
                 >
                   <X className="w-4 h-4" />
@@ -298,87 +299,84 @@ export default function MobileHeader({
               </div>
             </div>
 
-            {/* Notifications List */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-2.5 max-h-[60vh]">
+            {/* Notifications Flat List (Compact iOS-Inspired) */}
+            <div className="flex-1 overflow-y-auto p-2.5 flex flex-col gap-1.5 max-h-[65vh]">
               {notifications.length === 0 ? (
                 <div className="py-12 text-center space-y-2">
-                  <Bell className="w-8 h-8 text-purple-200 mx-auto" />
+                  <Bell className="w-7 h-7 text-slate-300 mx-auto" />
                   <p className="text-xs font-bold text-slate-500">No new notifications</p>
                 </div>
               ) : (
                 notifications.map((item) => {
-                  const isLive = item.type === "CLASS_LIVE";
+                  const { iconType, displayTitle, displaySummary, actionLabel, targetUrl, timeStr } =
+                    formatCompactNotification(item);
+
+                  const handleClick = () => {
+                    markNotificationAsRead(item.id);
+                    setNotifications(getNotifications());
+                    if (targetUrl) {
+                      window.open(targetUrl, "_blank", "noopener,noreferrer");
+                    }
+                  };
 
                   return (
                     <div
                       key={item.id}
-                      onClick={() => {
-                        markNotificationAsRead(item.id);
-                        setNotifications(getNotifications());
-                      }}
-                      className={`p-3 rounded-2xl border transition-all space-y-1.5 cursor-pointer ${
+                      onClick={handleClick}
+                      className={`group flex items-center justify-between gap-2.5 p-2.5 rounded-xl transition-all cursor-pointer ${
                         !item.isRead
-                          ? isLive
-                            ? "bg-rose-50/70 border-rose-300 ring-1 ring-rose-200"
-                            : "bg-purple-50/50 border-purple-200"
-                          : "bg-white border-purple-100/60 opacity-80"
+                          ? "bg-purple-50/50 hover:bg-purple-50/80"
+                          : "bg-transparent hover:bg-slate-50"
                       }`}
                     >
-                      <div className="flex items-start justify-between gap-1.5">
-                        <div className="flex items-center gap-1.5">
-                          {isLive ? (
-                            <Radio className="w-3.5 h-3.5 text-rose-600 animate-pulse shrink-0" />
-                          ) : item.type === "CLASS_SCHEDULED" ? (
-                            <Calendar className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                          ) : item.type === "NOTES_UPLOADED" ? (
-                            <FileText className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                      {/* Left: Icon + Text */}
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <div className="shrink-0 flex items-center justify-center w-5 h-5">
+                          {iconType === "video" ? (
+                            <Play className="w-3.5 h-3.5 text-rose-500 fill-current" />
+                          ) : iconType === "pdf" ? (
+                            <FileText className="w-3.5 h-3.5 text-purple-600" />
+                          ) : iconType === "live" ? (
+                            <Radio className="w-3.5 h-3.5 text-rose-600 animate-pulse" />
+                          ) : iconType === "calendar" ? (
+                            <Calendar className="w-3.5 h-3.5 text-slate-400" />
                           ) : (
-                            <Bell className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                            <Bell className="w-3.5 h-3.5 text-amber-500" />
                           )}
-                          <h4 className="text-xs font-black text-slate-900 leading-snug">
-                            {item.title}
-                          </h4>
                         </div>
-                        <span className="text-[9px] text-slate-400 shrink-0">
-                          {new Date(item.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        </span>
+
+                        <div className="min-w-0 flex-1 space-y-0.5">
+                          <div className="flex items-center gap-1.5">
+                            {!item.isRead && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-purple-600 shrink-0" />
+                            )}
+                            <span className="font-bold text-xs text-slate-900 truncate block">
+                              {displayTitle}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 truncate block font-normal leading-tight">
+                            {displaySummary}
+                          </p>
+                        </div>
                       </div>
 
-                      <p className="text-[11px] text-slate-600 leading-relaxed">
-                        {item.message}
-                      </p>
-
-                      {/* Direct action buttons */}
-                      {(item.meetingLink || item.pdfUrl) && (
-                        <div className="pt-1.5 border-t border-purple-100/60 flex items-center gap-2 flex-wrap">
-                          {item.meetingLink && (
-                            <a
-                              href={item.meetingLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="inline-flex items-center gap-1 py-1 px-2.5 rounded-lg text-[10px] font-bold text-white bg-purple-600 hover:bg-purple-700 transition-colors shadow-2xs"
-                            >
-                              <span>Join {item.platform || "Meeting"}</span>
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          )}
-
-                          {item.pdfUrl && (
-                            <a
-                              href={item.pdfUrl}
-                              download={item.pdfTitle || "notes.pdf"}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="inline-flex items-center gap-1 py-1 px-2.5 rounded-lg text-[10px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors"
-                            >
-                              <span>Download PDF</span>
-                              <Download className="w-3 h-3" />
-                            </a>
-                          )}
-                        </div>
-                      )}
+                      {/* Right: Timestamp & Minimal Action */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {timeStr && (
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            {timeStr}
+                          </span>
+                        )}
+                        {targetUrl && (
+                          <span className="text-[11px] font-semibold text-purple-600 flex items-center gap-0.5 group-hover:text-purple-700 transition-colors">
+                            <span>{actionLabel}</span>
+                            <ChevronRight className="w-3 h-3 text-slate-400 group-hover:text-purple-600 transition-colors" />
+                          </span>
+                        )}
+                        {!targetUrl && (
+                          <ChevronRight className="w-3 h-3 text-slate-300 group-hover:text-slate-500 transition-colors" />
+                        )}
+                      </div>
                     </div>
                   );
                 })

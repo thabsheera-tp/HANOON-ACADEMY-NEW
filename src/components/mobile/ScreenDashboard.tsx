@@ -39,7 +39,13 @@ import { getAdaviyyaSubjects, AdaviyyaSubject, fetchAdaviyyaSubjectsFromSupabase
 import AttendanceDonutChart from "@/components/charts/AttendanceDonutChart";
 import ProgressScoreBarChart from "@/components/charts/ProgressScoreBarChart";
 import { getAppSettings, formatWhatsAppLink } from "@/services/settingsService";
-import { getNotifications, markAllNotificationsAsRead, AppNotification } from "@/services/notificationService";
+import {
+  getNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  formatCompactNotification,
+  AppNotification,
+} from "@/services/notificationService";
 import StudentNoticeBoard from "@/components/mobile/StudentNoticeBoard";
 import {
   getLocalAttendanceRecords,
@@ -703,13 +709,19 @@ export default function ScreenDashboard({
         </button>
       </div>
 
-      {/* Notification Toast Dropdown with Real Alerts */}
+      {/* Notification Toast Dropdown with Real Alerts (Compact iOS-Inspired Design) */}
       {showNotificationToast && (
-        <div className="p-3.5 rounded-2xl bg-white border border-purple-200 text-xs text-slate-700 shadow-md space-y-2.5 animate-fade-in">
-          <div className="flex items-center justify-between border-b border-purple-100/60 pb-2">
-            <div className="flex items-center gap-1.5 font-bold text-purple-900">
+        <div className="p-3 rounded-2xl bg-white/95 backdrop-blur-md border border-slate-100 shadow-xl text-xs text-slate-700 space-y-2 animate-fade-in ring-1 ring-slate-900/5">
+          {/* Minimal iOS Header */}
+          <div className="flex items-center justify-between pb-1.5 border-b border-slate-100/80">
+            <div className="flex items-center gap-1.5 font-bold text-slate-800">
               <Bell className="w-3.5 h-3.5 text-purple-600" />
-              <span>Notifications & Class Alerts</span>
+              <span className="text-xs">Notifications & Class Alerts</span>
+              {unreadNotifs > 0 && (
+                <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded-full">
+                  {unreadNotifs} new
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               {unreadNotifs > 0 && (
@@ -717,9 +729,11 @@ export default function ScreenDashboard({
                   type="button"
                   onClick={() => {
                     markAllNotificationsAsRead();
+                    const updated = getNotifications();
+                    setNotificationsList(updated);
                     setUnreadNotifs(0);
                   }}
-                  className="text-[10px] font-bold text-purple-600 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 px-2 py-0.5 rounded-md transition-colors"
+                  className="text-[10px] font-bold text-purple-600 hover:text-purple-800 transition-colors cursor-pointer"
                 >
                   Mark all read
                 </button>
@@ -728,49 +742,101 @@ export default function ScreenDashboard({
                 type="button"
                 onClick={() => setShowNotificationToast(false)}
                 className="text-xs font-bold text-slate-400 hover:text-slate-700 cursor-pointer p-0.5"
+                aria-label="Close notifications"
               >
                 ✕
               </button>
             </div>
           </div>
 
-          {/* Show latest notifications */}
-          <div className="space-y-1.5">
+          {/* Compact iOS Flat List View */}
+          <div className="flex flex-col gap-1 max-h-72 overflow-y-auto pr-0.5">
             {notificationsList.length === 0 ? (
-              <div className="py-6 px-4 text-center space-y-2">
-                <div className="w-10 h-10 rounded-2xl bg-purple-50 text-purple-400 flex items-center justify-center mx-auto">
-                  <Bell className="w-5 h-5 text-purple-400" />
-                </div>
-                <p className="text-xs font-bold text-slate-700">No new notifications</p>
-                <p className="text-[10px] text-slate-400 max-w-[200px] mx-auto leading-relaxed">
+              <div className="py-6 px-4 text-center space-y-1.5">
+                <Bell className="w-6 h-6 text-slate-300 mx-auto" />
+                <p className="text-xs font-bold text-slate-600">No new notifications</p>
+                <p className="text-[10px] text-slate-400 leading-relaxed">
                   Class schedules, announcements, and study notes will appear here.
                 </p>
               </div>
             ) : (
-              notificationsList.slice(0, 4).map((item) => (
-                <div key={item.id} className="p-2.5 rounded-xl bg-purple-50/50 space-y-1 text-slate-700 border border-purple-100/50">
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="font-extrabold text-[11px] text-slate-900 flex items-center gap-1">
-                      {item.type === "CLASS_LIVE" && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />}
-                      <span>{item.title}</span>
-                    </span>
-                    <span className="text-[9px] text-slate-400">
-                      {new Date(item.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </span>
+              notificationsList.slice(0, 6).map((item) => {
+                const { iconType, displayTitle, displaySummary, actionLabel, targetUrl, timeStr } =
+                  formatCompactNotification(item);
+
+                const handleClick = () => {
+                  markNotificationAsRead(item.id);
+                  const updated = getNotifications();
+                  setNotificationsList(updated);
+                  setUnreadNotifs(updated.filter((n) => !n.isRead).length);
+                  if (targetUrl) {
+                    window.open(targetUrl, "_blank", "noopener,noreferrer");
+                  }
+                };
+
+                return (
+                  <div
+                    key={item.id}
+                    onClick={handleClick}
+                    className={`group flex items-center justify-between gap-2.5 p-2 rounded-xl transition-all cursor-pointer ${
+                      !item.isRead
+                        ? "bg-purple-50/50 hover:bg-purple-50/80"
+                        : "bg-transparent hover:bg-slate-50"
+                    }`}
+                  >
+                    {/* Left: Icon + Text */}
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      {/* Small Clean Icon */}
+                      <div className="shrink-0 flex items-center justify-center w-5 h-5">
+                        {iconType === "video" ? (
+                          <Play className="w-3.5 h-3.5 text-rose-500 fill-current" />
+                        ) : iconType === "pdf" ? (
+                          <FileText className="w-3.5 h-3.5 text-purple-600" />
+                        ) : iconType === "live" ? (
+                          <Radio className="w-3.5 h-3.5 text-rose-600 animate-pulse" />
+                        ) : iconType === "calendar" ? (
+                          <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                        ) : (
+                          <Bell className="w-3.5 h-3.5 text-amber-500" />
+                        )}
+                      </div>
+
+                      {/* 1-2 line concise text */}
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <div className="flex items-center gap-1.5">
+                          {!item.isRead && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-purple-600 shrink-0" />
+                          )}
+                          <span className="font-bold text-xs text-slate-900 truncate block">
+                            {displayTitle}
+                          </span>
+                        </div>
+                        <p className="text-[10.5px] text-slate-500 truncate block font-normal leading-tight">
+                          {displaySummary}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Right: Timestamp & Minimal Action */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      {timeStr && (
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          {timeStr}
+                        </span>
+                      )}
+                      {targetUrl && (
+                        <span className="text-[10.5px] font-semibold text-purple-600 flex items-center gap-0.5 group-hover:text-purple-700 transition-colors">
+                          <span>{actionLabel}</span>
+                          <ChevronRight className="w-3 h-3 text-slate-400 group-hover:text-purple-600 transition-colors" />
+                        </span>
+                      )}
+                      {!targetUrl && (
+                        <ChevronRight className="w-3 h-3 text-slate-300 group-hover:text-slate-500 transition-colors" />
+                      )}
+                    </div>
                   </div>
-                  <p className="text-[10.5px] text-slate-600 leading-snug">{item.message}</p>
-                  {item.meetingLink && (
-                    <a
-                      href={item.meetingLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-block mt-1 py-0.5 px-2 rounded-md bg-purple-600 hover:bg-purple-700 text-white font-bold text-[10px] transition-colors"
-                    >
-                      Join {item.platform || "Meeting"} ➔
-                    </a>
-                  )}
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
