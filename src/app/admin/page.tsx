@@ -1018,7 +1018,7 @@ export default function AdminDashboardPage() {
             )}
           </button>
 
-          {/* Tab 3: 📚 PDF Notes & Materials Upload */}
+          {/* Tab 3: 📚 PDF Notes & Recorded Classes */}
           <button
             type="button"
             onClick={() => setActiveTab("notes")}
@@ -1029,7 +1029,7 @@ export default function AdminDashboardPage() {
             }`}
           >
             <FileUp className="w-4 h-4 shrink-0 text-indigo-600" />
-            <span>📚 PDF Notes Upload</span>
+            <span>📚 PDF Notes & Recorded Classes</span>
           </button>
 
           {/* Tab 4: 🔔 Notifications Center */}
@@ -1182,7 +1182,7 @@ export default function AdminDashboardPage() {
               <div>
                 <span className="font-extrabold text-emerald-950 block">Staff & Verification Portal Active</span>
                 <span className="text-[11px] text-emerald-800">
-                  Full tools available: Payment Verification Queue, Class Scheduling & Live Google Meet/Zoom links, PDF Notes Upload, and Push Notifications.
+                  Full tools available: Payment Verification Queue, Class Scheduling & Live Google Meet/Zoom links, PDF Notes & Recorded Classes, and Push Notifications.
                 </span>
               </div>
             </div>
@@ -1251,7 +1251,7 @@ export default function AdminDashboardPage() {
         )}
 
         {/* ========================================================
-            TAB: 📚 PDF NOTES & MATERIALS UPLOAD TOOL
+            TAB: 📚 PDF NOTES & RECORDED CLASSES PORTAL
             ======================================================== */}
         {activeTab === "notes" && (
           <div className="animate-fade-in">

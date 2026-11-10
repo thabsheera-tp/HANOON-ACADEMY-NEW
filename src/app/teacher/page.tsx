@@ -388,8 +388,8 @@ export default function TeacherDashboardPage() {
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      alert("File exceeds 10MB limit. Please upload an optimized PDF under 10MB.");
+    if (file.size > 60 * 1024 * 1024) {
+      alert("File exceeds 50MB limit. Please upload an optimized PDF (Max size: 50MB).");
       return;
     }
 
@@ -1221,7 +1221,7 @@ export default function TeacherDashboardPage() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {accessibleClasses.slice(0, 2).map((cls) => (
+                  {accessibleClasses.map((cls) => (
                     <div
                       key={cls.id}
                       className="p-4 rounded-xl bg-purple-50/40 border border-purple-100 flex flex-col justify-between space-y-3"
@@ -1510,7 +1510,7 @@ export default function TeacherDashboardPage() {
                           PDF Document File *
                         </label>
                         <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
-                          PDF Only (Max 10MB)
+                          PDF Only (Max size: 50MB)
                         </span>
                       </div>
                       <div className="border-2 border-dashed border-purple-200 hover:border-purple-400 rounded-xl p-4 text-center bg-purple-50/30 hover:bg-purple-50/60 transition-all cursor-pointer relative">
@@ -1537,7 +1537,7 @@ export default function TeacherDashboardPage() {
                                 Click or drag PDF handbook here
                               </span>
                               <span className="text-[10px] text-slate-400">
-                                Direct file upload reserved strictly for PDF notes under 10MB
+                                Direct file upload reserved strictly for PDF notes (Max size: 50MB)
                               </span>
                             </div>
                           )}

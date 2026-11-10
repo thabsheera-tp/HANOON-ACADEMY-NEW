@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
-import { addChapterToSubject } from "@/services/subjectService";
+import { addChapterToSubject, deleteChapterFromSubject, getAdaviyyaSubjects, saveAdaviyyaSubjects } from "@/services/subjectService";
 
 export interface LiveClassSession {
   id: string;
@@ -27,10 +27,12 @@ export interface LiveClassSession {
 
 export interface CourseMaterial {
   id: string;
+  dbId?: string;
   title: string;
   courseId: string;
   courseName: string;
   subjectId?: string;
+  subjectName?: string;
   type: "PDF" | "VIDEO";
   fileOrUrl: string;
   pdfUrl?: string;
@@ -41,6 +43,7 @@ export interface CourseMaterial {
   downloadCount: number;
   teacher_id?: string;
   teacherName?: string;
+  sourceTable?: "live_classes" | "special_classes" | "local";
 }
 
 export interface TeacherStudentItem {
@@ -289,65 +292,175 @@ export function saveCourseMaterials(materials: CourseMaterial[]): void {
   }
 }
 
+const KNOWN_COURSE_NAMES: Record<string, string> = {
+  adaviyya: "Adaviyya",
+  "home-tuition": "Home Tuition",
+  "hifz-revision": "Hifz Revision",
+  "tajweed-foundation": "Tajweed Foundation",
+  special: "Special Classes",
+};
+
+const KNOWN_SUBJECT_NAMES: Record<string, string> = {
+  seerah: "Seerah",
+  haddad: "Haddad",
+  fiqh: "Fiqh",
+  hadith: "Hadith",
+};
+
 /**
- * Dynamically fetches materials from Supabase (including notes_pdf_url and recording_url from live_classes).
+ * Dynamically fetches materials from Supabase without any limits:
+ * Queries live_classes and special_classes, ordering by created_at descending,
+ * and formats all available PDF notes and recorded classes for full history visibility.
  */
 export async function fetchCourseMaterialsFromSupabase(courseId?: string): Promise<CourseMaterial[]> {
-  const localMaterials = getCourseMaterials();
-  const dynamicMaterials: CourseMaterial[] = [...localMaterials];
+  const dynamicMaterials: CourseMaterial[] = [];
+  const seenUrls = new Set<string>();
 
   if (isSupabaseConfigured && supabase) {
     try {
-      let query = supabase
+      // 1. Fetch ALL recorded classes and notes from live_classes (no limit)
+      let liveQuery = supabase
         .from("live_classes")
-        .select("id, title, course_id, subject_id, notes_pdf_url, recording_url, scheduled_at, created_at, teacher:teachers(full_name)")
-        .or("notes_pdf_url.is.not.null,recording_url.is.not.null");
+        .select("id, title, course_id, subject_id, notes_pdf_url, recording_url, scheduled_at, created_at, duration_minutes, teacher:teachers(full_name)")
+        .or("notes_pdf_url.is.not.null,recording_url.is.not.null")
+        .order("created_at", { ascending: false });
 
       if (courseId) {
-        query = query.eq("course_id", courseId);
+        liveQuery = liveQuery.eq("course_id", courseId);
       }
 
-      const { data, error } = await query;
-      if (!error && data && data.length > 0) {
-        data.forEach((row: any) => {
-          const classDateStr = row.scheduled_at
-            ? new Date(row.scheduled_at).toISOString().split("T")[0]
-            : row.created_at
-            ? new Date(row.created_at).toISOString().split("T")[0]
-            : "Recent";
+      const { data: liveData, error: liveErr } = await liveQuery;
+      if (!liveErr && liveData && liveData.length > 0) {
+        liveData.forEach((row: any) => {
+          const rawDate = row.scheduled_at || row.created_at;
+          let classDateStr = "Recent";
+          let uploadDateFormatted = "Recent";
+          if (rawDate) {
+            try {
+              const d = new Date(rawDate);
+              classDateStr = d.toISOString().split("T")[0];
+              uploadDateFormatted = d.toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              });
+            } catch {}
+          }
 
-          if (row.notes_pdf_url && !dynamicMaterials.some((m) => m.fileOrUrl === row.notes_pdf_url)) {
+          const resolvedCourseName = KNOWN_COURSE_NAMES[row.course_id] || row.course_id || "General Course";
+          const resolvedSubjectName = row.subject_id
+            ? KNOWN_SUBJECT_NAMES[row.subject_id] || row.subject_id
+            : undefined;
+
+          // PDF Notes Entry
+          if (row.notes_pdf_url && !seenUrls.has(row.notes_pdf_url)) {
+            seenUrls.add(row.notes_pdf_url);
             dynamicMaterials.push({
               id: `pdf-${row.id}`,
+              dbId: row.id,
               title: `${row.title} - Study Notes`,
-              courseId: row.course_id,
-              courseName: row.course_id,
+              courseId: row.course_id || "adaviyya",
+              courseName: resolvedCourseName,
               subjectId: row.subject_id,
+              subjectName: resolvedSubjectName,
               type: "PDF",
               fileOrUrl: row.notes_pdf_url,
               pdfUrl: row.notes_pdf_url,
               sessionDate: classDateStr,
               sizeOrDuration: "Official PDF",
-              uploadedAt: row.scheduled_at ? new Date(row.scheduled_at).toLocaleDateString() : "Recent",
+              uploadedAt: uploadDateFormatted,
               downloadCount: 0,
               teacherName: row.teacher?.full_name,
+              sourceTable: "live_classes",
             });
           }
-          if (row.recording_url && !dynamicMaterials.some((m) => m.fileOrUrl === row.recording_url || m.recordingUrl === row.recording_url)) {
+
+          // Recorded Video Entry
+          if (row.recording_url && !seenUrls.has(row.recording_url)) {
+            seenUrls.add(row.recording_url);
             dynamicMaterials.push({
               id: `rec-${row.id}`,
+              dbId: row.id,
               title: `${row.title} - Class Recording`,
-              courseId: row.course_id,
-              courseName: row.course_id,
+              courseId: row.course_id || "adaviyya",
+              courseName: resolvedCourseName,
               subjectId: row.subject_id,
+              subjectName: resolvedSubjectName,
               type: "VIDEO",
               fileOrUrl: row.recording_url,
               recordingUrl: row.recording_url,
               sessionDate: classDateStr,
-              sizeOrDuration: "Recorded Session",
-              uploadedAt: row.scheduled_at ? new Date(row.scheduled_at).toLocaleDateString() : "Recent",
+              sizeOrDuration: row.duration_minutes ? `${row.duration_minutes} mins` : "Recorded Session",
+              uploadedAt: uploadDateFormatted,
               downloadCount: 0,
               teacherName: row.teacher?.full_name,
+              sourceTable: "live_classes",
+            });
+          }
+        });
+      }
+
+      // 2. Fetch special classes records (no limit)
+      let spcQuery = supabase
+        .from("special_classes")
+        .select("id, title, category, instructor, schedule_time, recording_url, pdf_title, pdf_size, created_at")
+        .or("recording_url.is.not.null,pdf_title.is.not.null")
+        .order("created_at", { ascending: false });
+
+      const { data: spcData, error: spcErr } = await spcQuery;
+      if (!spcErr && spcData && spcData.length > 0) {
+        spcData.forEach((row: any) => {
+          let uploadDateFormatted = "Recent";
+          let sessionDate = row.schedule_time || "Scheduled";
+          if (row.created_at) {
+            try {
+              uploadDateFormatted = new Date(row.created_at).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              });
+            } catch {}
+          }
+
+          if (row.recording_url && !seenUrls.has(row.recording_url)) {
+            seenUrls.add(row.recording_url);
+            dynamicMaterials.push({
+              id: `spc-rec-${row.id}`,
+              dbId: row.id,
+              title: `${row.title} - Special Session Recording`,
+              courseId: "special",
+              courseName: "Special Classes",
+              subjectName: row.category || "Masterclass",
+              type: "VIDEO",
+              fileOrUrl: row.recording_url,
+              recordingUrl: row.recording_url,
+              sessionDate,
+              sizeOrDuration: "Recorded Session",
+              uploadedAt: uploadDateFormatted,
+              downloadCount: 0,
+              teacherName: row.instructor,
+              sourceTable: "special_classes",
+            });
+          }
+
+          if (row.pdf_title && !seenUrls.has(row.pdf_title)) {
+            seenUrls.add(row.pdf_title);
+            dynamicMaterials.push({
+              id: `spc-pdf-${row.id}`,
+              dbId: row.id,
+              title: `${row.title} - ${row.pdf_title}`,
+              courseId: "special",
+              courseName: "Special Classes",
+              subjectName: row.category || "Masterclass",
+              type: "PDF",
+              fileOrUrl: row.pdf_title,
+              pdfUrl: row.pdf_title,
+              sessionDate,
+              sizeOrDuration: row.pdf_size || "Official PDF",
+              uploadedAt: uploadDateFormatted,
+              downloadCount: 0,
+              teacherName: row.instructor,
+              sourceTable: "special_classes",
             });
           }
         });
@@ -356,6 +469,23 @@ export async function fetchCourseMaterialsFromSupabase(courseId?: string): Promi
       console.warn("Supabase fetchCourseMaterials error:", err);
     }
   }
+
+  // Merge any local-only materials that are not in the Supabase set
+  const localMaterials = getCourseMaterials();
+  localMaterials.forEach((local) => {
+    const isDuplicate =
+      seenUrls.has(local.fileOrUrl) ||
+      (local.recordingUrl && seenUrls.has(local.recordingUrl)) ||
+      (local.pdfUrl && seenUrls.has(local.pdfUrl)) ||
+      dynamicMaterials.some((d) => d.id === local.id || (local.title && d.title === local.title));
+
+    if (!isDuplicate) {
+      dynamicMaterials.push(local);
+    }
+  });
+
+  // Save complete synchronized state to local cache
+  saveCourseMaterials(dynamicMaterials);
 
   if (courseId) {
     return dynamicMaterials.filter((m) => (m.courseId || "").toLowerCase() === courseId.toLowerCase());
@@ -382,6 +512,117 @@ export function deleteCourseMaterial(id: string): void {
   const current = getCourseMaterials();
   const updated = current.filter((m) => m.id !== id);
   saveCourseMaterials(updated);
+}
+
+/**
+ * Safely deletes a course material from Supabase (live_classes, special_classes, course_subjects)
+ * as well as the local cache.
+ */
+export async function deleteCourseMaterialFromSupabase(
+  materialId: string,
+  item?: CourseMaterial
+): Promise<{ success: boolean; error?: string }> {
+  // 1. Remove from local storage cache
+  deleteCourseMaterial(materialId);
+
+  // 2. If it's linked to an Adaviyya subject chapter, remove it
+  if (item?.subjectId) {
+    try {
+      deleteChapterFromSubject(item.subjectId, materialId);
+    } catch (e) {
+      console.warn("Could not remove chapter from subject:", e);
+    }
+  }
+
+  // 3. Remove or clear columns in Supabase
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const cleanDbId =
+        item?.dbId ||
+        materialId.replace(/^(pdf|rec|spc-pdf|spc-rec)-/, "");
+
+      // Case A: special_classes table
+      if (item?.sourceTable === "special_classes" || materialId.startsWith("spc-")) {
+        if (cleanDbId) {
+          await supabase.from("special_classes").delete().eq("id", cleanDbId);
+        }
+      } else {
+        // Case B: live_classes table
+        if (cleanDbId) {
+          const { data: row } = await supabase
+            .from("live_classes")
+            .select("id, recording_url, notes_pdf_url")
+            .eq("id", cleanDbId)
+            .maybeSingle();
+
+          if (row) {
+            if (item?.type === "PDF") {
+              if (row.recording_url) {
+                // Keep recording link, clear PDF column
+                await supabase
+                  .from("live_classes")
+                  .update({ notes_pdf_url: null })
+                  .eq("id", cleanDbId);
+              } else {
+                // No recording present, delete row
+                await supabase.from("live_classes").delete().eq("id", cleanDbId);
+              }
+            } else if (item?.type === "VIDEO") {
+              if (row.notes_pdf_url) {
+                // Keep PDF notes, clear recording column
+                await supabase
+                  .from("live_classes")
+                  .update({ recording_url: null })
+                  .eq("id", cleanDbId);
+              } else {
+                // No PDF present, delete row
+                await supabase.from("live_classes").delete().eq("id", cleanDbId);
+              }
+            } else {
+              await supabase.from("live_classes").delete().eq("id", cleanDbId);
+            }
+          }
+        }
+      }
+
+      // Also clean up any chapters in course_subjects matching the title or URL
+      try {
+        const subjects = getAdaviyyaSubjects();
+        for (const sub of subjects) {
+          const hasMatch = sub.chapters.some(
+            (ch) =>
+              ch.id === materialId ||
+              (item?.fileOrUrl && (ch.pdfUrl === item.fileOrUrl || ch.videoUrl === item.fileOrUrl || ch.recordedLink === item.fileOrUrl))
+          );
+          if (hasMatch) {
+            const updatedChapters = sub.chapters.filter(
+              (ch) =>
+                ch.id !== materialId &&
+                (!item?.fileOrUrl || (ch.pdfUrl !== item.fileOrUrl && ch.videoUrl !== item.fileOrUrl && ch.recordedLink !== item.fileOrUrl))
+            );
+            await supabase
+              .from("course_subjects")
+              .update({ chapters: updatedChapters })
+              .eq("id", sub.id);
+          }
+        }
+      } catch (subErr) {
+        console.warn("course_subjects cleanup error:", subErr);
+      }
+    } catch (err: any) {
+      console.error("Error deleting material from Supabase:", err);
+      return { success: false, error: err.message };
+    }
+  }
+
+  // 4. Dispatch event so all components update immediately
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent("hanoon_material_uploaded", { detail: getCourseMaterials() })
+    );
+  }
+
+  return { success: true };
 }
 
 export interface RecordedClassUploadPayload {

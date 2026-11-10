@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   FileText,
   Upload,
@@ -20,6 +20,9 @@ import {
   Bell,
   X,
   Radio,
+  RefreshCw,
+  ExternalLink,
+  Layers,
 } from "lucide-react";
 import {
   getAdaviyyaSubjects,
@@ -29,6 +32,7 @@ import {
 import {
   getCourseMaterials,
   deleteCourseMaterial,
+  deleteCourseMaterialFromSupabase,
   fetchCourseMaterialsFromSupabase,
   saveRecordedClassToSupabase,
   CourseMaterial,
@@ -87,19 +91,36 @@ export default function PdfNotesUploadSection({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [filterCourse, setFilterCourse] = useState<string>("ALL");
+  const [filterType, setFilterType] = useState<"ALL" | "PDF" | "VIDEO">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const [materials, setMaterials] = useState<CourseMaterial[]>([]);
   const [adaviyyaSubjects, setAdaviyyaSubjects] = useState<AdaviyyaSubject[]>([]);
 
-  // Load initial materials and subjects
-  useEffect(() => {
-    setMaterials(getCourseMaterials());
-    setAdaviyyaSubjects(getAdaviyyaSubjects());
-
-    const handleUpdate = () => {
+  // Real-time loader for full upload history directly from Supabase
+  const loadUploadHistory = useCallback(async () => {
+    setIsLoadingHistory(true);
+    try {
+      const liveMaterials = await fetchCourseMaterialsFromSupabase();
+      setMaterials(liveMaterials);
+      setAdaviyyaSubjects(getAdaviyyaSubjects());
+    } catch (e) {
+      console.warn("Failed loading upload history from Supabase:", e);
       setMaterials(getCourseMaterials());
       setAdaviyyaSubjects(getAdaviyyaSubjects());
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, []);
+
+  // Load initial materials and subjects on mount and listen to broadcast events
+  useEffect(() => {
+    loadUploadHistory();
+
+    const handleUpdate = () => {
+      loadUploadHistory();
     };
 
     window.addEventListener("hanoon_material_uploaded", handleUpdate);
@@ -108,7 +129,7 @@ export default function PdfNotesUploadSection({
       window.removeEventListener("hanoon_material_uploaded", handleUpdate);
       window.removeEventListener("hanoon_subjects_updated", handleUpdate);
     };
-  }, []);
+  }, [loadUploadHistory]);
 
   const selectedPdfCourse =
     SHOWCASE_COURSES.find((c) => c.id === pdfCourseId) || SHOWCASE_COURSES[0];
@@ -118,7 +139,7 @@ export default function PdfNotesUploadSection({
     SHOWCASE_COURSES.find((c) => c.id === recCourseId) || SHOWCASE_COURSES[0];
   const isRecAdaviyya = recCourseId === "adaviyya";
 
-  // PDF File Selection & Data URL Reader
+  // PDF File Selection & Data URL Reader (Enforces 60MB file restriction with 50MB label)
   const handlePdfFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -128,8 +149,8 @@ export default function PdfNotesUploadSection({
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      setErrorMessage("File exceeds 10MB limit. Please upload an optimized PDF under 10MB.");
+    if (file.size > 60 * 1024 * 1024) {
+      setErrorMessage("File exceeds 50MB limit. Please upload an optimized PDF (Max size: 50MB).");
       return;
     }
 
@@ -230,9 +251,8 @@ export default function PdfNotesUploadSection({
         senderName: currentUserName,
       });
 
-      // 3. Refresh materials list
-      const freshMaterials = await fetchCourseMaterialsFromSupabase(pdfCourseId);
-      setMaterials(freshMaterials);
+      // 3. Refresh full upload history across all courses
+      await loadUploadHistory();
 
       setSuccessMessage(
         `📚 PDF Notes "${finalPdfTitle}" uploaded successfully and broadcasted to enrolled students!`
@@ -294,9 +314,8 @@ export default function PdfNotesUploadSection({
         senderName: currentUserName || "Academic Administration",
       });
 
-      // 3. Refresh materials list
-      const freshMaterials = await fetchCourseMaterialsFromSupabase(recCourseId);
-      setMaterials(freshMaterials);
+      // 3. Refresh full upload history across all courses
+      await loadUploadHistory();
 
       setSuccessMessage(
         `▶️ Recorded Class Link for "${recClassTitle.trim()}" saved to Supabase and students successfully alerted!`
@@ -345,28 +364,58 @@ export default function PdfNotesUploadSection({
     setTimeout(() => setSuccessMessage(null), 4000);
   };
 
-  // Delete material
-  const handleDeleteMaterial = (materialId: string, subjectId?: string) => {
-    if (confirm("Are you sure you want to remove this academic content?")) {
-      deleteCourseMaterial(materialId);
-      if (subjectId) {
-        deleteChapterFromSubject(subjectId, materialId);
+  // Delete material safely from Supabase and local cache
+  const handleDeleteMaterial = async (item: CourseMaterial) => {
+    const itemName = item.title || "this content";
+    const itemTypeLabel = item.type === "PDF" ? "PDF Study Notes" : "Recorded Class Video";
+    if (
+      !confirm(
+        `Are you sure you want to permanently delete this ${itemTypeLabel} ("${itemName}") from the Supabase database?`
+      )
+    ) {
+      return;
+    }
+
+    setDeletingId(item.id);
+    setErrorMessage(null);
+
+    try {
+      const res = await deleteCourseMaterialFromSupabase(item.id, item);
+      if (res.success) {
+        setSuccessMessage(`🗑️ Successfully deleted "${itemName}" from Supabase database.`);
+        await loadUploadHistory();
+        setTimeout(() => setSuccessMessage(null), 4000);
+      } else {
+        setErrorMessage(res.error || "Failed to remove content from Supabase.");
       }
-      setMaterials(getCourseMaterials());
-      setAdaviyyaSubjects(getAdaviyyaSubjects());
-      setSuccessMessage("Content successfully removed.");
-      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err: any) {
+      console.error("Delete material error:", err);
+      setErrorMessage("An unexpected error occurred while deleting content.");
+    } finally {
+      setDeletingId(null);
     }
   };
 
-  // Filtered materials
+  // Filtered materials for full history view
   const filteredMaterials = materials.filter((m) => {
     const matchesCourse = filterCourse === "ALL" || m.courseId === filterCourse;
+    const isVideo = m.type === "VIDEO" || Boolean(m.recordingUrl);
+    const isPdf = m.type === "PDF" || Boolean(m.pdfUrl);
+
+    let matchesType = true;
+    if (filterType === "PDF") matchesType = isPdf;
+    if (filterType === "VIDEO") matchesType = isVideo;
+
+    const query = searchQuery.trim().toLowerCase();
     const matchesSearch =
-      m.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.courseName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.fileOrUrl.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCourse && matchesSearch;
+      !query ||
+      m.title.toLowerCase().includes(query) ||
+      m.courseName.toLowerCase().includes(query) ||
+      (m.subjectName && m.subjectName.toLowerCase().includes(query)) ||
+      (m.sessionDate && m.sessionDate.toLowerCase().includes(query)) ||
+      m.fileOrUrl.toLowerCase().includes(query);
+
+    return matchesCourse && matchesType && matchesSearch;
   });
 
   const pdfCount = materials.filter((m) => m.type === "PDF" || Boolean(m.pdfUrl)).length;
@@ -570,7 +619,7 @@ export default function PdfNotesUploadSection({
                       <span>PDF Document File <span className="text-rose-500">*</span></span>
                     </label>
                     <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                      PDF Only (Max 10MB)
+                      PDF Only (Max size: 50MB)
                     </span>
                   </div>
 
@@ -600,7 +649,7 @@ export default function PdfNotesUploadSection({
                             Click or drag PDF study notes here
                           </span>
                           <span className="text-[10px] text-slate-400">
-                            Strictly for official student PDF handbooks under 10MB
+                            Strictly for official student PDF handbooks (Max size: 50MB)
                           </span>
                         </div>
                       )}
@@ -851,181 +900,296 @@ export default function PdfNotesUploadSection({
           )}
         </div>
 
-        {/* Right Column (7 cols): Published Notes & Recorded Class Library */}
+        {/* Right Column (7 cols): Full Upload History List/Table */}
         <div className="lg:col-span-7 bg-white rounded-3xl p-5 sm:p-6 border border-purple-100 shadow-xs space-y-4 flex flex-col justify-between">
-          <div className="space-y-3">
+          <div className="space-y-3.5">
+            {/* Header: Title, Live Supabase Indicator & Refresh Button */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-100 pb-3">
               <div>
-                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                <div className="flex items-center gap-2">
                   <BookOpen className="w-4 h-4 text-purple-600" />
-                  <span>Published Academic Content Directory</span>
-                </h3>
+                  <h3 className="text-base font-extrabold text-slate-900">
+                    Upload History
+                  </h3>
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>Supabase Live</span>
+                  </span>
+                </div>
                 <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                  Official PDF notes and lecture recording archives currently live for students.
+                  Complete historical log of all uploaded PDF notes and recorded video links (Admin & Verifier).
                 </p>
               </div>
 
-              {/* Course Filter */}
-              <div className="flex items-center gap-1.5 shrink-0">
-                <Filter className="w-3.5 h-3.5 text-slate-400" />
-                <select
-                  value={filterCourse}
-                  onChange={(e) => setFilterCourse(e.target.value)}
-                  className="py-1 px-2.5 rounded-lg bg-purple-50 text-[11px] font-bold text-slate-700 border border-purple-200 outline-none cursor-pointer"
-                >
-                  <option value="ALL">All Courses ({materials.length})</option>
-                  {SHOWCASE_COURSES.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.title}
-                    </option>
-                  ))}
-                </select>
+              {/* Refresh History Button */}
+              <button
+                type="button"
+                onClick={() => loadUploadHistory()}
+                disabled={isLoadingHistory}
+                className="py-1.5 px-3 rounded-xl bg-purple-50 hover:bg-purple-100 active:scale-95 text-purple-700 border border-purple-200 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-60 shrink-0 self-start sm:self-center"
+                title="Refresh history from Supabase database"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-purple-600 ${isLoadingHistory ? "animate-spin" : ""}`} />
+                <span>{isLoadingHistory ? "Refreshing..." : "Refresh History"}</span>
+              </button>
+            </div>
+
+            {/* Filter and Search Bar Controls */}
+            <div className="space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                {/* Course Dropdown Filter */}
+                <div className="flex items-center gap-1.5 shrink-0 flex-1">
+                  <Filter className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <select
+                    value={filterCourse}
+                    onChange={(e) => setFilterCourse(e.target.value)}
+                    className="w-full py-2 px-3 rounded-xl bg-purple-50/60 text-xs font-bold text-slate-800 border border-purple-200 outline-none cursor-pointer focus:border-purple-500"
+                  >
+                    <option value="ALL">All Courses ({materials.length})</option>
+                    {SHOWCASE_COURSES.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.title}
+                      </option>
+                    ))}
+                    <option value="special">Special Classes</option>
+                  </select>
+                </div>
+
+                {/* Type Filter Pills (ALL, PDF, VIDEO) */}
+                <div className="flex items-center gap-1 bg-slate-100/80 p-1 rounded-xl shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setFilterType("ALL")}
+                    className={`py-1 px-2.5 rounded-lg text-[11px] font-extrabold transition-all cursor-pointer ${
+                      filterType === "ALL"
+                        ? "bg-white text-purple-800 shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    All ({materials.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterType("PDF")}
+                    className={`py-1 px-2.5 rounded-lg text-[11px] font-extrabold flex items-center gap-1 transition-all cursor-pointer ${
+                      filterType === "PDF"
+                        ? "bg-white text-emerald-700 shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    <FileText className="w-3 h-3 text-emerald-600" />
+                    <span>PDFs ({pdfCount})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterType("VIDEO")}
+                    className={`py-1 px-2.5 rounded-lg text-[11px] font-extrabold flex items-center gap-1 transition-all cursor-pointer ${
+                      filterType === "VIDEO"
+                        ? "bg-white text-rose-700 shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    <Video className="w-3 h-3 text-rose-600" />
+                    <span>Videos ({recordedCount})</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Search Bar */}
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search by title, subject, course, or date..."
+                  className="w-full pl-9 pr-8 py-2 rounded-xl bg-purple-50/40 border border-purple-100 text-xs font-medium text-slate-900 outline-none placeholder:text-slate-400 focus:border-purple-400 transition-colors"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* Search Bar */}
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by chapter, course, or filename..."
-                className="w-full pl-9 pr-3 py-2 rounded-xl bg-purple-50/40 border border-purple-100 text-xs font-medium text-slate-900 outline-none placeholder:text-slate-400"
-              />
-            </div>
-
-            {/* List */}
+            {/* Scrollable History List Table */}
             {filteredMaterials.length === 0 ? (
-              <div className="py-12 text-center rounded-2xl bg-purple-50/30 border border-purple-100/60 p-6 space-y-2">
-                <FileText className="w-8 h-8 text-purple-300 mx-auto" />
-                <h4 className="text-xs font-bold text-slate-700">No content found</h4>
+              <div className="py-14 text-center rounded-2xl bg-purple-50/30 border border-purple-100/60 p-6 space-y-2">
+                <FileText className="w-9 h-9 text-purple-300 mx-auto" />
+                <h4 className="text-xs font-bold text-slate-700">No upload history found</h4>
                 <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
-                  {searchQuery || filterCourse !== "ALL"
-                    ? "Try clearing your search or course filters."
-                    : "Use Section 1 to upload PDF notes or Section 2 to add recorded classes."}
+                  {searchQuery || filterCourse !== "ALL" || filterType !== "ALL"
+                    ? "Try adjusting or clearing your filters and search term."
+                    : "No uploaded PDF notes or recorded classes found in the Supabase database. Upload one on the left to start."}
                 </p>
               </div>
             ) : (
-              <div className="space-y-2.5 max-h-[520px] overflow-y-auto pr-1">
+              <div className="space-y-3 max-h-[560px] overflow-y-auto pr-1">
                 {filteredMaterials.map((item) => {
                   const isVideo = item.type === "VIDEO" || Boolean(item.recordingUrl);
                   const isPdf = item.type === "PDF" || Boolean(item.pdfUrl);
                   const videoLink = item.recordingUrl || (isVideo ? item.fileOrUrl : null);
+                  const pdfLink = item.pdfUrl || (isPdf ? item.fileOrUrl : null);
+                  const isDeleting = deletingId === item.id;
 
                   return (
                     <div
                       key={item.id}
-                      className="p-3.5 rounded-2xl bg-purple-50/30 border border-purple-100/80 hover:border-purple-200 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs"
+                      className="p-4 rounded-2xl bg-purple-50/30 border border-purple-100/90 hover:border-purple-300/80 transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-2xs"
                     >
-                      <div className="flex items-start gap-3 min-w-0">
+                      {/* Left: Info */}
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
                         <div
-                          className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                          className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                             isVideo
                               ? "bg-rose-100 text-rose-600"
-                              : "bg-purple-100 text-purple-700"
+                              : "bg-emerald-100 text-emerald-700"
                           }`}
                         >
                           {isVideo ? (
-                            <Video className="w-4 h-4" />
+                            <Video className="w-5 h-5" />
                           ) : (
-                            <FileText className="w-4 h-4" />
+                            <FileText className="w-5 h-5" />
                           )}
                         </div>
-                        <div className="min-w-0 space-y-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-purple-100 text-purple-800">
-                              {item.courseName}
-                            </span>
+
+                        <div className="min-w-0 space-y-1.5 flex-1">
+                          {/* Badges: Course, Subject, Type, Date */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {/* Type Badge */}
                             {isVideo && (
-                              <span className="text-[10px] font-extrabold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200 flex items-center gap-1">
+                              <span className="text-[10px] font-black text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200 flex items-center gap-1">
                                 <Play className="w-2.5 h-2.5 fill-current" />
-                                <span>Recorded Class</span>
+                                <span>Recorded Video</span>
                               </span>
                             )}
-                            {isPdf && !isVideo && (
-                              <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1">
+                            {isPdf && (
+                              <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1">
                                 <FileText className="w-2.5 h-2.5" />
                                 <span>PDF Notes</span>
                               </span>
                             )}
-                            {item.sizeOrDuration && (
-                              <span className="text-[10px] font-semibold text-slate-500">
-                                {item.sizeOrDuration}
+
+                            {/* Course Badge */}
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-purple-100 text-purple-900 border border-purple-200">
+                              {item.courseName || item.courseId}
+                            </span>
+
+                            {/* Subject Badge */}
+                            {item.subjectName && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                {item.subjectName}
                               </span>
                             )}
-                            <span className="text-[10px] text-slate-400">
-                              • {item.sessionDate ? `Class: ${item.sessionDate}` : item.uploadedAt}
+
+                            {/* Upload / Session Date */}
+                            <span className="text-[10px] font-semibold text-slate-500 flex items-center gap-1">
+                              <Calendar className="w-3 h-3 text-slate-400" />
+                              <span>{item.sessionDate ? `Class Date: ${item.sessionDate}` : `Uploaded: ${item.uploadedAt}`}</span>
                             </span>
+
+                            {/* Size or Duration */}
+                            {item.sizeOrDuration && (
+                              <span className="text-[10px] font-medium text-slate-400">
+                                • {item.sizeOrDuration}
+                              </span>
+                            )}
                           </div>
-                          <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 truncate">
+
+                          {/* Title */}
+                          <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 leading-snug">
                             {item.title}
                           </h4>
-                          <p className="text-[11px] text-slate-500 font-medium truncate flex items-center gap-1">
-                            <span>Link / File:</span>
-                            <span className="font-mono text-purple-700 truncate max-w-xs">
+
+                          {/* Teacher & File/Link snippet */}
+                          <div className="flex items-center gap-2 text-[11px] text-slate-500 flex-wrap">
+                            {item.teacherName && (
+                              <span className="font-semibold text-purple-700">
+                                By {item.teacherName}
+                              </span>
+                            )}
+                            <span className="truncate max-w-xs font-mono text-slate-500">
                               {item.fileOrUrl}
                             </span>
-                          </p>
+                          </div>
                         </div>
                       </div>
 
-                      {/* Decoupled Independent Actions */}
-                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-center flex-wrap">
+                      {/* Right: Actions (Watch / View, Notify, and Safe Delete) */}
+                      <div className="flex items-center gap-2 shrink-0 self-end md:self-center flex-wrap pt-2 md:pt-0 border-t md:border-t-0 border-purple-100 w-full md:w-auto justify-end">
+                        {/* Notify Students Button for Recorded Class */}
                         {videoLink && (
-                          <>
-                            {/* INDEPENDENT NOTIFY STUDENTS BUTTON FOR RECORDED CLASS */}
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleNotifyRecordedClass({
-                                  title: item.title,
-                                  courseId: item.courseId,
-                                  courseName: item.courseName,
-                                  recordingUrl: videoLink,
-                                })
-                              }
-                              className="py-1.5 px-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
-                              title="Broadcast alert to all students without requiring any PDF"
-                            >
-                              <Bell className="w-3.5 h-3.5 text-purple-600" />
-                              <span>Notify Students</span>
-                            </button>
-
-                            <a
-                              href={videoLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="py-1.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
-                              title="Watch Recorded Class (Opens Drive / YouTube)"
-                            >
-                              <Play className="w-3.5 h-3.5 fill-current" />
-                              <span>▶️ Watch Replay</span>
-                            </a>
-                          </>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleNotifyRecordedClass({
+                                title: item.title,
+                                courseId: item.courseId,
+                                courseName: item.courseName,
+                                recordingUrl: videoLink,
+                              })
+                            }
+                            className="py-1.5 px-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                            title="Broadcast notification to enrolled students"
+                          >
+                            <Bell className="w-3 h-3 text-purple-600" />
+                            <span className="hidden sm:inline">Notify</span>
+                          </button>
                         )}
 
-                        {(item.pdfUrl || (isPdf && item.fileOrUrl)) && (
+                        {/* Watch Replay Button */}
+                        {videoLink && (
                           <a
-                            href={item.pdfUrl || item.fileOrUrl}
-                            download={item.fileOrUrl || "notes.pdf"}
+                            href={videoLink}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="py-1.5 px-3 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-                            title="Download / View PDF Notes"
+                            className="py-1.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
+                            title="Watch Recorded Class Replay"
                           >
-                            <Download className="w-3.5 h-3.5" />
-                            <span>PDF Notes</span>
+                            <Play className="w-3 h-3 fill-current" />
+                            <span>Watch</span>
                           </a>
                         )}
 
+                        {/* View / Download PDF Button */}
+                        {pdfLink && (
+                          <a
+                            href={pdfLink}
+                            download={item.fileOrUrl || "notes.pdf"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="py-1.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs active:scale-95"
+                            title="Download or View PDF Handbook"
+                          >
+                            <Download className="w-3 h-3" />
+                            <span>PDF</span>
+                          </a>
+                        )}
+
+                        {/* SAFE DELETE BUTTON (Supabase & Local) */}
                         <button
                           type="button"
-                          onClick={() => handleDeleteMaterial(item.id, item.subjectId)}
-                          className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                          title="Delete Content"
+                          disabled={isDeleting}
+                          onClick={() => handleDeleteMaterial(item)}
+                          className="py-1.5 px-2.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-extrabold flex items-center gap-1 transition-all cursor-pointer shadow-2xs disabled:opacity-50 active:scale-95"
+                          title="Safely delete this upload from Supabase database"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          {isDeleting ? (
+                            <span className="inline-flex items-center gap-1 text-[11px]">
+                              <span className="animate-spin h-3 w-3 border-2 border-rose-600 border-t-transparent rounded-full" />
+                              <span>Deleting...</span>
+                            </span>
+                          ) : (
+                            <>
+                              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                              <span>Delete</span>
+                            </>
+                          )}
                         </button>
                       </div>
                     </div>
@@ -1035,13 +1199,14 @@ export default function PdfNotesUploadSection({
             )}
           </div>
 
-          <div className="pt-2 border-t border-purple-100 flex items-center justify-between text-[11px] text-slate-400">
-            <span>
-              Showing {filteredMaterials.length} of {materials.length} published items
+          {/* Footer: Count and Sync Status */}
+          <div className="pt-3 border-t border-purple-100 flex items-center justify-between text-[11px] text-slate-500 flex-wrap gap-2">
+            <span className="font-semibold">
+              Showing {filteredMaterials.length} of {materials.length} uploaded items
             </span>
-            <span className="font-medium text-emerald-600 flex items-center gap-1">
+            <span className="font-bold text-emerald-700 flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
               <Check className="w-3.5 h-3.5" />
-              Decoupled Student Portal Sync Active
+              <span>Full Supabase Sync Active</span>
             </span>
           </div>
         </div>
