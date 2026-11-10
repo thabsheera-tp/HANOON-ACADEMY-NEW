@@ -36,15 +36,15 @@ export default function AdminMetricsChart({
 
   if (!isMounted) {
     return (
-      <div className="h-44 w-full flex items-center justify-center bg-purple-50/40 rounded-2xl animate-pulse" />
+      <div className="h-44 w-full flex items-center justify-center bg-slate-100/60 rounded-2xl animate-pulse" />
     );
   }
 
   return (
     <div className="w-full space-y-2">
       <div className="flex items-center justify-between text-xs">
-        <span className="font-extrabold text-slate-800">Class Performance & Completion</span>
-        <div className="flex items-center gap-3 text-[10px] font-bold">
+        <span className="font-bold text-slate-800 tracking-tight">Class Performance & Completion</span>
+        <div className="flex items-center gap-3 text-[10px] font-semibold">
           <span className="flex items-center gap-1 text-purple-700">
             <span className="w-2 h-2 rounded-full bg-purple-600" />
             Avg Attendance
@@ -79,8 +79,8 @@ export default function AdminMetricsChart({
               content={({ active, payload }) => {
                 if (active && payload && payload.length) {
                   return (
-                    <div className="bg-white p-2.5 rounded-xl border border-purple-100 shadow-md text-[11px] font-bold space-y-0.5">
-                      <p className="text-slate-800 font-extrabold">{payload[0].payload.course}</p>
+                    <div className="bg-white/95 backdrop-blur-sm p-2 rounded-xl border border-slate-200/80 shadow-md text-[11px] font-semibold space-y-0.5">
+                      <p className="text-slate-900 font-bold">{payload[0].payload.course}</p>
                       <p className="text-purple-600">
                         Attendance: {payload[0].value}%
                       </p>
@@ -94,7 +94,7 @@ export default function AdminMetricsChart({
                 }
                 return null;
               }}
-              cursor={{ fill: "rgba(243, 232, 255, 0.3)" }}
+              cursor={{ fill: "rgba(241, 245, 249, 0.5)" }}
             />
             <Bar dataKey="attendanceRate" fill="#9333ea" radius={[6, 6, 0, 0]} maxBarSize={22} />
             <Bar dataKey="completionRate" fill="#c084fc" radius={[6, 6, 0, 0]} maxBarSize={22} />

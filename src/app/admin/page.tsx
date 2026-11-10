@@ -856,18 +856,18 @@ export default function AdminDashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-purple-50 text-slate-900 font-['Plus_Jakarta_Sans'] select-none w-full overflow-x-hidden">
-      {/* Top Admin Navigation Header */}
-      <header className="bg-white border-b border-purple-100 shadow-xs sticky top-0 z-40 w-full max-w-full overflow-x-hidden">
-        <div className="w-full max-w-md sm:max-w-6xl mx-auto px-2.5 sm:px-6 py-2 sm:py-3.5 flex items-center justify-between gap-1.5 sm:gap-2 min-w-0 max-w-full">
+    <div className="min-h-screen bg-[#F8F9FA] text-slate-900 font-['Plus_Jakarta_Sans'] select-none w-full overflow-x-hidden">
+      {/* Top Admin Navigation Header - Sleek Minimalist iOS Design */}
+      <header className="bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-2xs sticky top-0 z-40 w-full max-w-full overflow-x-hidden">
+        <div className="w-full max-w-md sm:max-w-6xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3.5 flex items-center justify-between gap-2 min-w-0 max-w-full">
           <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0 shrink">
             <HanoonLogo size="sm" compactMobile />
-            <div className="h-3.5 sm:h-4 w-px bg-purple-200 shrink-0" />
+            <div className="h-3.5 sm:h-4 w-px bg-slate-200 shrink-0" />
             <span
-              className={`text-[9px] sm:text-[10px] font-black uppercase tracking-wider px-1.5 sm:px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap ${
+              className={`text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap ${
                 isSuperAdmin
-                  ? "bg-purple-100 text-purple-800 border border-purple-200/60"
-                  : "bg-emerald-100 text-emerald-800 border border-emerald-200/60"
+                  ? "bg-purple-50 text-purple-700 border border-purple-200/60"
+                  : "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
               }`}
             >
               <span>{isSuperAdmin ? "Admin" : "Verifier"}</span>
@@ -875,7 +875,7 @@ export default function AdminDashboardPage() {
           </div>
 
           <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-            <span className="text-xs font-bold text-slate-600 hidden lg:inline max-w-[130px] truncate">
+            <span className="text-xs font-semibold text-slate-600 hidden xl:inline max-w-[130px] truncate">
               {currentUser.full_name}
             </span>
 
@@ -883,10 +883,10 @@ export default function AdminDashboardPage() {
             <Link
               href="/"
               title="Preview Student Portal"
-              className="p-1.5 sm:py-1.5 sm:px-2.5 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-[10px] sm:text-xs font-bold text-purple-800 flex items-center gap-1 cursor-pointer transition-colors shadow-2xs shrink-0"
+              className="p-1.5 sm:py-1.5 sm:px-2.5 rounded-full border border-slate-200/80 bg-slate-50 hover:bg-slate-100 text-[10px] sm:text-xs font-semibold text-slate-700 flex items-center gap-1 cursor-pointer transition-colors shadow-2xs shrink-0"
             >
-              <Eye className="w-3.5 h-3.5 shrink-0 text-purple-600" />
-              <span className="hidden sm:inline font-bold">Student View</span>
+              <Eye className="w-3.5 h-3.5 shrink-0 text-slate-600" />
+              <span className="hidden sm:inline">Student View</span>
             </Link>
 
             {/* Role Switcher: Live evaluation toggle between Super Admin & Verification Staff */}
@@ -894,11 +894,11 @@ export default function AdminDashboardPage() {
               type="button"
               onClick={handleToggleRolePreview}
               title={`Switch live role preview to ${isSuperAdmin ? "Verification Staff" : "Super Admin"}`}
-              className="p-1.5 sm:py-1.5 sm:px-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-[10px] sm:text-xs font-bold text-slate-700 flex items-center gap-1 cursor-pointer transition-colors shadow-2xs shrink-0"
+              className="p-1.5 sm:py-1.5 sm:px-2.5 rounded-full border border-slate-200/80 bg-white hover:bg-slate-50 text-[10px] sm:text-xs font-semibold text-slate-700 flex items-center gap-1 cursor-pointer transition-colors shadow-2xs shrink-0"
               aria-label={`Switch mode to ${isSuperAdmin ? "Verifier" : "Admin"}`}
             >
               <ShieldCheck className={`w-3.5 h-3.5 shrink-0 ${isSuperAdmin ? "text-purple-600" : "text-emerald-600"}`} />
-              <span className="hidden sm:inline font-extrabold text-purple-700">
+              <span className="hidden sm:inline font-bold">
                 {isSuperAdmin ? "Admin" : "Verifier"}
               </span>
             </button>
@@ -908,35 +908,35 @@ export default function AdminDashboardPage() {
               type="button"
               onClick={handleSignOut}
               title="Sign Out of Admin Dashboard"
-              className="py-1.5 px-2.5 sm:px-3 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs font-bold text-rose-700 flex items-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-2xs active:scale-95"
+              className="p-1.5 sm:py-1.5 sm:px-3 rounded-full bg-rose-50/80 hover:bg-rose-100 border border-rose-200/70 text-xs font-bold text-rose-700 flex items-center gap-1 transition-all cursor-pointer shrink-0 shadow-2xs active:scale-95"
               aria-label="Sign Out"
             >
               <LogOut className="w-3.5 h-3.5 shrink-0 text-rose-600" />
-              <span className="text-xs font-extrabold">Logout</span>
+              <span className="hidden sm:inline text-xs font-bold">Logout</span>
             </button>
           </div>
         </div>
 
         {/* Navigation Tabs Bar */}
-        <div className="w-full max-w-md sm:max-w-6xl mx-auto px-4 sm:px-6 flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar pt-1 border-t border-purple-50 sm:border-0">
+        <div className="w-full max-w-md sm:max-w-6xl mx-auto px-3 sm:px-6 flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar py-1 border-t border-slate-100 sm:border-0">
           {/* Tab 1: 🎓 Student Registrations & Payments */}
           <button
             type="button"
             onClick={() => setActiveTab("overview")}
-            className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-xs border-b-2 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all shrink-0 ${
+            className={`py-2 px-3 font-semibold text-xs rounded-full flex items-center gap-1.5 cursor-pointer transition-all shrink-0 ${
               activeTab === "overview"
-                ? "border-purple-600 text-purple-700 font-extrabold"
-                : "border-transparent text-slate-500 hover:text-slate-800"
+                ? "bg-slate-900 text-white shadow-2xs font-bold"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/70"
             }`}
           >
             {isSuperAdmin ? (
-              <Users className="w-4 h-4 shrink-0 text-purple-600" />
+              <Users className="w-3.5 h-3.5 shrink-0" />
             ) : (
-              <CreditCard className="w-4 h-4 shrink-0 text-emerald-600" />
+              <CreditCard className="w-3.5 h-3.5 shrink-0" />
             )}
-            <span>{isSuperAdmin ? "🎓 Registrations & Payments" : "💳 Payment Verification"}</span>
+            <span>{isSuperAdmin ? "Registrations" : "Verification"}</span>
             {pendingPaymentsCount > 0 && (
-              <span className="w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center animate-pulse">
+              <span className="w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center animate-pulse">
                 {pendingPaymentsCount}
               </span>
             )}
@@ -946,70 +946,70 @@ export default function AdminDashboardPage() {
           <button
             type="button"
             onClick={() => setActiveTab("analytics")}
-            className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-xs border-b-2 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all shrink-0 ${
+            className={`py-2 px-3 font-semibold text-xs rounded-full flex items-center gap-1.5 cursor-pointer transition-all shrink-0 ${
               activeTab === "analytics"
-                ? "border-purple-600 text-purple-700 font-extrabold"
-                : "border-transparent text-slate-500 hover:text-slate-800"
+                ? "bg-slate-900 text-white shadow-2xs font-bold"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/70"
             }`}
           >
-            <TrendingUp className="w-4 h-4 shrink-0 text-purple-600" />
-            <span>📊 Analytics</span>
+            <TrendingUp className="w-3.5 h-3.5 shrink-0" />
+            <span>Analytics</span>
           </button>
 
           {/* Tab 1.2: 📅 Attendance Register */}
           <button
             type="button"
             onClick={() => setActiveTab("attendance")}
-            className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-xs border-b-2 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all shrink-0 ${
+            className={`py-2 px-3 font-semibold text-xs rounded-full flex items-center gap-1.5 cursor-pointer transition-all shrink-0 ${
               activeTab === "attendance"
-                ? "border-purple-600 text-purple-700 font-extrabold"
-                : "border-transparent text-slate-500 hover:text-slate-800"
+                ? "bg-slate-900 text-white shadow-2xs font-bold"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/70"
             }`}
           >
-            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
-            <span>📅 Attendance</span>
+            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+            <span>Attendance</span>
           </button>
 
           {/* Tab 1.3: 🧾 Official Fee Receipts */}
           <button
             type="button"
             onClick={() => setActiveTab("receipts")}
-            className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-xs border-b-2 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all shrink-0 ${
+            className={`py-2 px-3 font-semibold text-xs rounded-full flex items-center gap-1.5 cursor-pointer transition-all shrink-0 ${
               activeTab === "receipts"
-                ? "border-purple-600 text-purple-700 font-extrabold"
-                : "border-transparent text-slate-500 hover:text-slate-800"
+                ? "bg-slate-900 text-white shadow-2xs font-bold"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/70"
             }`}
           >
-            <FileText className="w-4 h-4 shrink-0 text-blue-600" />
-            <span>🧾 Fee Receipts</span>
+            <FileText className="w-3.5 h-3.5 shrink-0" />
+            <span>Receipts</span>
           </button>
 
           {/* Tab 1.5: 📢 Notice Board & Announcements */}
           <button
             type="button"
             onClick={() => setActiveTab("notices")}
-            className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-xs border-b-2 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all shrink-0 ${
+            className={`py-2 px-3 font-semibold text-xs rounded-full flex items-center gap-1.5 cursor-pointer transition-all shrink-0 ${
               activeTab === "notices"
-                ? "border-purple-600 text-purple-700 font-extrabold"
-                : "border-transparent text-slate-500 hover:text-slate-800"
+                ? "bg-slate-900 text-white shadow-2xs font-bold"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/70"
             }`}
           >
-            <Megaphone className="w-4 h-4 shrink-0 text-purple-600" />
-            <span>📢 Notice Board</span>
+            <Megaphone className="w-3.5 h-3.5 shrink-0" />
+            <span>Notices</span>
           </button>
 
           {/* Tab 2: 📅 Class Scheduling & Live Manager */}
           <button
             type="button"
             onClick={() => setActiveTab("classes")}
-            className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-xs border-b-2 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all shrink-0 ${
+            className={`py-2 px-3 font-semibold text-xs rounded-full flex items-center gap-1.5 cursor-pointer transition-all shrink-0 ${
               activeTab === "classes"
-                ? "border-purple-600 text-purple-700 font-extrabold"
-                : "border-transparent text-slate-500 hover:text-slate-800"
+                ? "bg-slate-900 text-white shadow-2xs font-bold"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/70"
             }`}
           >
-            <Calendar className="w-4 h-4 shrink-0 text-purple-600" />
-            <span>📅 Class Scheduling & Live</span>
+            <Calendar className="w-3.5 h-3.5 shrink-0" />
+            <span>Classes</span>
             {teacherClasses.some((c) => c.status === "LIVE_NOW") && (
               <span className="px-1.5 py-0.5 rounded-full bg-rose-600 text-white text-[9px] font-black animate-pulse flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-white" />
@@ -1022,30 +1022,30 @@ export default function AdminDashboardPage() {
           <button
             type="button"
             onClick={() => setActiveTab("notes")}
-            className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-xs border-b-2 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all shrink-0 ${
+            className={`py-2 px-3 font-semibold text-xs rounded-full flex items-center gap-1.5 cursor-pointer transition-all shrink-0 ${
               activeTab === "notes"
-                ? "border-purple-600 text-purple-700 font-extrabold"
-                : "border-transparent text-slate-500 hover:text-slate-800"
+                ? "bg-slate-900 text-white shadow-2xs font-bold"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/70"
             }`}
           >
-            <FileUp className="w-4 h-4 shrink-0 text-indigo-600" />
-            <span>📚 PDF Notes & Recorded Classes</span>
+            <FileUp className="w-3.5 h-3.5 shrink-0" />
+            <span>Notes & Records</span>
           </button>
 
           {/* Tab 4: 🔔 Notifications Center */}
           <button
             type="button"
             onClick={() => setActiveTab("notifications")}
-            className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-xs border-b-2 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all shrink-0 ${
+            className={`py-2 px-3 font-semibold text-xs rounded-full flex items-center gap-1.5 cursor-pointer transition-all shrink-0 ${
               activeTab === "notifications"
-                ? "border-purple-600 text-purple-700 font-extrabold"
-                : "border-transparent text-slate-500 hover:text-slate-800"
+                ? "bg-slate-900 text-white shadow-2xs font-bold"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/70"
             }`}
           >
-            <Bell className="w-4 h-4 shrink-0 text-amber-500" />
-            <span>🔔 Notifications Hub</span>
+            <Bell className="w-3.5 h-3.5 shrink-0" />
+            <span>Alerts</span>
             {unreadNotifsCount > 0 && (
-              <span className="w-5 h-5 rounded-full bg-amber-500 text-white text-[10px] font-black flex items-center justify-center">
+              <span className="w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-black flex items-center justify-center">
                 {unreadNotifsCount}
               </span>
             )}
@@ -1058,53 +1058,53 @@ export default function AdminDashboardPage() {
               <button
                 type="button"
                 onClick={() => setActiveTab("teachers")}
-                className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-xs border-b-2 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all shrink-0 ${
+                className={`py-2 px-3 font-semibold text-xs rounded-full flex items-center gap-1.5 cursor-pointer transition-all shrink-0 ${
                   activeTab === "teachers"
-                    ? "border-purple-600 text-purple-700 font-extrabold"
-                    : "border-transparent text-slate-500 hover:text-slate-800"
+                    ? "bg-slate-900 text-white shadow-2xs font-bold"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/70"
                 }`}
               >
-                <GraduationCap className="w-4 h-4 shrink-0 text-indigo-600" />
-                <span>👩‍🏫 Teachers & Subjects</span>
+                <GraduationCap className="w-3.5 h-3.5 shrink-0" />
+                <span>Teachers</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setActiveTab("upi")}
-                className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-xs border-b-2 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all shrink-0 ${
+                className={`py-2 px-3 font-semibold text-xs rounded-full flex items-center gap-1.5 cursor-pointer transition-all shrink-0 ${
                   activeTab === "upi"
-                    ? "border-purple-600 text-purple-700 font-extrabold"
-                    : "border-transparent text-slate-500 hover:text-slate-800"
+                    ? "bg-slate-900 text-white shadow-2xs font-bold"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/70"
                 }`}
               >
-                <QrCode className="w-4 h-4 shrink-0" />
-                <span>UPI Settings</span>
+                <QrCode className="w-3.5 h-3.5 shrink-0" />
+                <span>UPI</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setActiveTab("payroll")}
-                className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-xs border-b-2 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all shrink-0 ${
+                className={`py-2 px-3 font-semibold text-xs rounded-full flex items-center gap-1.5 cursor-pointer transition-all shrink-0 ${
                   activeTab === "payroll"
-                    ? "border-purple-600 text-purple-700 font-extrabold"
-                    : "border-transparent text-slate-500 hover:text-slate-800"
+                    ? "bg-slate-900 text-white shadow-2xs font-bold"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/70"
                 }`}
               >
-                <DollarSign className="w-4 h-4 shrink-0" />
+                <DollarSign className="w-3.5 h-3.5 shrink-0" />
                 <span>Payroll</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setActiveTab("settings")}
-                className={`py-2.5 sm:py-3 px-3 sm:px-4 font-bold text-xs border-b-2 flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all shrink-0 ${
+                className={`py-2 px-3 font-semibold text-xs rounded-full flex items-center gap-1.5 cursor-pointer transition-all shrink-0 ${
                   activeTab === "settings"
-                    ? "border-purple-600 text-purple-700 font-extrabold"
-                    : "border-transparent text-slate-500 hover:text-slate-800"
+                    ? "bg-slate-900 text-white shadow-2xs font-bold"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/70"
                 }`}
               >
-                <Settings className="w-4 h-4 shrink-0" />
-                <span>Settings & Audit</span>
+                <Settings className="w-3.5 h-3.5 shrink-0" />
+                <span>Settings</span>
               </button>
             </>
           )}
@@ -1172,25 +1172,6 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        {/* Verification Staff Restrictive Scope Notification */}
-        {!isSuperAdmin && (
-          <div className="p-3.5 sm:p-4 rounded-2xl bg-emerald-50/90 border border-emerald-200 text-emerald-950 text-xs font-medium flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                <ShieldCheck className="w-4 h-4" />
-              </div>
-              <div>
-                <span className="font-extrabold text-emerald-950 block">Staff & Verification Portal Active</span>
-                <span className="text-[11px] text-emerald-800">
-                  Full tools available: Payment Verification Queue, Class Scheduling & Live Google Meet/Zoom links, PDF Notes & Recorded Classes, and Push Notifications.
-                </span>
-              </div>
-            </div>
-            <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-white text-emerald-800 border border-emerald-200 shrink-0 self-start sm:self-auto">
-              Staff Suite Online
-            </span>
-          </div>
-        )}
 
         {/* ========================================================
             TAB 1: 🎓 STUDENT REGISTRATIONS & PAYMENTS VIEW
