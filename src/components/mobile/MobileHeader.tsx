@@ -148,24 +148,21 @@ export default function MobileHeader({
           </button>
         </div>
 
-        {/* Right Header Element: Notifications Bell (Enrolled Students Only) + Profile Avatar / Help */}
-        <div className="flex items-center gap-1.5">
-          {/* Notifications Bell: Strictly available ONLY for enrolled & approved students */}
+        {/* Right Header Element: iOS-Style Notifications Bell + Profile Avatar */}
+        <div className="flex items-center gap-1">
+          {/* Notifications Bell with subtle small dot */}
           {isApproved && (
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setIsNotifDrawerOpen(!isNotifDrawerOpen)}
                 title="Notifications"
-                className={`p-2 rounded-xl text-slate-700 hover:bg-purple-50 active:scale-95 transition-all relative cursor-pointer ${
-                  hasNewAlertAnimation ? "animate-bounce" : ""
-                }`}
+                className="p-2 rounded-full text-slate-600 hover:text-slate-900 hover:bg-slate-100/70 active:scale-95 transition-all relative cursor-pointer"
+                aria-label="Notifications"
               >
-                <Bell className="w-4 h-4 text-purple-700" />
+                <Bell className="w-4 h-4" />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-rose-600 text-white font-black text-[9.5px] flex items-center justify-center shadow-xs">
-                    {unreadCount}
-                  </span>
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white" />
                 )}
               </button>
             </div>
@@ -173,11 +170,13 @@ export default function MobileHeader({
 
           {isApproved ? (
             <div className="flex items-center relative">
+              {/* Minimalist Circular iOS Profile Avatar */}
               <button
                 type="button"
                 onClick={() => setIsPortalMenuOpen(!isPortalMenuOpen)}
                 title="Student Profile"
-                className="w-8 h-8 rounded-xl bg-purple-600 text-white font-extrabold text-xs flex items-center justify-center shadow-xs hover:bg-purple-700 active:scale-95 transition-all cursor-pointer"
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 border border-slate-200/80 text-slate-700 font-bold text-xs flex items-center justify-center shadow-2xs active:scale-95 transition-all cursor-pointer"
+                aria-label="Student Profile"
               >
                 {avatarLetter}
               </button>

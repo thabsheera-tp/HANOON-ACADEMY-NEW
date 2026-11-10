@@ -36,8 +36,6 @@ import StudentIDModal from "@/components/mobile/StudentIDModal";
 import SpecialClassModal from "@/components/mobile/SpecialClassModal";
 import SubjectClassHubModal from "@/components/mobile/SubjectClassHubModal";
 import { getAdaviyyaSubjects, AdaviyyaSubject, fetchAdaviyyaSubjectsFromSupabase } from "@/services/subjectService";
-import AttendanceDonutChart from "@/components/charts/AttendanceDonutChart";
-import ProgressScoreBarChart from "@/components/charts/ProgressScoreBarChart";
 import { getAppSettings, formatWhatsAppLink } from "@/services/settingsService";
 import {
   getNotifications,
@@ -656,7 +654,7 @@ export default function ScreenDashboard({
   const upcomingClass = liveClasses.find((c) => c.status === "SCHEDULED");
 
   return (
-    <div className="w-full max-w-md mx-auto overflow-x-hidden px-4 py-3 flex-1 flex flex-col justify-start space-y-4 select-none font-['Plus_Jakarta_Sans'] bg-purple-50/30 text-slate-900">
+    <div className="w-full max-w-md mx-auto overflow-x-hidden px-4 py-3.5 flex-1 flex flex-col justify-start space-y-4 select-none font-['Plus_Jakarta_Sans'] bg-[#F8F9FA] text-slate-900">
       {/* Toast banner when returning from Google Meet session */}
       {liveReturnToast && (
         <div className="p-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold text-xs flex items-center justify-between shadow-md animate-fade-in border border-emerald-400/40">
@@ -674,37 +672,28 @@ export default function ScreenDashboard({
         </div>
       )}
 
-      {/* 1. TOP PROFILE BAR & GREETING */}
-      <div className="flex items-center justify-between pt-0.5">
-        <div className="flex items-center gap-2.5">
-          <div className="w-10 h-10 rounded-2xl bg-purple-600 text-white font-extrabold flex items-center justify-center shadow-xs text-sm shrink-0">
-            {avatarLetter}
-          </div>
-          <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600 block leading-tight">
-              Student Dashboard
-            </span>
-            <h2 className="text-base font-extrabold text-slate-900 tracking-tight leading-tight line-clamp-1">
-              Welcome, {studentName}
-            </h2>
-          </div>
+      {/* 1. iOS-STYLE WELCOME HEADLINE (Clean typography, no extra background boxes) */}
+      <div className="pt-1.5 pb-0.5 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+            Welcome, {studentName}
+          </h1>
+          <p className="text-xs text-slate-400 font-medium mt-0.5">
+            {selectedCourse.title}
+          </p>
         </div>
 
+        {/* Subtle iOS Notification Bell */}
         <button
           type="button"
-          onClick={() => {
-            setShowNotificationToast((prev) => !prev);
-          }}
-          className="relative w-9 h-9 rounded-2xl bg-white border border-purple-100 shadow-xs flex items-center justify-center hover:bg-purple-50 transition-all text-slate-700 cursor-pointer shrink-0"
+          onClick={() => setShowNotificationToast((prev) => !prev)}
+          className="relative p-2 rounded-full text-slate-500 hover:text-slate-800 hover:bg-white active:scale-95 transition-all cursor-pointer"
           title="Notifications"
+          aria-label="Toggle notifications"
         >
-          <Bell className="w-4 h-4 text-purple-600" />
-          {unreadNotifs > 0 ? (
-            <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-rose-600 text-white font-black text-[9px] flex items-center justify-center shadow-xs animate-bounce">
-              {unreadNotifs}
-            </span>
-          ) : (
-            <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-purple-400" />
+          <Bell className="w-4 h-4" />
+          {unreadNotifs > 0 && (
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-[#F8F9FA]" />
           )}
         </button>
       </div>
@@ -866,196 +855,83 @@ export default function ScreenDashboard({
         </div>
       )}
 
-      {/* 2. COMPACT QUICK ACCESS GRID (2x2 Soft-Shadow Cards) */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-              Quick Access
-            </h3>
+      {/* 2. iOS-STYLE COMPACT QUICK ACCESS (2x2 Neat Square Tiles) */}
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+        {/* Tile 1: My Courses */}
+        <button
+          type="button"
+          onClick={() => {
+            const el = document.getElementById("enrolled-subjects");
+            if (el) {
+              el.scrollIntoView({ behavior: "smooth" });
+            }
+          }}
+          className="p-3.5 rounded-2xl bg-white border border-slate-100/90 shadow-2xs hover:shadow-xs active:scale-[0.98] transition-all text-left flex flex-col justify-between aspect-square max-h-[105px] cursor-pointer group"
+        >
+          <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center transition-transform group-hover:scale-105">
+            <BookOpen className="w-4 h-4" />
           </div>
-          <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100">
-            Essential Services
+          <span className="text-xs sm:text-[13px] font-semibold text-slate-800 tracking-tight">
+            My Courses
           </span>
-        </div>
+        </button>
 
-        <div className="grid grid-cols-2 gap-2.5">
-          {/* Card 1: My Courses */}
-          <button
-            type="button"
-            onClick={() => {
-              const el = document.getElementById("enrolled-subjects");
+        {/* Tile 2: Live Classes */}
+        <button
+          type="button"
+          onClick={() => {
+            if (isApproved) {
+              setShowLiveModal(true);
+            } else {
+              setLockedNoticeSubject("Live Classroom");
+            }
+          }}
+          className="p-3.5 rounded-2xl bg-white border border-slate-100/90 shadow-2xs hover:shadow-xs active:scale-[0.98] transition-all text-left flex flex-col justify-between aspect-square max-h-[105px] cursor-pointer group"
+        >
+          <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center transition-transform group-hover:scale-105">
+            <Radio className="w-4 h-4" />
+          </div>
+          <span className="text-xs sm:text-[13px] font-semibold text-slate-800 tracking-tight">
+            Live Classes
+          </span>
+        </button>
+
+        {/* Tile 3: Downloads */}
+        <button
+          type="button"
+          onClick={() => setShowMaterialsModal(true)}
+          className="p-3.5 rounded-2xl bg-white border border-slate-100/90 shadow-2xs hover:shadow-xs active:scale-[0.98] transition-all text-left flex flex-col justify-between aspect-square max-h-[105px] cursor-pointer group"
+        >
+          <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center transition-transform group-hover:scale-105">
+            <Download className="w-4 h-4" />
+          </div>
+          <span className="text-xs sm:text-[13px] font-semibold text-slate-800 tracking-tight">
+            Downloads
+          </span>
+        </button>
+
+        {/* Tile 4: Certificates */}
+        <button
+          type="button"
+          onClick={() => {
+            if (certificates && certificates.length > 0) {
+              setSelectedCert(certificates[0]);
+            } else {
+              const el = document.getElementById("certificates-section");
               if (el) {
                 el.scrollIntoView({ behavior: "smooth" });
               }
-            }}
-            className="p-3.5 rounded-2xl bg-white hover:bg-purple-50/40 border border-purple-100 hover:border-purple-300 shadow-sm hover:shadow-md transition-all text-left flex flex-col justify-between min-h-[96px] cursor-pointer group active:scale-[0.98]"
-          >
-            <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-all shadow-xs">
-              <BookOpen className="w-4 h-4" />
-            </div>
-            <div className="mt-2">
-              <p className="text-xs font-extrabold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
-                My Courses
-              </p>
-              <span className="text-[10px] text-slate-500 font-semibold block mt-0.5 truncate">
-                {selectedCourse.title}
-              </span>
-            </div>
-          </button>
-
-          {/* Card 2: Live Classes */}
-          <button
-            type="button"
-            onClick={() => {
-              if (isApproved) {
-                setShowLiveModal(true);
-              } else {
-                setLockedNoticeSubject("Live Classroom");
-              }
-            }}
-            className="p-3.5 rounded-2xl bg-white hover:bg-purple-50/40 border border-purple-100 hover:border-purple-300 shadow-sm hover:shadow-md transition-all text-left flex flex-col justify-between min-h-[96px] cursor-pointer group active:scale-[0.98]"
-          >
-            <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center group-hover:bg-rose-600 group-hover:text-white transition-all shadow-xs">
-              <Radio className="w-4 h-4 animate-pulse" />
-            </div>
-            <div className="mt-2">
-              <p className="text-xs font-extrabold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
-                Live Classes
-              </p>
-              <span className="text-[10px] text-rose-600 font-semibold block mt-0.5">
-                {isApproved ? "Join Live Stream" : "Locked (Pending)"}
-              </span>
-            </div>
-          </button>
-
-          {/* Card 3: Downloads & Notes */}
-          <button
-            type="button"
-            onClick={() => setShowMaterialsModal(true)}
-            className="p-3.5 rounded-2xl bg-white hover:bg-purple-50/40 border border-purple-100 hover:border-purple-300 shadow-sm hover:shadow-md transition-all text-left flex flex-col justify-between min-h-[96px] cursor-pointer group active:scale-[0.98]"
-          >
-            <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-all shadow-xs">
-              <Download className="w-4 h-4" />
-            </div>
-            <div className="mt-2">
-              <p className="text-xs font-extrabold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
-                Downloads & Notes
-              </p>
-              <span className="text-[10px] text-slate-500 font-semibold block mt-0.5">
-                PDFs & Handbooks
-              </span>
-            </div>
-          </button>
-
-          {/* Card 4: My Certificates */}
-          <button
-            type="button"
-            onClick={() => {
-              if (certificates && certificates.length > 0) {
-                setSelectedCert(certificates[0]);
-              } else {
-                const el = document.getElementById("certificates-section");
-                if (el) {
-                  el.scrollIntoView({ behavior: "smooth" });
-                }
-              }
-            }}
-            className="p-3.5 rounded-2xl bg-white hover:bg-purple-50/40 border border-purple-100 hover:border-purple-300 shadow-sm hover:shadow-md transition-all text-left flex flex-col justify-between min-h-[96px] cursor-pointer group active:scale-[0.98]"
-          >
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-xs">
-              <Award className="w-4 h-4" />
-            </div>
-            <div className="mt-2">
-              <p className="text-xs font-extrabold text-slate-900 group-hover:text-purple-700 transition-colors leading-tight">
-                My Certificates
-              </p>
-              <span className="text-[10px] text-emerald-600 font-semibold block mt-0.5">
-                {certificates.length > 0 ? `${certificates.length} Issued` : "No certificates yet"}
-              </span>
-            </div>
-          </button>
-
-          {/* Widget A: Neumorphic Square Card containing Modern Donut Chart (Attendance Record) */}
-          <div className="col-span-1 bg-white rounded-3xl p-3 border border-purple-100/90 shadow-[5px_5px_15px_rgba(147,51,234,0.06),-5px_-5px_15px_rgba(255,255,255,0.95)] flex flex-col justify-between hover:border-purple-200 transition-all">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-purple-600 animate-pulse" />
-                <span className="text-[11px] font-extrabold text-slate-800">
-                  Attendance
-                </span>
-              </div>
-              <span className="text-[9px] font-black uppercase text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded-full border border-purple-100">
-                Donut
-              </span>
-            </div>
-
-            <div className="my-auto py-1">
-              <AttendanceDonutChart
-                compact={true}
-                presentCount={attendanceStats.present}
-                leaveCount={attendanceStats.leave}
-                absentCount={attendanceStats.absent}
-              />
-            </div>
+            }
+          }}
+          className="p-3.5 rounded-2xl bg-white border border-slate-100/90 shadow-2xs hover:shadow-xs active:scale-[0.98] transition-all text-left flex flex-col justify-between aspect-square max-h-[105px] cursor-pointer group"
+        >
+          <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center transition-transform group-hover:scale-105">
+            <Award className="w-4 h-4" />
           </div>
-
-          {/* Widget B: Companion Neumorphic Square Card - Attendance Health & Compliance */}
-          <div className="col-span-1 bg-white rounded-3xl p-3 border border-purple-100/90 shadow-[5px_5px_15px_rgba(147,51,234,0.06),-5px_-5px_15px_rgba(255,255,255,0.95)] flex flex-col justify-between hover:border-purple-200 transition-all">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                <span className="text-[11px] font-extrabold text-slate-800">
-                  Health & Streak
-                </span>
-              </div>
-              <span className={`text-[9px] font-black uppercase px-1.5 py-0.2 rounded-full border ${
-                attendanceStats.present + attendanceStats.leave + attendanceStats.absent === 0
-                  ? "text-slate-500 bg-slate-50 border-slate-200"
-                  : "text-emerald-700 bg-emerald-50 border-emerald-100"
-              }`}>
-                {attendanceStats.present + attendanceStats.leave + attendanceStats.absent === 0 ? "Standby" : "Good Standing"}
-              </span>
-            </div>
-
-            <div className="my-auto space-y-1.5 py-1">
-              <div className="p-2 rounded-xl bg-purple-50/60 border border-purple-100/60">
-                <span className="text-[9px] uppercase font-bold text-slate-400 block leading-none">
-                  Compliance Status
-                </span>
-                <span className="text-sm font-black text-purple-900 block mt-0.5">
-                  {attendanceStats.present + attendanceStats.leave + attendanceStats.absent === 0
-                    ? "No records yet"
-                    : attendanceStats.absent === 0
-                    ? "100% Verified"
-                    : `${attendanceStats.present} Attended`}
-                </span>
-              </div>
-              <p className="text-[9.5px] text-slate-500 font-medium leading-tight">
-                {attendanceStats.present + attendanceStats.leave + attendanceStats.absent === 0
-                  ? "Attendance will be logged automatically when live lectures begin."
-                  : attendanceStats.absent === 0
-                  ? "Zero unexcused absences recorded. Full exam eligibility active."
-                  : `${attendanceStats.absent} absences on record. Maintain >80% for certification.`}
-              </p>
-            </div>
-
-            <div className="pt-1.5 border-t border-purple-50 flex items-center justify-between text-[9.5px] text-purple-700 font-bold">
-              <span>Term Presence</span>
-              <span className="text-emerald-600 font-black">
-                {attendanceStats.present + attendanceStats.leave + attendanceStats.absent > 0
-                  ? `${Math.round((attendanceStats.present / (attendanceStats.present + attendanceStats.leave + attendanceStats.absent)) * 100)}%`
-                  : "—"}
-              </span>
-            </div>
-          </div>
-
-          {/* Widget C: Minimalist Bar Chart / Line Graph in a Wider Card (col-span-2) */}
-          <div className="col-span-2 bg-white rounded-3xl p-4 border border-purple-100/90 shadow-[5px_5px_15px_rgba(147,51,234,0.06),-5px_-5px_15px_rgba(255,255,255,0.95)] hover:border-purple-200 transition-all">
-            <ProgressScoreBarChart data={progressData} />
-          </div>
-        </div>
+          <span className="text-xs sm:text-[13px] font-semibold text-slate-800 tracking-tight">
+            Certificates
+          </span>
+        </button>
       </div>
 
       {/* 4. ANNOUNCEMENT BOARD / NOTICE BOARD (Prominently Placed for All Enrolled Students) */}
