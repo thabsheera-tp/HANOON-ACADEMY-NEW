@@ -36,10 +36,7 @@ ON CONFLICT (id) DO UPDATE SET
     public = true,
     file_size_limit = 52428800;
 
--- 2. ENABLE ROW-LEVEL SECURITY (RLS) ON storage.objects
-ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
-
--- 3. STORAGE RLS POLICY: SELECT (Download / Read PDF Notes)
+-- 2. STORAGE RLS POLICY: SELECT (Download / Read PDF Notes)
 -- Allows authenticated users (Admins, Teachers, Verifiers, Students) and public to view/download notes
 DROP POLICY IF EXISTS "Allow Authenticated Select Course Materials" ON storage.objects;
 DROP POLICY IF EXISTS "Public & Authenticated Read Course Materials" ON storage.objects;
@@ -50,7 +47,7 @@ ON storage.objects FOR SELECT
 TO authenticated, anon
 USING (bucket_id IN ('course-materials', 'pdf-notes'));
 
--- 4. STORAGE RLS POLICY: INSERT (Upload PDF Notes)
+-- 3. STORAGE RLS POLICY: INSERT (Upload PDF Notes)
 -- Explicitly allows authenticated users (Admins, Teachers, Verifiers) to upload new PDFs
 DROP POLICY IF EXISTS "Allow Authenticated Insert Course Materials" ON storage.objects;
 DROP POLICY IF EXISTS "Allow Upload Course Materials" ON storage.objects;
@@ -60,7 +57,7 @@ ON storage.objects FOR INSERT
 TO authenticated, anon
 WITH CHECK (bucket_id IN ('course-materials', 'pdf-notes'));
 
--- 5. STORAGE RLS POLICY: UPDATE (Modify / Replace PDF Notes)
+-- 4. STORAGE RLS POLICY: UPDATE (Modify / Replace PDF Notes)
 -- Allows authenticated staff to update existing PDFs
 DROP POLICY IF EXISTS "Allow Authenticated Update Course Materials" ON storage.objects;
 DROP POLICY IF EXISTS "Allow Update Course Materials" ON storage.objects;
@@ -70,7 +67,7 @@ ON storage.objects FOR UPDATE
 TO authenticated, anon
 USING (bucket_id IN ('course-materials', 'pdf-notes'));
 
--- 6. STORAGE RLS POLICY: DELETE (Remove Outdated PDF Notes)
+-- 5. STORAGE RLS POLICY: DELETE (Remove Outdated PDF Notes)
 -- Allows authenticated staff to delete PDFs from storage
 DROP POLICY IF EXISTS "Allow Authenticated Delete Course Materials" ON storage.objects;
 DROP POLICY IF EXISTS "Allow Delete Course Materials" ON storage.objects;
@@ -80,7 +77,7 @@ ON storage.objects FOR DELETE
 TO authenticated, anon
 USING (bucket_id IN ('course-materials', 'pdf-notes'));
 
--- 7. ENSURE DATABASE TABLE `live_classes` SUPPORTS DIRECT PDF NOTES
+-- 6. ENSURE DATABASE TABLE `live_classes` SUPPORTS DIRECT PDF NOTES
 ALTER TABLE public.live_classes ALTER COLUMN teacher_id DROP NOT NULL;
 ALTER TABLE public.live_classes ADD COLUMN IF NOT EXISTS notes_pdf_url TEXT;
 ALTER TABLE public.live_classes ADD COLUMN IF NOT EXISTS recording_url TEXT;
