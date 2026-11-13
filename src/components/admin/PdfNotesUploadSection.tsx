@@ -41,6 +41,7 @@ import {
   triggerNotesUploadedNotification,
   triggerRecordedClassNotification,
 } from "@/services/notificationService";
+import { uploadPdfToSupabaseStorage } from "@/services/storageService";
 import { SHOWCASE_COURSES } from "@/components/mobile/ScreenCoursesList";
 
 interface PdfNotesUploadSectionProps {
@@ -139,7 +140,7 @@ export default function PdfNotesUploadSection({
     SHOWCASE_COURSES.find((c) => c.id === recCourseId) || SHOWCASE_COURSES[0];
   const isRecAdaviyya = recCourseId === "adaviyya";
 
-  // PDF File Selection & Data URL Reader (Enforces 60MB file restriction with 50MB label)
+  // PDF File Selection (Direct File binding for Supabase Storage, max 50MB)
   const handlePdfFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -149,7 +150,7 @@ export default function PdfNotesUploadSection({
       return;
     }
 
-    if (file.size > 60 * 1024 * 1024) {
+    if (file.size > 50 * 1024 * 1024) {
       setErrorMessage("File exceeds 50MB limit. Please upload an optimized PDF (Max size: 50MB).");
       return;
     }
@@ -160,15 +161,6 @@ export default function PdfNotesUploadSection({
 
     const sizeInMb = (file.size / (1024 * 1024)).toFixed(1);
     setPdfFileSize(`${sizeInMb} MB`);
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      if (dataUrl) {
-        setPdfFileDataUrl(dataUrl);
-      }
-    };
-    reader.readAsDataURL(file);
   };
 
   const handleClearPdfFile = () => {
@@ -206,25 +198,39 @@ export default function PdfNotesUploadSection({
       return;
     }
 
-    const finalPdfUrl = pdfFileDataUrl || customPdfUrl.trim();
-    const finalPdfTitle =
-      pdfFileName || (finalPdfUrl ? `${pdfChapterTitle.trim()}.pdf` : "");
-    const finalSize = pdfFileSize || (finalPdfUrl ? "3.5 MB" : "Official PDF");
-
-    if (!finalPdfUrl) {
-      setErrorMessage("Please select a PDF file (.pdf) or provide a direct PDF document URL.");
+    if (!pdfFile && !customPdfUrl.trim()) {
+      setErrorMessage("Please select a PDF file (.pdf) to upload or provide a direct PDF document URL.");
       return;
     }
 
     setIsSubmittingPdf(true);
     setErrorMessage(null);
+    setSuccessMessage(null);
 
     try {
+      let finalPdfUrl = customPdfUrl.trim();
+      let finalPdfTitle = pdfFileName || `${pdfChapterTitle.trim()}.pdf`;
+      let finalSize = pdfFileSize || "Official PDF";
+
+      // 1. SUPABASE STORAGE UPLOAD WITH STRICT ERROR HANDLING
+      if (pdfFile) {
+        const uploadResult = await uploadPdfToSupabaseStorage(pdfFile, "notes");
+        if (!uploadResult.success || !uploadResult.publicUrl) {
+          // Stop loading and display exact storage/RLS error immediately
+          setErrorMessage(uploadResult.error || "Failed to upload PDF to Supabase Storage.");
+          setIsSubmittingPdf(false);
+          return;
+        }
+        finalPdfUrl = uploadResult.publicUrl;
+        finalPdfTitle = pdfFile.name;
+        finalSize = pdfFileSize || `${(pdfFile.size / (1024 * 1024)).toFixed(1)} MB`;
+      }
+
       const subjectObj = adaviyyaSubjects.find((s) => s.id === pdfSubjectId);
       const subjectName = isPdfAdaviyya && subjectObj ? subjectObj.name : undefined;
 
-      // 1. Save PDF notes to Supabase & Course Materials
-      await saveRecordedClassToSupabase({
+      // 2. DATABASE INSERTION WITH STRICT ERROR CHECKING
+      const dbResult = await saveRecordedClassToSupabase({
         title: pdfChapterTitle.trim(),
         courseId: pdfCourseId,
         courseName: selectedPdfCourse.title,
@@ -239,7 +245,13 @@ export default function PdfNotesUploadSection({
         duration: pdfEstimatedDuration,
       });
 
-      // 2. Trigger instant PDF Notes notification to enrolled students
+      if (!dbResult.success) {
+        setErrorMessage(dbResult.error || "Database insertion failed for this PDF note.");
+        setIsSubmittingPdf(false);
+        return;
+      }
+
+      // 3. Trigger instant PDF Notes notification to enrolled students
       triggerNotesUploadedNotification({
         chapterTitle: pdfChapterTitle.trim(),
         courseName: selectedPdfCourse.title,
@@ -251,17 +263,18 @@ export default function PdfNotesUploadSection({
         senderName: currentUserName,
       });
 
-      // 3. Refresh full upload history across all courses
+      // 4. REFRESH FULL UPLOAD HISTORY IMMEDIATELY
       await loadUploadHistory();
 
+      // 5. SUCCESS FEEDBACK & FORM RESET
       setSuccessMessage(
-        `📚 PDF Notes "${finalPdfTitle}" uploaded successfully and broadcasted to enrolled students!`
+        `📚 PDF Notes "${finalPdfTitle}" uploaded successfully to Supabase Storage and published to students!`
       );
       handleResetPdfForm();
-      setTimeout(() => setSuccessMessage(null), 5000);
-    } catch (err) {
+      setTimeout(() => setSuccessMessage(null), 6000);
+    } catch (err: any) {
       console.error("Failed to upload PDF notes:", err);
-      setErrorMessage("Failed to upload PDF notes. Please try again.");
+      setErrorMessage(`Upload Failed: ${err?.message || "Please check Supabase Storage RLS and network connection."}`);
     } finally {
       setIsSubmittingPdf(false);
     }
@@ -291,7 +304,7 @@ export default function PdfNotesUploadSection({
       const subjectName = isRecAdaviyya && subjectObj ? subjectObj.name : undefined;
 
       // 1. Save Recorded Class Link to Supabase & Course Materials
-      await saveRecordedClassToSupabase({
+      const saveRes = await saveRecordedClassToSupabase({
         title: recClassTitle.trim(),
         courseId: recCourseId,
         courseName: selectedRecCourse.title,
@@ -303,6 +316,12 @@ export default function PdfNotesUploadSection({
         teacherName: currentUserName,
         duration: recEstimatedDuration,
       });
+
+      if (!saveRes.success) {
+        setErrorMessage(saveRes.error || "Failed to save recorded class to Supabase database.");
+        setIsSubmittingRecorded(false);
+        return;
+      }
 
       // 2. Trigger instant Recorded Class notification to enrolled students
       triggerRecordedClassNotification({
@@ -460,16 +479,36 @@ export default function PdfNotesUploadSection({
 
       {/* Success & Error Notifications */}
       {successMessage && (
-        <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs sm:text-sm font-bold flex items-center gap-3 animate-fade-in shadow-xs">
-          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-          <span>{successMessage}</span>
+        <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs sm:text-sm font-bold flex items-center justify-between gap-3 animate-fade-in shadow-xs">
+          <div className="flex items-center gap-3 min-w-0">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <span className="leading-relaxed">{successMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSuccessMessage(null)}
+            className="p-1 rounded-lg hover:bg-emerald-100 text-emerald-700 cursor-pointer shrink-0"
+            aria-label="Dismiss success message"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
       {errorMessage && (
-        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs sm:text-sm font-bold flex items-center gap-3 animate-fade-in shadow-xs">
-          <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
-          <span>{errorMessage}</span>
+        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs sm:text-sm font-bold flex items-center justify-between gap-3 animate-fade-in shadow-xs">
+          <div className="flex items-center gap-3 min-w-0">
+            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+            <span className="leading-relaxed break-words">{errorMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setErrorMessage(null)}
+            className="p-1 rounded-lg hover:bg-rose-100 text-rose-700 cursor-pointer shrink-0"
+            aria-label="Dismiss error message"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 

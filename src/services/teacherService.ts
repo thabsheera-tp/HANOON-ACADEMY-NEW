@@ -485,9 +485,15 @@ export async function fetchCourseMaterialsFromSupabase(courseId?: string): Promi
     }
   }
 
-  // Merge any local-only materials that are not in the Supabase set
+  // Merge any local-only materials that are not in the Supabase set, filtering out legacy bloated data URLs
   const localMaterials = getCourseMaterials();
   localMaterials.forEach((local) => {
+    const isBloatedDataUrl =
+      (typeof local.fileOrUrl === "string" && local.fileOrUrl.startsWith("data:application/pdf") && local.fileOrUrl.length > 10000) ||
+      (typeof local.pdfUrl === "string" && local.pdfUrl.startsWith("data:application/pdf") && local.pdfUrl.length > 10000);
+
+    if (isBloatedDataUrl) return;
+
     const isDuplicate =
       seenUrls.has(local.fileOrUrl) ||
       (local.recordingUrl && seenUrls.has(local.recordingUrl)) ||
@@ -701,8 +707,30 @@ export async function saveRecordedClassToSupabase(
         if (payload.pdfUrl) {
           updatePayload.notes_pdf_url = payload.pdfUrl;
         }
-        await supabase.from("live_classes").update(updatePayload).eq("id", targetId);
+        const { error: updateErr } = await supabase.from("live_classes").update(updatePayload).eq("id", targetId);
+        if (updateErr) {
+          console.error("live_classes update error:", updateErr);
+          return { success: false, error: `Database update error: ${updateErr.message}` };
+        }
       } else {
+        // Resolve guaranteed teacher_id to satisfy database NOT NULL constraint
+        let resolvedTeacherId =
+          payload.teacherId && !payload.teacherId.startsWith("custom-")
+            ? payload.teacherId
+            : undefined;
+
+        if (!resolvedTeacherId) {
+          try {
+            const { data: tch } = await supabase.from("teachers").select("id").limit(1);
+            if (tch && tch.length > 0) {
+              resolvedTeacherId = tch[0].id;
+            }
+          } catch {}
+          if (!resolvedTeacherId) {
+            resolvedTeacherId = "tch-1792073086500-kgyy";
+          }
+        }
+
         const { data: inserted, error: insertErr } = await supabase
           .from("live_classes")
           .insert({
@@ -717,19 +745,23 @@ export async function saveRecordedClassToSupabase(
             duration_minutes: parseInt(payload.duration || "45") || 45,
             status: "COMPLETED",
             attendees_count: Math.floor(Math.random() * 30) + 75,
-            teacher_id: payload.teacherId && !payload.teacherId.startsWith("custom-") ? payload.teacherId : undefined,
+            teacher_id: resolvedTeacherId,
           })
           .select("id")
           .single();
 
+        if (insertErr) {
+          console.error("live_classes insert error:", insertErr);
+          return { success: false, error: `Database insertion error: ${insertErr.message}` };
+        }
+
         if (inserted?.id) {
           generatedClassId = inserted.id;
-        } else if (insertErr) {
-          console.warn("live_classes Supabase insert warning:", insertErr.message);
         }
       }
     } catch (err: any) {
-      console.warn("Could not sync recorded class to Supabase live_classes:", err);
+      console.error("Could not sync recorded class to Supabase live_classes:", err);
+      return { success: false, error: `Database connection error: ${err?.message || String(err)}` };
     }
   }
 

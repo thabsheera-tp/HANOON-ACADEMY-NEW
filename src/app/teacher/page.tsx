@@ -39,6 +39,7 @@ import {
   triggerRecordedClassNotification,
   triggerClassLiveNotification,
 } from "@/services/notificationService";
+import { uploadPdfToSupabaseStorage } from "@/services/storageService";
 import HanoonLogo from "@/components/brand/HanoonLogo";
 import TeacherEngagementDonut from "@/components/charts/TeacherEngagementDonut";
 import AdminMetricsChart from "@/components/charts/AdminMetricsChart";
@@ -475,8 +476,7 @@ export default function TeacherDashboardPage() {
       return;
     }
 
-    const finalPdfUrl = teacherPdfDataUrl || teacherPdfForm.customUrl.trim();
-    if (!finalPdfUrl) {
+    if (!teacherPdfFile && !teacherPdfForm.customUrl.trim()) {
       alert("Please attach a PDF document file (.pdf) or provide a direct PDF link.");
       return;
     }
@@ -490,11 +490,30 @@ export default function TeacherDashboardPage() {
     };
     const courseName = courseMap[teacherPdfForm.courseId] || "Adaviyya";
     const teacherId = resolveTeacherId(currentUser);
-    const finalPdfTitle = teacherPdfFileName || `${teacherPdfForm.title.trim()}.pdf`;
-    const finalSize = teacherPdfFileSize || "3.5 MB";
+    let finalPdfTitle = teacherPdfFileName || `${teacherPdfForm.title.trim()}.pdf`;
+    let finalSize = teacherPdfFileSize || "3.5 MB";
+    let finalPdfUrl = teacherPdfForm.customUrl.trim();
 
     try {
-      await saveRecordedClassToSupabase({
+      if (teacherPdfFile) {
+        const uploadRes = await uploadPdfToSupabaseStorage(teacherPdfFile, "notes");
+        if (!uploadRes.success || !uploadRes.publicUrl) {
+          alert(`❌ Storage Error: ${uploadRes.error}`);
+          setIsSubmittingTeacherPdf(false);
+          return;
+        }
+        finalPdfUrl = uploadRes.publicUrl;
+        finalPdfTitle = teacherPdfFile.name;
+        finalSize = teacherPdfFileSize || `${(teacherPdfFile.size / (1024 * 1024)).toFixed(1)} MB`;
+      }
+
+      if (!finalPdfUrl) {
+        alert("Please provide a valid PDF file or direct document URL.");
+        setIsSubmittingTeacherPdf(false);
+        return;
+      }
+
+      const saveRes = await saveRecordedClassToSupabase({
         title: teacherPdfForm.title.trim(),
         courseId: teacherPdfForm.courseId,
         courseName,
@@ -507,6 +526,12 @@ export default function TeacherDashboardPage() {
         teacherName: currentUser?.full_name || "Faculty",
         duration: teacherPdfForm.duration,
       });
+
+      if (!saveRes.success) {
+        alert(`❌ Database Error: ${saveRes.error}`);
+        setIsSubmittingTeacherPdf(false);
+        return;
+      }
 
       uploadCourseMaterial({
         title: `${teacherPdfForm.title.trim()} - Study Notes`,
@@ -544,12 +569,12 @@ export default function TeacherDashboardPage() {
       setTeacherPdfFileName("");
       setTeacherPdfFileSize("");
       setTeacherPdfDataUrl("");
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to upload PDF notes:", err);
-      setUploadSuccessMsg("Failed to upload PDF notes. Please try again.");
+      setUploadSuccessMsg(`Failed to upload PDF notes: ${err?.message || "Please check Supabase Storage connection."}`);
     } finally {
       setIsSubmittingTeacherPdf(false);
-      setTimeout(() => setUploadSuccessMsg(null), 4000);
+      setTimeout(() => setUploadSuccessMsg(null), 5000);
     }
   };
 
