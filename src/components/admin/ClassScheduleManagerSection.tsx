@@ -1243,9 +1243,9 @@ export default function ClassScheduleManagerSection({
                           </button>
 
                           {/* Recorded Class Watch Button */}
-                          {(item.recordingUrl || (item as any).recording_url) && (
+                          {(item.recordingUrl || (item as any).recording_url || (item as any).recorded_video_link) && (
                             <a
-                              href={item.recordingUrl || (item as any).recording_url}
+                              href={(item as any).recorded_video_link || item.recordingUrl || (item as any).recording_url}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="py-1 px-2.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer"

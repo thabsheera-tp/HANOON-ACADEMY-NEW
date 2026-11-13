@@ -363,7 +363,11 @@ export default function SpecialClassModal({
               </div>
 
               {/* Recorded Session Replay Link */}
-              {Boolean((specialClass as any).recordingUrl || (specialClass as any).recording_url) && (
+              {Boolean(
+                (specialClass as any).recorded_video_link ||
+                (specialClass as any).recordingUrl ||
+                (specialClass as any).recording_url
+              ) && (
                 <div className="p-3.5 rounded-2xl bg-purple-50 border border-purple-200 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-900">Recorded Class Replay</span>
@@ -372,7 +376,11 @@ export default function SpecialClassModal({
                     </span>
                   </div>
                   <a
-                    href={(specialClass as any).recordingUrl || (specialClass as any).recording_url}
+                    href={
+                      (specialClass as any).recorded_video_link ||
+                      (specialClass as any).recordingUrl ||
+                      (specialClass as any).recording_url
+                    }
                     target="_blank"
                     rel="noopener noreferrer"
                     className="w-full py-2.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer"

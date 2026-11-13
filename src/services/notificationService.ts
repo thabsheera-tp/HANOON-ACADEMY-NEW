@@ -19,6 +19,10 @@ export interface AppNotification {
   targetCourseId?: string;
   targetCourseName?: string;
   meetingLink?: string;
+  live_meet_link?: string;
+  class_link?: string;
+  recordingUrl?: string;
+  recorded_video_link?: string;
   platform?: "Zoom" | "Google Meet";
   pdfUrl?: string;
   pdfTitle?: string;
@@ -333,7 +337,8 @@ export function triggerRecordedClassNotification(params: {
     targetRole: "students",
     targetCourseId: courseId,
     targetCourseName: courseName,
-    meetingLink: recordingUrl,
+    recordingUrl,
+    recorded_video_link: recordingUrl,
     senderName: senderName || teacherName || "Academic Faculty",
     priority: "high",
   });
@@ -354,7 +359,14 @@ export interface CompactNotificationView {
 export function formatCompactNotification(item: AppNotification): CompactNotificationView {
   const isVideo =
     item.type === "BROADCAST" ||
-    Boolean(item.meetingLink && (item.meetingLink.includes("drive.google.com") || item.meetingLink.includes("youtube") || item.meetingLink.includes("youtu.be"))) ||
+    Boolean(
+      item.recordingUrl ||
+      item.recorded_video_link ||
+      (item.meetingLink &&
+        (item.meetingLink.includes("drive.google.com") ||
+          item.meetingLink.includes("youtube") ||
+          item.meetingLink.includes("youtu.be")))
+    ) ||
     item.title.toLowerCase().includes("recorded") ||
     item.message.toLowerCase().includes("recording") ||
     item.message.toLowerCase().includes("youtube") ||
@@ -378,7 +390,19 @@ export function formatCompactNotification(item: AppNotification): CompactNotific
     }
   } catch {}
 
-  const targetUrl = item.meetingLink || item.pdfUrl;
+  // STRICT SEPARATION: Live Meet Link vs Recorded Video Link
+  let targetUrl: string | undefined = undefined;
+  if (isVideo) {
+    const recCandidate =
+      item.recorded_video_link ||
+      item.recordingUrl ||
+      ((item.meetingLink && !item.meetingLink.includes("meet.google.com") && !item.meetingLink.includes("zoom.us")) ? item.meetingLink : undefined);
+    targetUrl = recCandidate;
+  } else if (isPdf) {
+    targetUrl = item.pdfUrl;
+  } else {
+    targetUrl = item.meetingLink || item.pdfUrl;
+  }
 
   // Extract quoted text if present: e.g. "Haddad class 3"
   const quoteMatch = item.message.match(/"([^"]+)"/);

@@ -239,7 +239,11 @@ export default function CourseMaterialsModal({
                         <button
                           type="button"
                           onClick={() => {
-                            const link = activeLesson.recordingUrl || activeLesson.fileOrUrl;
+                            const link =
+                              (activeLesson as any).recorded_video_link ||
+                              activeLesson.recordingUrl ||
+                              (activeLesson as any).recording_url ||
+                              (activeLesson.fileOrUrl && !activeLesson.fileOrUrl.includes("meet.google.com") && !activeLesson.fileOrUrl.includes("zoom.us") ? activeLesson.fileOrUrl : null);
                             if (link && link.startsWith("http")) {
                               window.open(link, "_blank", "noopener,noreferrer");
                             } else {
@@ -261,25 +265,39 @@ export default function CourseMaterialsModal({
                     </div>
 
                     {/* Prominent Watch Recorded Class Button */}
-                    {(activeLesson.recordingUrl || (activeLesson.fileOrUrl && activeLesson.fileOrUrl.startsWith("http"))) && (
-                      <a
-                        href={activeLesson.recordingUrl || activeLesson.fileOrUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-full py-2.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-[0.98] text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer"
-                        title="Open Google Drive or YouTube recorded class link"
-                      >
-                        <Play className="w-3.5 h-3.5 fill-white" />
-                        <span>▶️ Watch Recorded Class</span>
-                      </a>
-                    )}
+                    {(() => {
+                      const videoHref =
+                        (activeLesson as any).recorded_video_link ||
+                        activeLesson.recordingUrl ||
+                        (activeLesson as any).recording_url ||
+                        (activeLesson.fileOrUrl && !activeLesson.fileOrUrl.includes("meet.google.com") && !activeLesson.fileOrUrl.includes("zoom.us") ? activeLesson.fileOrUrl : null);
+
+                      if (!videoHref || !videoHref.startsWith("http")) return null;
+
+                      return (
+                        <a
+                          href={videoHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full py-2.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-[0.98] text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                          title="Open Google Drive or YouTube recorded class link"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-white" />
+                          <span>▶️ Watch Recorded Class</span>
+                        </a>
+                      );
+                    })()}
                   </div>
                 )}
 
                 {/* Playlist */}
                 <div className="space-y-2">
                   {videoMaterials.map((ch, idx) => {
-                    const videoLink = ch.recordingUrl || (ch.fileOrUrl?.startsWith("http") ? ch.fileOrUrl : undefined);
+                    const videoLink =
+                      (ch as any).recorded_video_link ||
+                      ch.recordingUrl ||
+                      (ch as any).recording_url ||
+                      (ch.fileOrUrl && !ch.fileOrUrl.includes("meet.google.com") && !ch.fileOrUrl.includes("zoom.us") && ch.fileOrUrl.startsWith("http") ? ch.fileOrUrl : undefined);
                     return (
                       <div
                         key={ch.id}

@@ -1834,8 +1834,8 @@ export default function TeacherDashboardPage() {
                 ) : (
                   accessibleMaterials.map((mat) => {
                     const isPdf = mat.type === "PDF";
-                    const isVideo = mat.type === "VIDEO" || Boolean(mat.recordingUrl);
-                    const videoLink = mat.recordingUrl || (isVideo ? mat.fileOrUrl : null);
+                    const isVideo = mat.type === "VIDEO" || Boolean(mat.recordingUrl || (mat as any).recorded_video_link || (mat as any).recording_url);
+                    const videoLink = (mat as any).recorded_video_link || mat.recordingUrl || (mat as any).recording_url || (isVideo ? mat.fileOrUrl : null);
 
                     return (
                       <div

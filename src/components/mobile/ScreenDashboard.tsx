@@ -301,28 +301,47 @@ export default function ScreenDashboard({
         ]);
 
         const recordedFromMaterials = (materials || [])
-          .filter((m) => (m.type === "VIDEO" || Boolean(m.recordingUrl)) && Boolean(m.recordingUrl || m.fileOrUrl))
-          .map((m) => ({
-            id: m.id,
-            title: m.title,
-            url: (m.recordingUrl || m.fileOrUrl)!,
-            date: m.sessionDate,
-            subjectName: m.courseName,
-            teacherName: m.teacherName,
-            duration: m.sizeOrDuration,
-          }));
+          .filter((m) => (m.type === "VIDEO" || Boolean(m.recordingUrl || (m as any).recorded_video_link)) && Boolean((m as any).recorded_video_link || m.recordingUrl || m.fileOrUrl))
+          .map((m) => {
+            // STRICT SEPARATION: strictly map to recorded video link column, NEVER live_meet_link or class_link
+            const videoUrl =
+              (m as any).recorded_video_link ||
+              m.recordingUrl ||
+              (m as any).recording_url ||
+              (m.type === "VIDEO" && m.fileOrUrl && !m.fileOrUrl.includes("meet.google.com") && !m.fileOrUrl.includes("zoom.us") ? m.fileOrUrl : "");
+
+            return {
+              id: m.id,
+              title: m.title,
+              url: videoUrl,
+              date: m.sessionDate,
+              subjectName: m.courseName,
+              teacherName: m.teacherName,
+              duration: m.sizeOrDuration,
+            };
+          })
+          .filter((m) => Boolean(m.url));
 
         const recordedFromClasses = (cls || [])
-          .filter((c) => Boolean(c.recordingUrl || (c as any).recording_url))
-          .map((c) => ({
-            id: c.id,
-            title: c.title,
-            url: (c.recordingUrl || (c as any).recording_url)!,
-            date: c.date,
-            subjectName: c.courseName,
-            teacherName: c.teacherName,
-            duration: c.duration,
-          }));
+          .filter((c) => Boolean((c as any).recorded_video_link || c.recordingUrl || (c as any).recording_url))
+          .map((c) => {
+            // STRICT SEPARATION: strictly map to recorded_video_link column, NEVER meetingLink, live_meet_link, or class_link
+            const recordedUrl =
+              (c as any).recorded_video_link ||
+              c.recordingUrl ||
+              (c as any).recording_url;
+
+            return {
+              id: c.id,
+              title: c.title,
+              url: recordedUrl || "",
+              date: c.date,
+              subjectName: c.courseName,
+              teacherName: c.teacherName,
+              duration: c.duration,
+            };
+          })
+          .filter((c) => Boolean(c.url));
 
         const combinedMap = new Map<string, (typeof recordedFromMaterials)[0]>();
         [...recordedFromClasses, ...recordedFromMaterials].forEach((item) => {

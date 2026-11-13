@@ -10,6 +10,8 @@ export interface LiveClassSession {
   time: string;
   duration: string;
   meetingLink: string;
+  live_meet_link?: string;
+  class_link?: string;
   platform: "Zoom" | "Google Meet";
   status: "SCHEDULED" | "LIVE_NOW" | "COMPLETED";
   attendeesCount: number;
@@ -22,6 +24,7 @@ export interface LiveClassSession {
   subjectId?: string;
   recordingUrl?: string;
   recording_url?: string;
+  recorded_video_link?: string;
   notesPdfUrl?: string;
 }
 
@@ -37,6 +40,8 @@ export interface CourseMaterial {
   fileOrUrl: string;
   pdfUrl?: string;
   recordingUrl?: string;
+  recording_url?: string;
+  recorded_video_link?: string;
   sessionDate?: string;
   sizeOrDuration: string;
   uploadedAt: string;
@@ -126,6 +131,9 @@ export async function fetchLiveClassesFromSupabase(courseId?: string): Promise<L
               timeStr = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
             } catch {}
           }
+          const liveMeetUrl = row.live_meet_link || row.class_link || row.meeting_link || "";
+          const recordedVideoUrl = row.recorded_video_link || row.recording_url || row.recorded_link || undefined;
+
           return {
             id: row.id,
             title: row.title,
@@ -134,15 +142,18 @@ export async function fetchLiveClassesFromSupabase(courseId?: string): Promise<L
             date: dateStr,
             time: timeStr,
             duration: `${row.duration_minutes || 60} mins`,
-            meetingLink: row.meeting_link || "",
-            platform: (row.meeting_link?.toLowerCase().includes("zoom") ? "Zoom" : "Google Meet") as "Zoom" | "Google Meet",
+            meetingLink: liveMeetUrl,
+            live_meet_link: row.live_meet_link || liveMeetUrl,
+            class_link: row.class_link || liveMeetUrl,
+            platform: (liveMeetUrl.toLowerCase().includes("zoom") ? "Zoom" : "Google Meet") as "Zoom" | "Google Meet",
             status: (row.status || "SCHEDULED") as "SCHEDULED" | "LIVE_NOW" | "COMPLETED",
             attendeesCount: row.attendees_count || 0,
             teacher_id: row.teacher_id,
             teacherName: row.teacher?.full_name || row.teacher_name,
             subjectName: row.subject_id,
-            recordingUrl: row.recording_url || undefined,
-            recording_url: row.recording_url || undefined,
+            recordingUrl: recordedVideoUrl,
+            recording_url: recordedVideoUrl,
+            recorded_video_link: recordedVideoUrl,
             notesPdfUrl: row.notes_pdf_url || undefined,
           };
         });
@@ -321,8 +332,7 @@ export async function fetchCourseMaterialsFromSupabase(courseId?: string): Promi
       // 1. Fetch ALL recorded classes and notes from live_classes (no limit)
       let liveQuery = supabase
         .from("live_classes")
-        .select("id, title, course_id, subject_id, notes_pdf_url, recording_url, scheduled_at, created_at, duration_minutes, teacher:teachers(full_name)")
-        .or("notes_pdf_url.is.not.null,recording_url.is.not.null")
+        .select("*, teacher:teachers(full_name)")
         .order("created_at", { ascending: false });
 
       if (courseId) {
@@ -375,9 +385,10 @@ export async function fetchCourseMaterialsFromSupabase(courseId?: string): Promi
             });
           }
 
-          // Recorded Video Entry
-          if (row.recording_url && !seenUrls.has(row.recording_url)) {
-            seenUrls.add(row.recording_url);
+          // Recorded Video Entry (Strictly map recorded_video_link / recording_url, NOT meeting_link)
+          const recordedVideoUrl = row.recorded_video_link || row.recording_url || row.recorded_link;
+          if (recordedVideoUrl && !seenUrls.has(recordedVideoUrl)) {
+            seenUrls.add(recordedVideoUrl);
             dynamicMaterials.push({
               id: `rec-${row.id}`,
               dbId: row.id,
@@ -387,8 +398,10 @@ export async function fetchCourseMaterialsFromSupabase(courseId?: string): Promi
               subjectId: row.subject_id,
               subjectName: resolvedSubjectName,
               type: "VIDEO",
-              fileOrUrl: row.recording_url,
-              recordingUrl: row.recording_url,
+              fileOrUrl: recordedVideoUrl,
+              recordingUrl: recordedVideoUrl,
+              recording_url: recordedVideoUrl,
+              recorded_video_link: recordedVideoUrl,
               sessionDate: classDateStr,
               sizeOrDuration: row.duration_minutes ? `${row.duration_minutes} mins` : "Recorded Session",
               uploadedAt: uploadDateFormatted,
@@ -403,8 +416,7 @@ export async function fetchCourseMaterialsFromSupabase(courseId?: string): Promi
       // 2. Fetch special classes records (no limit)
       let spcQuery = supabase
         .from("special_classes")
-        .select("id, title, category, instructor, schedule_time, recording_url, pdf_title, pdf_size, created_at")
-        .or("recording_url.is.not.null,pdf_title.is.not.null")
+        .select("*")
         .order("created_at", { ascending: false });
 
       const { data: spcData, error: spcErr } = await spcQuery;
@@ -422,8 +434,9 @@ export async function fetchCourseMaterialsFromSupabase(courseId?: string): Promi
             } catch {}
           }
 
-          if (row.recording_url && !seenUrls.has(row.recording_url)) {
-            seenUrls.add(row.recording_url);
+          const spcRecUrl = row.recorded_video_link || row.recording_url || row.recorded_link;
+          if (spcRecUrl && !seenUrls.has(spcRecUrl)) {
+            seenUrls.add(spcRecUrl);
             dynamicMaterials.push({
               id: `spc-rec-${row.id}`,
               dbId: row.id,
@@ -432,8 +445,10 @@ export async function fetchCourseMaterialsFromSupabase(courseId?: string): Promi
               courseName: "Special Classes",
               subjectName: row.category || "Masterclass",
               type: "VIDEO",
-              fileOrUrl: row.recording_url,
-              recordingUrl: row.recording_url,
+              fileOrUrl: spcRecUrl,
+              recordingUrl: spcRecUrl,
+              recording_url: spcRecUrl,
+              recorded_video_link: spcRecUrl,
               sessionDate,
               sizeOrDuration: "Recorded Session",
               uploadedAt: uploadDateFormatted,
@@ -679,6 +694,7 @@ export async function saveRecordedClassToSupabase(
         generatedClassId = targetId;
         const updatePayload: Record<string, any> = {
           recording_url: cleanLink || undefined,
+          recorded_video_link: cleanLink || undefined,
           status: "COMPLETED",
           scheduled_at: scheduledAt,
         };
@@ -693,8 +709,9 @@ export async function saveRecordedClassToSupabase(
             title: finalTitle,
             course_id: payload.courseId,
             subject_id: payload.subjectId || undefined,
-            meeting_link: cleanLink || "https://zoom.us/j/hanoon-faculty-live",
+            meeting_link: "https://zoom.us/j/hanoon-faculty-live",
             recording_url: cleanLink || null,
+            recorded_video_link: cleanLink || null,
             notes_pdf_url: payload.pdfUrl || null,
             scheduled_at: scheduledAt,
             duration_minutes: parseInt(payload.duration || "45") || 45,
@@ -747,6 +764,8 @@ export async function saveRecordedClassToSupabase(
       type: "VIDEO",
       fileOrUrl: cleanLink,
       recordingUrl: cleanLink,
+      recording_url: cleanLink,
+      recorded_video_link: cleanLink,
       sessionDate: classDate,
       sizeOrDuration: payload.duration || "Recorded Session",
       teacherName: payload.teacherName || "Faculty Instructor",
@@ -778,8 +797,8 @@ export async function saveRecordedClassToSupabase(
     date: classDate,
     time: classTime,
     duration: payload.duration || "45 mins",
-    meetingLink: cleanLink || "https://zoom.us/j/hanoon-faculty-live",
-    platform: cleanLink.includes("zoom") ? "Zoom" : "Google Meet",
+    meetingLink: "https://zoom.us/j/hanoon-faculty-live",
+    platform: "Zoom",
     status: "COMPLETED",
     attendeesCount: Math.floor(Math.random() * 25) + 80,
     teacher_id: payload.teacherId,
@@ -787,6 +806,7 @@ export async function saveRecordedClassToSupabase(
     subjectName: payload.subjectName || payload.subjectId,
     recordingUrl: cleanLink,
     recording_url: cleanLink,
+    recorded_video_link: cleanLink,
     notesPdfUrl: payload.pdfUrl,
   };
 

@@ -399,7 +399,7 @@ export default function PdfNotesUploadSection({
   // Filtered materials for full history view
   const filteredMaterials = materials.filter((m) => {
     const matchesCourse = filterCourse === "ALL" || m.courseId === filterCourse;
-    const isVideo = m.type === "VIDEO" || Boolean(m.recordingUrl);
+    const isVideo = m.type === "VIDEO" || Boolean(m.recordingUrl || (m as any).recorded_video_link || (m as any).recording_url);
     const isPdf = m.type === "PDF" || Boolean(m.pdfUrl);
 
     let matchesType = true;
@@ -420,7 +420,7 @@ export default function PdfNotesUploadSection({
 
   const pdfCount = materials.filter((m) => m.type === "PDF" || Boolean(m.pdfUrl)).length;
   const recordedCount = materials.filter(
-    (m) => m.type === "VIDEO" || Boolean(m.recordingUrl)
+    (m) => m.type === "VIDEO" || Boolean(m.recordingUrl || (m as any).recorded_video_link || (m as any).recording_url)
   ).length;
 
   return (
@@ -1031,9 +1031,9 @@ export default function PdfNotesUploadSection({
             ) : (
               <div className="space-y-3 max-h-[560px] overflow-y-auto pr-1">
                 {filteredMaterials.map((item) => {
-                  const isVideo = item.type === "VIDEO" || Boolean(item.recordingUrl);
+                  const isVideo = item.type === "VIDEO" || Boolean(item.recordingUrl || (item as any).recorded_video_link || (item as any).recording_url);
                   const isPdf = item.type === "PDF" || Boolean(item.pdfUrl);
-                  const videoLink = item.recordingUrl || (isVideo ? item.fileOrUrl : null);
+                  const videoLink = (item as any).recorded_video_link || item.recordingUrl || (item as any).recording_url || (isVideo ? item.fileOrUrl : null);
                   const pdfLink = item.pdfUrl || (isPdf ? item.fileOrUrl : null);
                   const isDeleting = deletingId === item.id;
 

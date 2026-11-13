@@ -40,6 +40,7 @@ export interface DbSpecialClass {
   status: "UPCOMING" | "LIVE_NOW" | "COMPLETED";
   live_url: string;
   recording_url?: string;
+  recorded_video_link?: string;
   pdf_title?: string;
   pdf_size?: string;
   description?: string;
@@ -90,12 +91,15 @@ export interface DbLiveClass {
   subject_id?: string;
   title: string;
   meeting_link: string;
+  live_meet_link?: string;
+  class_link?: string;
   scheduled_at: string;
   duration_minutes: number;
   status: ClassStatus;
   attendees_count: number;
   notes_pdf_url?: string;
   recording_url?: string;
+  recorded_video_link?: string;
   created_at?: string;
   teacher?: DbTeacher;
 }
