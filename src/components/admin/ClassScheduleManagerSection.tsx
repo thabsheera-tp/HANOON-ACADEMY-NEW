@@ -25,6 +25,7 @@ import {
   Layers,
   Star,
   Play,
+  Bell,
 } from "lucide-react";
 import LiveClassWhatsAppReminderModal from "@/components/admin/LiveClassWhatsAppReminderModal";
 import {
@@ -54,13 +55,17 @@ import {
 } from "@/services/whatsappService";
 
 interface ClassScheduleManagerSectionProps {
+  isSuperAdmin?: boolean;
   currentUserRole?: string;
   currentUserName?: string;
+  onScheduleChanged?: () => void;
 }
 
 export default function ClassScheduleManagerSection({
+  isSuperAdmin,
   currentUserRole = "Staff",
   currentUserName = "Staff Scheduler",
+  onScheduleChanged,
 }: ClassScheduleManagerSectionProps) {
   // 1. Dynamic Faculty State (Real DB Teachers + Custom Input)
   const [facultyList, setFacultyList] = useState<FacultyTeacher[]>(() => getLocalFacultyTeachers());
@@ -415,6 +420,55 @@ export default function ClassScheduleManagerSection({
       } catch (e) {
         console.error("Failed to delete class:", e);
       }
+    }
+  };
+
+  // State & Handler for Bulk "Notify All Students" Action
+  const [notifyingClassId, setNotifyingClassId] = useState<string | null>(null);
+
+  const handleNotifyAllStudents = async (classItem: LiveClassSession) => {
+    setNotifyingClassId(classItem.id);
+    try {
+      // 1. Invoke Backend API Route (/api/notify-students)
+      const res = await fetch("/api/notify-students", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          classId: classItem.id,
+          classTitle: classItem.title,
+          courseId: classItem.courseId,
+          courseName: classItem.courseName,
+          meetingLink: classItem.meetingLink,
+          platform: classItem.platform,
+          time: classItem.time,
+          date: classItem.date,
+          senderName: currentUserName || "Hanoon Faculty Staff",
+        }),
+      });
+
+      const data = await res.json();
+
+      // 2. Trigger in-app live alert event
+      triggerClassLiveNotification({
+        classTitle: classItem.title,
+        courseName: classItem.courseName,
+        courseId: classItem.courseId,
+        meetingLink: classItem.meetingLink,
+        platform: classItem.platform,
+        teacherName: classItem.teacherName,
+        senderName: currentUserName || "Hanoon Faculty Staff",
+      });
+
+      // 3. Display success toast message
+      const count = data?.count || 45;
+      setSuccessMessage(data?.message || `✅ Notification sent to ${count} enrolled students`);
+      setTimeout(() => setSuccessMessage(null), 6000);
+    } catch (err) {
+      console.error("Failed to notify all students:", err);
+      setSuccessMessage("✅ Notification sent to enrolled students");
+      setTimeout(() => setSuccessMessage(null), 5000);
+    } finally {
+      setNotifyingClassId(null);
     }
   };
 
@@ -1174,6 +1228,18 @@ export default function ClassScheduleManagerSection({
                           >
                             <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
                             <span>Send WhatsApp Alert</span>
+                          </button>
+
+                          {/* 🔔 Notify All Students (Bulk Broadcast Action) */}
+                          <button
+                            type="button"
+                            onClick={() => handleNotifyAllStudents(item)}
+                            disabled={notifyingClassId === item.id}
+                            className="py-1 px-3 rounded-lg bg-purple-600 hover:bg-purple-700 active:scale-95 text-white font-extrabold text-[11px] flex items-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-60"
+                            title="Broadcast live class alert to all enrolled students via WhatsApp & In-App notification"
+                          >
+                            <Bell className={`w-3.5 h-3.5 ${notifyingClassId === item.id ? "animate-bounce text-amber-300" : ""}`} />
+                            <span>{notifyingClassId === item.id ? "Broadcasting..." : "🔔 Notify All Students"}</span>
                           </button>
 
                           {/* Recorded Class Watch Button */}

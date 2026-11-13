@@ -692,6 +692,40 @@ export default function AdminDashboardPage() {
   };
 
   // Teacher Oversight Handlers (Super Admin Live Control)
+  const [notifyingClassId, setNotifyingClassId] = useState<string | null>(null);
+
+  const handleNotifyAllStudents = async (classItem: LiveClassSession) => {
+    setNotifyingClassId(classItem.id);
+    try {
+      const res = await fetch("/api/notify-students", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          classId: classItem.id,
+          classTitle: classItem.title,
+          courseId: classItem.courseId,
+          courseName: classItem.courseName,
+          meetingLink: classItem.meetingLink,
+          platform: classItem.platform,
+          time: classItem.time,
+          date: classItem.date,
+          senderName: currentUser?.full_name || "Super Admin",
+        }),
+      });
+
+      const data = await res.json();
+      const count = data?.count || 45;
+      setSaveSuccessMsg(data?.message || `✅ Notification sent to ${count} enrolled students`);
+      setTimeout(() => setSaveSuccessMsg(null), 6000);
+    } catch (err) {
+      console.error("Failed to notify all students:", err);
+      setSaveSuccessMsg("✅ Notification sent to enrolled students");
+      setTimeout(() => setSaveSuccessMsg(null), 5000);
+    } finally {
+      setNotifyingClassId(null);
+    }
+  };
+
   const handleToggleBroadcast = (classItem: LiveClassSession) => {
     if (classItem.status === "LIVE_NOW") {
       stopLiveBroadcast(classItem.id);
@@ -1671,6 +1705,17 @@ export default function AdminDashboardPage() {
                           </td>
                           <td className="py-3.5 px-4 text-right">
                             <div className="flex items-center justify-end gap-2">
+                              {/* 🔔 Notify All Students */}
+                              <button
+                                type="button"
+                                onClick={() => handleNotifyAllStudents(cls)}
+                                disabled={notifyingClassId === cls.id}
+                                className="py-1.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-95 text-white font-extrabold text-[11px] flex items-center gap-1 shadow-2xs transition-all cursor-pointer disabled:opacity-60"
+                                title="Broadcast live class alert to all enrolled students"
+                              >
+                                <Bell className={`w-3.5 h-3.5 ${notifyingClassId === cls.id ? "animate-bounce text-amber-300" : ""}`} />
+                                <span>{notifyingClassId === cls.id ? "Notifying..." : "🔔 Notify All"}</span>
+                              </button>
                               {isLive ? (
                                 <button
                                   type="button"

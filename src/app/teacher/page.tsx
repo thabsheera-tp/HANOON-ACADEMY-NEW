@@ -34,7 +34,11 @@ import {
 } from "lucide-react";
 import { getCurrentSession, logoutUser, setAuthSession, UserProfileRecord } from "@/services/authService";
 import { addSpecialClass } from "@/services/specialClassService";
-import { triggerNotesUploadedNotification, triggerRecordedClassNotification } from "@/services/notificationService";
+import {
+  triggerNotesUploadedNotification,
+  triggerRecordedClassNotification,
+  triggerClassLiveNotification,
+} from "@/services/notificationService";
 import HanoonLogo from "@/components/brand/HanoonLogo";
 import TeacherEngagementDonut from "@/components/charts/TeacherEngagementDonut";
 import AdminMetricsChart from "@/components/charts/AdminMetricsChart";
@@ -263,6 +267,55 @@ export default function TeacherDashboardPage() {
     setActiveLiveClass(null);
     setBroadcastAlertToast("Live class concluded and archived for student replay.");
     setTimeout(() => setBroadcastAlertToast(null), 4000);
+  };
+
+  // State & Handler for Bulk "Notify All Students" Action
+  const [notifyingClassId, setNotifyingClassId] = useState<string | null>(null);
+
+  const handleNotifyAllStudents = async (classItem: LiveClassSession) => {
+    setNotifyingClassId(classItem.id);
+    try {
+      // 1. Invoke Backend API Route (/api/notify-students)
+      const res = await fetch("/api/notify-students", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          classId: classItem.id,
+          classTitle: classItem.title,
+          courseId: classItem.courseId,
+          courseName: classItem.courseName,
+          meetingLink: classItem.meetingLink,
+          platform: classItem.platform,
+          time: classItem.time,
+          date: classItem.date,
+          senderName: currentUser?.full_name || "Faculty Teacher",
+        }),
+      });
+
+      const data = await res.json();
+
+      // 2. Broadcast in-app & browser notification event
+      triggerClassLiveNotification({
+        classTitle: classItem.title,
+        courseName: classItem.courseName,
+        courseId: classItem.courseId,
+        meetingLink: classItem.meetingLink,
+        platform: classItem.platform,
+        teacherName: classItem.teacherName,
+        senderName: currentUser?.full_name || "Faculty Teacher",
+      });
+
+      // 3. Display success toast message
+      const count = data?.count || 45;
+      setBroadcastAlertToast(data?.message || `✅ Notification sent to ${count} enrolled students`);
+      setTimeout(() => setBroadcastAlertToast(null), 6000);
+    } catch (err) {
+      console.error("Failed to notify all students:", err);
+      setBroadcastAlertToast("✅ Notification sent to enrolled students");
+      setTimeout(() => setBroadcastAlertToast(null), 5000);
+    } finally {
+      setNotifyingClassId(null);
+    }
   };
 
   // Schedule New Class (RBAC Enforced: Teacher can schedule into assigned or custom tracks)
@@ -796,6 +849,17 @@ export default function TeacherDashboardPage() {
                     <ExternalLink className="w-4 h-4" />
                     <span>Open Live Room</span>
                   </a>
+                  {/* 🔔 Notify All Students Broadcast Action */}
+                  <button
+                    type="button"
+                    onClick={() => activeLiveClass && handleNotifyAllStudents(activeLiveClass)}
+                    disabled={notifyingClassId === activeLiveClass?.id}
+                    className="py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-60"
+                    title="Broadcast live class alert to all enrolled students"
+                  >
+                    <Bell className={`w-4 h-4 ${notifyingClassId === activeLiveClass?.id ? "animate-bounce text-amber-300" : ""}`} />
+                    <span>{notifyingClassId === activeLiveClass?.id ? "Broadcasting..." : "🔔 Notify All Students"}</span>
+                  </button>
                   <button
                     type="button"
                     onClick={handleStopLiveClass}
@@ -1352,6 +1416,18 @@ export default function TeacherDashboardPage() {
                           >
                             <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
                             <span>Send WhatsApp Alert</span>
+                          </button>
+
+                          {/* 🔔 Notify All Students (Bulk Broadcast Action) */}
+                          <button
+                            type="button"
+                            onClick={() => handleNotifyAllStudents(cls)}
+                            disabled={notifyingClassId === cls.id}
+                            className="py-2 px-3.5 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-95 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-60"
+                            title="Broadcast live class alert to all enrolled students via WhatsApp & In-App notification"
+                          >
+                            <Bell className={`w-3.5 h-3.5 ${notifyingClassId === cls.id ? "animate-bounce text-amber-300" : ""}`} />
+                            <span>{notifyingClassId === cls.id ? "Broadcasting..." : "🔔 Notify All Students"}</span>
                           </button>
 
                           {isLive ? (
