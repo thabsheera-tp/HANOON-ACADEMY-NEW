@@ -31,6 +31,7 @@ import {
   GraduationCap,
   Play,
   Bell,
+  AlertCircle,
 } from "lucide-react";
 import { getCurrentSession, logoutUser, setAuthSession, UserProfileRecord } from "@/services/authService";
 import { addSpecialClass } from "@/services/specialClassService";
@@ -118,6 +119,7 @@ export default function TeacherDashboardPage() {
   // State for Course Content / Decoupled Actions (PDF Notes & Recorded Class)
   const [materials, setMaterials] = useState<CourseMaterial[]>([]);
   const [uploadSuccessMsg, setUploadSuccessMsg] = useState<string | null>(null);
+  const [uploadErrorMsg, setUploadErrorMsg] = useState<string | null>(null);
   const [teacherActionSection, setTeacherActionSection] = useState<"PDF" | "RECORDED">("PDF");
 
   // Section 1: PDF Notes Upload State
@@ -466,22 +468,24 @@ export default function TeacherDashboardPage() {
   const handleTeacherPdfSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!teacherPdfForm.title.trim()) {
-      alert("Please enter a Chapter or Notes Title.");
+      setUploadErrorMsg("Please enter a Chapter or Notes Title.");
       return;
     }
 
     if (!canTeacherAccessCourse(teacherPdfForm.courseId, currentUser)) {
-      setUploadSuccessMsg("Access Denied: You can only publish notes for your assigned tracks.");
-      setTimeout(() => setUploadSuccessMsg(null), 4000);
+      setUploadErrorMsg("Access Denied: You can only publish notes for your assigned tracks.");
       return;
     }
 
     if (!teacherPdfFile && !teacherPdfForm.customUrl.trim()) {
-      alert("Please attach a PDF document file (.pdf) or provide a direct PDF link.");
+      setUploadErrorMsg("Please attach a PDF document file (.pdf) or provide a direct PDF link.");
       return;
     }
 
     setIsSubmittingTeacherPdf(true);
+    setUploadErrorMsg(null);
+    setUploadSuccessMsg(null);
+
     const courseMap: Record<string, string> = {
       adaviyya: "Adaviyya",
       shamail: "الشمائل المحمدية",
@@ -498,7 +502,7 @@ export default function TeacherDashboardPage() {
       if (teacherPdfFile) {
         const uploadRes = await uploadPdfToSupabaseStorage(teacherPdfFile, "notes");
         if (!uploadRes.success || !uploadRes.publicUrl) {
-          alert(`❌ Storage Error: ${uploadRes.error}`);
+          setUploadErrorMsg(uploadRes.error || "Failed to upload PDF to Supabase Storage.");
           setIsSubmittingTeacherPdf(false);
           return;
         }
@@ -508,7 +512,7 @@ export default function TeacherDashboardPage() {
       }
 
       if (!finalPdfUrl) {
-        alert("Please provide a valid PDF file or direct document URL.");
+        setUploadErrorMsg("Please provide a valid PDF file or direct document URL.");
         setIsSubmittingTeacherPdf(false);
         return;
       }
@@ -528,7 +532,7 @@ export default function TeacherDashboardPage() {
       });
 
       if (!saveRes.success) {
-        alert(`❌ Database Error: ${saveRes.error}`);
+        setUploadErrorMsg(saveRes.error || "Database insertion failed for this PDF note.");
         setIsSubmittingTeacherPdf(false);
         return;
       }
@@ -571,10 +575,9 @@ export default function TeacherDashboardPage() {
       setTeacherPdfDataUrl("");
     } catch (err: any) {
       console.error("Failed to upload PDF notes:", err);
-      setUploadSuccessMsg(`Failed to upload PDF notes: ${err?.message || "Please check Supabase Storage connection."}`);
+      setUploadErrorMsg(`Upload Failed: ${err?.message || "Please check Supabase Storage connection."}`);
     } finally {
       setIsSubmittingTeacherPdf(false);
-      setTimeout(() => setUploadSuccessMsg(null), 5000);
     }
   };
 
@@ -773,6 +776,29 @@ export default function TeacherDashboardPage() {
             type="button"
             onClick={() => setBroadcastAlertToast(null)}
             className="text-purple-300 hover:text-white shrink-0 p-1"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Floating Red Error Toast for PDF Upload / Storage Errors */}
+      {uploadErrorMsg && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-lg w-[92%] bg-rose-600 text-white p-3.5 rounded-2xl shadow-2xl border border-rose-400 flex items-start justify-between gap-3 animate-in fade-in slide-in-from-top-4 duration-200">
+          <div className="flex items-start gap-2.5 text-xs font-bold min-w-0">
+            <AlertCircle className="w-4 h-4 text-white shrink-0 mt-0.5" />
+            <div className="space-y-0.5 min-w-0">
+              <span className="text-[10px] uppercase font-black tracking-wider text-rose-200 block">
+                PDF Upload Error
+              </span>
+              <span className="leading-snug break-words block">{uploadErrorMsg}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setUploadErrorMsg(null)}
+            className="text-rose-200 hover:text-white shrink-0 p-1 cursor-pointer"
+            aria-label="Dismiss error toast"
           >
             <X className="w-4 h-4" />
           </button>
@@ -1035,9 +1061,35 @@ export default function TeacherDashboardPage() {
         )}
 
         {uploadSuccessMsg && (
-          <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2.5 shadow-sm">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>{uploadSuccessMsg}</span>
+          <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center justify-between gap-2.5 shadow-sm animate-in fade-in">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{uploadSuccessMsg}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setUploadSuccessMsg(null)}
+              className="text-emerald-700 hover:text-emerald-900 p-1 shrink-0"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {uploadErrorMsg && (
+          <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center justify-between gap-2.5 shadow-sm animate-in fade-in">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span className="leading-snug break-words">{uploadErrorMsg}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setUploadErrorMsg(null)}
+              className="text-rose-700 hover:text-rose-900 p-1 shrink-0"
+              aria-label="Dismiss error"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
           </div>
         )}
 
@@ -1675,6 +1727,24 @@ export default function TeacherDashboardPage() {
                         className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none"
                       />
                     </div>
+
+                    {/* Inline Error Alert if Teacher PDF Upload Fails */}
+                    {uploadErrorMsg && (
+                      <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-start justify-between gap-2 animate-in fade-in">
+                        <div className="flex items-start gap-2 min-w-0">
+                          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                          <span className="leading-snug break-words">{uploadErrorMsg}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setUploadErrorMsg(null)}
+                          className="text-rose-600 hover:text-rose-800 p-0.5 shrink-0"
+                          aria-label="Dismiss error"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
 
                     <button
                       type="submit"

@@ -477,6 +477,29 @@ export default function PdfNotesUploadSection({
         </div>
       </div>
 
+      {/* Floating Red Toast Notification for Immediate Visibility on Error */}
+      {errorMessage && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 max-w-xl w-[92%] bg-rose-600 text-white p-4 rounded-2xl shadow-2xl border border-rose-400 flex items-start justify-between gap-3 animate-in fade-in slide-in-from-top-4 duration-200">
+          <div className="flex items-start gap-3 min-w-0">
+            <AlertCircle className="w-5 h-5 text-white shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <p className="text-[11px] font-black uppercase tracking-wider text-rose-200">
+                PDF Upload Blocked / Error
+              </p>
+              <p className="text-xs font-bold leading-relaxed break-words">{errorMessage}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setErrorMessage(null)}
+            className="text-rose-200 hover:text-white p-1 rounded-lg shrink-0 cursor-pointer"
+            aria-label="Dismiss error toast"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Success & Error Notifications */}
       {successMessage && (
         <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs sm:text-sm font-bold flex items-center justify-between gap-3 animate-fade-in shadow-xs">
@@ -742,6 +765,24 @@ export default function PdfNotesUploadSection({
                     />
                   </div>
                 </div>
+
+                {/* Inline Error Alert if upload or database failed */}
+                {errorMessage && (
+                  <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-start justify-between gap-2.5 animate-in fade-in duration-150 shadow-2xs">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                      <span className="leading-snug break-words">{errorMessage}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setErrorMessage(null)}
+                      className="p-1 rounded-lg hover:bg-rose-100 text-rose-700 cursor-pointer shrink-0"
+                      aria-label="Dismiss error"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
 
                 {/* STANDALONE SUBMIT BUTTON: UPLOAD PDF NOTES */}
                 <div className="pt-2">
