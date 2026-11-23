@@ -45,6 +45,7 @@ import {
   AppNotification,
 } from "@/services/notificationService";
 import StudentNoticeBoard from "@/components/mobile/StudentNoticeBoard";
+import StudentOfTheMonthWidget from "@/components/mobile/StudentOfTheMonthWidget";
 import {
   getLocalAttendanceRecords,
   fetchStudentAttendanceMetrics,
@@ -966,6 +967,17 @@ export default function ScreenDashboard({
           }
         }}
       />
+
+      {/* 4.5. 🏆 STUDENT OF THE MONTH WIDGET (Strictly Verified/Approved Students Only) */}
+      {isApproved && (
+        <StudentOfTheMonthWidget
+          courseId={selectedCourse.id}
+          courseName={selectedCourse.title}
+          studentId={userProfile.id}
+          studentPhone={userProfile.phone}
+          studentName={studentName}
+        />
+      )}
 
       {/* 5. COMPACT ENROLLED PROGRAM & LIVE COUNTDOWN HERO CARD / ACTIVE LIVE SESSION CARD */}
       {activeLiveSession ? (

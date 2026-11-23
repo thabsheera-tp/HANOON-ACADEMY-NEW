@@ -16,7 +16,9 @@ import {
   Save,
   RefreshCw,
   Sparkles,
+  Trophy,
 } from "lucide-react";
+import MonthlyAttendanceAnalytics from "@/components/admin/MonthlyAttendanceAnalytics";
 import {
   AttendanceRecord,
   AttendanceStatus,
@@ -82,6 +84,7 @@ export default function AttendanceTrackerSection({
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [allAttendanceRecords, setAllAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [sessionRecords, setSessionRecords] = useState<Record<string, AttendanceStatus>>({});
+  const [attendanceSubTab, setAttendanceSubTab] = useState<"monthly" | "daily">("monthly");
   const [isSaving, setIsSaving] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
 
@@ -220,8 +223,41 @@ export default function AttendanceTrackerSection({
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-emerald-900 via-teal-900 to-emerald-800 rounded-3xl p-6 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* Attendance Mode Navigation: Monthly Analytics vs Daily Class Register */}
+      <div className="p-1 rounded-2xl bg-purple-50/80 border border-purple-100 flex items-center gap-1.5 w-fit shadow-2xs">
+        <button
+          type="button"
+          onClick={() => setAttendanceSubTab("monthly")}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+            attendanceSubTab === "monthly"
+              ? "bg-purple-600 text-white shadow-xs"
+              : "text-slate-600 hover:text-slate-900 hover:bg-white/60"
+          }`}
+        >
+          <Trophy className="w-4 h-4" />
+          <span>Monthly Analytics & Leaderboard</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setAttendanceSubTab("daily")}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+            attendanceSubTab === "daily"
+              ? "bg-purple-600 text-white shadow-xs"
+              : "text-slate-600 hover:text-slate-900 hover:bg-white/60"
+          }`}
+        >
+          <Calendar className="w-4 h-4" />
+          <span>Daily Class Attendance Register</span>
+        </button>
+      </div>
+
+      {attendanceSubTab === "monthly" ? (
+        <MonthlyAttendanceAnalytics registrations={registrations} />
+      ) : (
+        <div className="space-y-6">
+          {/* Header Banner */}
+          <div className="bg-gradient-to-r from-emerald-900 via-teal-900 to-emerald-800 rounded-3xl p-6 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="p-2 rounded-xl bg-white/10 backdrop-blur-md">
@@ -492,6 +528,8 @@ export default function AttendanceTrackerSection({
           )}
         </div>
       </div>
+        </div>
+      )}
     </div>
   );
 }
