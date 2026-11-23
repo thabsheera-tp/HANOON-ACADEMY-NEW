@@ -11,11 +11,14 @@ export interface WhatsAppStudentRecipient {
 }
 
 export interface WhatsAppAlertPayload {
-  type: "LIVE_CLASS_REMINDER" | "PAYMENT_VERIFIED";
+  type: "LIVE_CLASS_REMINDER" | "PAYMENT_VERIFIED" | "FEE_REMINDER";
   studentName: string;
   phone: string;
   courseName?: string;
   liveLink?: string;
+  balanceFee?: number;
+  totalFee?: number;
+  paidAmount?: number;
 }
 
 export interface WhatsAppDispatchResult {
@@ -97,6 +100,57 @@ export function getPaymentVerificationWhatsAppUrl(
 }
 
 /**
+ * Requirement 3: Balance Fee Reminder Notification Message (Malayalam)
+ */
+export function buildBalanceFeeReminderMessage(
+  studentName: string,
+  courseName: string,
+  balanceFee: number,
+  totalFee?: number,
+  paidAmount?: number
+): string {
+  const sName = studentName?.trim() || "Student";
+  const cName = courseName?.trim() || "Course";
+  const bal = balanceFee.toLocaleString("en-IN");
+  const tot = totalFee ? `₹${totalFee.toLocaleString("en-IN")}` : "";
+  const paid = paidAmount !== undefined ? `₹${paidAmount.toLocaleString("en-IN")}` : "";
+
+  return `*HANOON ACADEMY | ഫീസ് ഓർമ്മപ്പെടുത്തൽ* 🎓
+
+പ്രിയപ്പെട്ട രക്ഷിതാവേ / വിദ്യാർത്ഥി,
+*${sName}* ന്റെ *${cName}* കോഴ്സിന്റെ ബാക്കി ഫീസ് വിവരങ്ങൾ:
+
+${tot ? `💰 *ആകെ ഫീസ് (Total Fee):* ${tot}\n` : ""}${paid ? `✅ *അടച്ച തുക (Paid Amount):* ${paid}\n` : ""}⚠️ *ബാക്കി അടക്കാനുള്ള തുക (Balance Due):* ₹${bal}
+
+നിങ്ങളുടെ ബാക്കി ഫീസ് ഉടൻ അടച്ച് അക്കാദമിക് ബാച്ചിൽ തുടരുവാൻ അഭ്യർത്ഥിക്കുന്നു.
+
+🌐 സ്റ്റുഡന്റ് ഡാഷ്‌ബോർഡിൽ നിന്ന് നേരിട്ട് UPI വഴി ഫീസ് അടക്കാം:
+https://hanoonacademy.com/dashboard
+
+സഹായങ്ങൾക്ക് ബന്ധപ്പെടുക: +91 96562 94203
+_Hanoon Academy Financial Administration_`;
+}
+
+/**
+ * Generates direct wa.me link for Balance Fee Reminder
+ */
+export function getBalanceFeeReminderWhatsAppUrl(
+  phone: string,
+  studentName: string,
+  courseName: string,
+  balanceFee: number,
+  totalFee?: number,
+  paidAmount?: number
+): string {
+  const formattedPhone = formatWhatsAppPhone(phone);
+  const text = buildBalanceFeeReminderMessage(studentName, courseName, balanceFee, totalFee, paidAmount);
+  if (formattedPhone) {
+    return `https://wa.me/${formattedPhone}?text=${encodeURIComponent(text)}`;
+  }
+  return `https://wa.me/?text=${encodeURIComponent(text)}`;
+}
+
+/**
  * Dispatches an automated WhatsApp alert:
  * - Calls server-side webhook hook (/api/whatsapp/send) for Twilio / Interakt integration
  * - Returns generated wa.me URL for 1-click browser invocation
@@ -111,6 +165,23 @@ export async function sendWhatsAppAlert(
   if (payload.type === "PAYMENT_VERIFIED") {
     messageText = buildPaymentVerificationMessage(payload.studentName);
     waUrl = getPaymentVerificationWhatsAppUrl(payload.phone, payload.studentName);
+  } else if (payload.type === "FEE_REMINDER") {
+    const bal = payload.balanceFee || 0;
+    messageText = buildBalanceFeeReminderMessage(
+      payload.studentName,
+      payload.courseName || "Course",
+      bal,
+      payload.totalFee,
+      payload.paidAmount
+    );
+    waUrl = getBalanceFeeReminderWhatsAppUrl(
+      payload.phone,
+      payload.studentName,
+      payload.courseName || "Course",
+      bal,
+      payload.totalFee,
+      payload.paidAmount
+    );
   } else {
     messageText = buildLiveClassReminderMessage(
       payload.studentName,

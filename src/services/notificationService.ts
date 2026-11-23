@@ -6,6 +6,7 @@ export type NotificationType =
   | "NOTES_UPLOADED"
   | "PAYMENT_APPROVED"
   | "PAYMENT_REJECTED"
+  | "FEE_REMINDER"
   | "BROADCAST";
 
 export type NotificationTargetRole = "all" | "students" | "teachers" | "staff";
@@ -344,6 +345,33 @@ export function triggerRecordedClassNotification(params: {
   });
 }
 
+/**
+ * Trigger: When Admin or Verifier dispatches a balance fee reminder to a student.
+ * Creates an urgent in-app notification for the student dashboard.
+ */
+export function triggerFeeReminderNotification(params: {
+  studentId?: string;
+  studentName?: string;
+  courseName?: string;
+  courseId?: string;
+  balanceFee: number;
+  totalFee?: number;
+  paidAmount?: number;
+}): AppNotification {
+  const { studentName, courseName, courseId, balanceFee } = params;
+
+  return createNotification({
+    title: `🔔 Fee Reminder: Pending Balance ₹${balanceFee.toLocaleString()}`,
+    message: `Reminder: You have a pending balance fee of ₹${balanceFee.toLocaleString()} for ${courseName || "your course"}. Please complete the payment to avoid interruption.`,
+    type: "FEE_REMINDER",
+    targetRole: "students",
+    targetCourseId: courseId,
+    targetCourseName: courseName,
+    senderName: "Finance & Accounts Department",
+    priority: "urgent",
+  });
+}
+
 export interface CompactNotificationView {
   iconType: "video" | "pdf" | "live" | "calendar" | "bell";
   displayTitle: string;
@@ -413,7 +441,12 @@ export function formatCompactNotification(item: AppNotification): CompactNotific
   let displaySummary = item.message;
   let actionLabel = "View";
 
-  if (isLive) {
+  if (item.type === "FEE_REMINDER") {
+    iconType = "bell";
+    displayTitle = "Fee Reminder";
+    displaySummary = item.message;
+    actionLabel = "Pay";
+  } else if (isLive) {
     iconType = "live";
     displayTitle = quotedName || item.targetCourseName || item.title.replace(/^🔴\s*LIVE NOW:\s*/i, "").replace(/!$/, "");
     displaySummary = "Class is live now";

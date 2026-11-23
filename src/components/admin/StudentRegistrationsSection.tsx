@@ -27,6 +27,8 @@ import {
   Sparkles,
   AlertCircle,
   BarChart3,
+  Pencil,
+  Bell,
 } from "lucide-react";
 import AdminMetricsChart from "@/components/charts/AdminMetricsChart";
 import EngagementAreaChart from "@/components/charts/EngagementAreaChart";
@@ -43,7 +45,9 @@ import {
 } from "@/services/studentService";
 import { getWhatsAppWelcomeUrl } from "@/services/paymentService";
 import { addAuditLog, clearAuditLogs } from "@/services/settingsService";
-import { sendWhatsAppAlert, getPaymentVerificationWhatsAppUrl } from "@/services/whatsappService";
+import { sendWhatsAppAlert, getPaymentVerificationWhatsAppUrl, getBalanceFeeReminderWhatsAppUrl } from "@/services/whatsappService";
+import { triggerFeeReminderNotification } from "@/services/notificationService";
+import EditFeeModal from "@/components/admin/EditFeeModal";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 
 interface StudentRegistrationsSectionProps {
@@ -80,6 +84,41 @@ export default function StudentRegistrationsSection({
     course: string;
     whatsappUrl: string;
   } | null>(null);
+
+  // Editable Fee Management States
+  const [editingFeeItem, setEditingFeeItem] = useState<UnifiedStudentRegistration | null>(null);
+  const [feeReminderSentMsg, setFeeReminderSentMsg] = useState<string | null>(null);
+
+  const handleSendFeeReminder = (item: UnifiedStudentRegistration) => {
+    const total = item.totalFee ?? 3000;
+    const paid = item.paidAmount ?? (item.paymentStatus === "APPROVED" ? item.amount : 0);
+    const bal = item.balanceFee ?? Math.max(0, total - paid);
+
+    // 1. Dispatch In-App Notification (🔔) to Student Dashboard
+    triggerFeeReminderNotification({
+      studentId: item.studentId,
+      studentName: item.fullName,
+      courseName: item.courseChoice,
+      courseId: item.courseId,
+      balanceFee: bal,
+      totalFee: total,
+      paidAmount: paid,
+    });
+
+    // 2. Open 1-Click WhatsApp Reminder in Malayalam with exact balance
+    const cleanPhone = (item.whatsappNum || "").replace(/\D/g, "");
+    const waUrl = getBalanceFeeReminderWhatsAppUrl(
+      cleanPhone,
+      item.fullName,
+      item.courseChoice,
+      bal
+    );
+
+    window.open(waUrl, "_blank");
+
+    setFeeReminderSentMsg(`✅ Balance fee reminder sent to ${item.fullName} (Pending: ₹${bal.toLocaleString()})`);
+    setTimeout(() => setFeeReminderSentMsg(null), 6000);
+  };
 
   // Strict debounced loading to avoid race conditions & duplicate entries
   const debounceTimerRef = React.useRef<NodeJS.Timeout | null>(null);
@@ -851,6 +890,33 @@ export default function StudentRegistrationsSection({
         </div>
       )}
 
+      {/* Balance Fee Reminder Sent Banner */}
+      {feeReminderSentMsg && (
+        <div className="p-4 rounded-2xl bg-purple-50 border-2 border-purple-300 text-purple-950 flex items-center justify-between gap-3 animate-fade-in shadow-md">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Bell className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs sm:text-sm font-extrabold text-purple-950">
+                Fee Reminder Broadcast Dispatched
+              </h4>
+              <p className="text-[11px] text-purple-800 mt-0.5 font-medium">
+                {feeReminderSentMsg}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFeeReminderSentMsg(null)}
+            className="p-2 text-purple-700 hover:text-purple-950 hover:bg-purple-100 rounded-xl transition-colors cursor-pointer"
+            title="Dismiss"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Purge Success Alert Banner */}
       {purgeSuccessMsg && (
         <div className="p-4 rounded-2xl bg-amber-50 border-2 border-amber-300 text-amber-950 flex items-center justify-between gap-3 animate-fade-in shadow-md">
@@ -1034,6 +1100,7 @@ export default function StudentRegistrationsSection({
                 <th className="py-3.5 px-4">Student Name</th>
                 <th className="py-3.5 px-4">Mobile / WhatsApp Number</th>
                 <th className="py-3.5 px-4">Course Choice</th>
+                <th className="py-3.5 px-4">Fee & Balance</th>
                 <th className="py-3.5 px-4">District / Place</th>
                 <th className="py-3.5 px-4">Payment Status</th>
                 <th className="py-3.5 px-4">Payment Proof</th>
@@ -1044,7 +1111,7 @@ export default function StudentRegistrationsSection({
             <tbody className="divide-y divide-purple-50 font-medium text-slate-800">
               {loading && registrations.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400 text-xs">
+                  <td colSpan={9} className="py-12 text-center text-slate-400 text-xs">
                     <div className="flex items-center justify-center gap-2">
                       <RefreshCw className="w-4 h-4 animate-spin text-purple-600" />
                       <span>Loading registration records from Supabase...</span>
@@ -1053,7 +1120,7 @@ export default function StudentRegistrationsSection({
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-16 text-center">
+                  <td colSpan={9} className="py-16 text-center">
                     <div className="max-w-md mx-auto space-y-2">
                       <div className={`w-12 h-12 rounded-2xl mx-auto flex items-center justify-center font-bold text-xl ${
                         fetchError ? "bg-rose-100 text-rose-700" : "bg-purple-50 text-purple-600"
@@ -1154,7 +1221,29 @@ export default function StudentRegistrationsSection({
                         </span>
                       </td>
 
-                      {/* Column 4: District / Place */}
+                      {/* Column 4: Fee & Balance Due */}
+                      <td className="py-3.5 px-4">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-800">
+                            <span>₹{(item.paidAmount ?? (item.paymentStatus === "APPROVED" ? item.amount : 0)).toLocaleString("en-IN")}</span>
+                            <span className="text-slate-300 font-normal">/</span>
+                            <span className="text-slate-500 font-medium">₹{(item.totalFee ?? 3000).toLocaleString("en-IN")}</span>
+                          </div>
+                          <div>
+                            {(item.balanceFee ?? Math.max(0, (item.totalFee ?? 3000) - (item.paidAmount ?? 0))) <= 0 ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
+                                Fully Paid ✅
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 text-[10px] font-bold border border-amber-200">
+                                Due: ₹{(item.balanceFee ?? Math.max(0, (item.totalFee ?? 3000) - (item.paidAmount ?? 0))).toLocaleString("en-IN")}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Column 5: District / Place */}
                       <td className="py-3.5 px-4 text-slate-700 font-semibold">
                         {item.district || "Kerala"}
                       </td>
@@ -1260,6 +1349,29 @@ export default function StudentRegistrationsSection({
                             >
                               <X className="w-3.5 h-3.5" />
                               <span>Reject</span>
+                            </button>
+                          )}
+
+                          {/* Edit Fee ✏️ Button */}
+                          <button
+                            type="button"
+                            onClick={() => setEditingFeeItem(item)}
+                            className="p-1.5 rounded-full bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200/70 inline-flex items-center justify-center transition-all cursor-pointer shadow-2xs"
+                            title="Edit Course & Fee Details"
+                          >
+                            <Pencil className="w-3.5 h-3.5 text-purple-600" />
+                          </button>
+
+                          {/* 🔔 Fee Reminder Button (if balance > 0) */}
+                          {(item.balanceFee ?? Math.max(0, (item.totalFee ?? 3000) - (item.paidAmount ?? (item.paymentStatus === "APPROVED" ? item.amount : 0)))) > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => handleSendFeeReminder(item)}
+                              className="py-1 px-2.5 rounded-full bg-amber-50 hover:bg-amber-100 active:scale-95 text-amber-800 border border-amber-300 font-bold text-xs inline-flex items-center gap-1 shadow-2xs transition-all cursor-pointer"
+                              title="Send Fee Reminder (In-App & WhatsApp)"
+                            >
+                              <Bell className="w-3.5 h-3.5 text-amber-600" />
+                              <span>Remind</span>
                             </button>
                           )}
 
@@ -1432,6 +1544,22 @@ export default function StudentRegistrationsSection({
                     )}
                   </div>
 
+                  {/* Fee & Balance Status Pill Row */}
+                  <div className="flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-purple-50/50 border border-purple-100 text-[11px]">
+                    <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                      <span className="text-purple-700">Paid: ₹{(item.paidAmount ?? (item.paymentStatus === "APPROVED" ? item.amount : 0)).toLocaleString("en-IN")}</span>
+                      <span className="text-slate-300">/</span>
+                      <span className="text-slate-500">₹{(item.totalFee ?? 3000).toLocaleString("en-IN")}</span>
+                    </div>
+                    <div>
+                      {(item.balanceFee ?? Math.max(0, (item.totalFee ?? 3000) - (item.paidAmount ?? 0))) <= 0 ? (
+                        <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">Fully Paid ✅</span>
+                      ) : (
+                        <span className="text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">Due: ₹{(item.balanceFee ?? Math.max(0, (item.totalFee ?? 3000) - (item.paidAmount ?? 0))).toLocaleString("en-IN")}</span>
+                      )}
+                    </div>
+                  </div>
+
                   {/* Row 3: Action Buttons aligned neatly on the right */}
                   <div className="flex items-center justify-between pt-1.5 border-t border-slate-100">
                     {/* Left: UTR / Tx ID if present */}
@@ -1472,6 +1600,29 @@ export default function StudentRegistrationsSection({
                         >
                           <X className="w-3 h-3" />
                           <span>Reject</span>
+                        </button>
+                      )}
+
+                      {/* Edit Fee ✏️ Button */}
+                      <button
+                        type="button"
+                        onClick={() => setEditingFeeItem(item)}
+                        className="w-7 h-7 rounded-full bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200/70 flex items-center justify-center transition-all cursor-pointer shadow-2xs"
+                        title="Edit Fee"
+                      >
+                        <Pencil className="w-3.5 h-3.5 text-purple-600" />
+                      </button>
+
+                      {/* 🔔 Remind Button */}
+                      {(item.balanceFee ?? Math.max(0, (item.totalFee ?? 3000) - (item.paidAmount ?? 0))) > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handleSendFeeReminder(item)}
+                          className="py-1 px-2 rounded-full bg-amber-50 hover:bg-amber-100 active:scale-95 text-amber-800 border border-amber-300 font-bold text-[10px] inline-flex items-center gap-1 transition-all cursor-pointer"
+                          title="Fee Reminder"
+                        >
+                          <Bell className="w-3 h-3 text-amber-600" />
+                          <span>Remind</span>
                         </button>
                       )}
 
@@ -1831,6 +1982,13 @@ export default function StudentRegistrationsSection({
           </div>
         </div>
       )}
+      {/* 9. Edit Fee Modal */}
+      <EditFeeModal
+        student={editingFeeItem}
+        isOpen={Boolean(editingFeeItem)}
+        onClose={() => setEditingFeeItem(null)}
+        onSuccess={() => loadData(true)}
+      />
     </div>
   );
 }

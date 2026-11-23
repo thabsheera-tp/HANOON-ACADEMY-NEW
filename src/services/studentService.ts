@@ -643,6 +643,11 @@ export interface UnifiedStudentRegistration {
   screenshotUrl?: string;
   paymentId?: string;
   rejectionReason?: string;
+  // Editable Fee Management
+  totalFee?: number;
+  paidAmount?: number;
+  balanceFee?: number;
+  feeStatus?: "PAID" | "PARTIAL" | "UNPAID";
 }
 
 const COURSE_NAMES_MAP: Record<string, string> = {
@@ -1062,6 +1067,20 @@ export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedR
       COURSE_NAMES_MAP[p.course_id] ||
       (p.course_id ? p.course_id.charAt(0).toUpperCase() + p.course_id.slice(1) : "Adaviyya Track");
 
+    const sObj = joined || lookupStudent;
+    const defaultCourseTotal =
+      p.course_id === "home-tuition"
+        ? 2000
+        : p.course_id === "fashion-designing"
+        ? 2500
+        : p.course_id === "burdah" || p.course_id === "haddad"
+        ? 1200
+        : 3000;
+    const sTotalFee = Number(sObj?.total_fee ?? defaultCourseTotal);
+    const sPaidAmount = Number(sObj?.paid_amount ?? (paymentStatus === "APPROVED" ? (p.amount ?? 500) : 0));
+    const sBalanceFee = Math.max(0, Number(sObj?.balance_fee ?? (sTotalFee - sPaidAmount)));
+    const sFeeStatus: "PAID" | "PARTIAL" | "UNPAID" = sBalanceFee <= 0 ? "PAID" : sPaidAmount > 0 ? "PARTIAL" : "UNPAID";
+
     result.push({
       id: p.id || `pay-${Math.random().toString(36).substring(2, 9)}`,
       studentId: joined?.id || lookupStudent?.id || p.student_id,
@@ -1077,6 +1096,10 @@ export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedR
       screenshotUrl: p.screenshot_url || (p as any).screenshotUrl || (joined as any)?.screenshot_url || (lookupStudent as any)?.screenshot_url || "",
       paymentId: p.id,
       rejectionReason: p.rejection_reason || undefined,
+      totalFee: sTotalFee,
+      paidAmount: sPaidAmount,
+      balanceFee: sBalanceFee,
+      feeStatus: sFeeStatus,
     });
   }
 
@@ -1093,6 +1116,10 @@ export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedR
     const cleanP = (s.whatsapp_num || s.whatsapp_number || "").replace(/\D/g, "").slice(-10);
     if (existingStudentIds.has(s.id) || (cleanP && existingPhones.has(cleanP))) continue;
 
+    const sTotal = Number(s.total_fee ?? 3000);
+    const sPaid = Number(s.paid_amount ?? 0);
+    const sBal = Math.max(0, Number(s.balance_fee ?? (sTotal - sPaid)));
+
     result.push({
       id: `reg-${s.id}`,
       studentId: s.id,
@@ -1100,12 +1127,16 @@ export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedR
       whatsappNum: s.whatsapp_num || s.whatsapp_number || "",
       district: s.district || s.place || "Kerala",
       courseChoice: "Adaviyya (General Admission)",
-      courseId: "adaviyya",
+      courseId: s.enrolled_course_id || "adaviyya",
       registrationDate: s.created_at || new Date().toISOString(),
       paymentStatus: "PENDING",
       amount: 500,
       upiTxId: "Pending Payment",
       paymentId: undefined,
+      totalFee: sTotal,
+      paidAmount: sPaid,
+      balanceFee: sBal,
+      feeStatus: sBal <= 0 ? "PAID" : sPaid > 0 ? "PARTIAL" : "UNPAID",
     });
     existingStudentIds.add(s.id);
     if (cleanP) existingPhones.add(cleanP);
@@ -1130,6 +1161,10 @@ export async function fetchUnifiedRegistrationsDetailed(): Promise<FetchUnifiedR
       amount: 500,
       upiTxId: "Pending Payment",
       paymentId: undefined,
+      totalFee: 3000,
+      paidAmount: 0,
+      balanceFee: 3000,
+      feeStatus: "UNPAID",
     });
     existingStudentIds.add(prof.id);
     if (cleanP) existingPhones.add(cleanP);
@@ -1221,6 +1256,42 @@ export async function updateStudentPaymentStatusDirect(params: {
 
         if (upErr) {
           console.error("Supabase payment update error:", upErr.message);
+        }
+
+        // Auto-recalculate student paid_amount and balance_fee in Supabase
+        if (studentId) {
+          try {
+            const { data: payRows } = await supabase
+              .from("payments")
+              .select("amount, status")
+              .eq("student_id", studentId);
+
+            if (payRows && Array.isArray(payRows)) {
+              const totalApproved = payRows
+                .filter((p: any) => ["APPROVED", "VERIFIED", "PAID"].includes((p.status || "").toUpperCase()))
+                .reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
+
+              const { data: sRecord } = await supabase
+                .from("students")
+                .select("total_fee")
+                .eq("id", studentId)
+                .maybeSingle();
+
+              const totalCourseFee = Number(sRecord?.total_fee ?? 3000);
+              const newBal = Math.max(0, totalCourseFee - totalApproved);
+
+              await supabase
+                .from("students")
+                .update({
+                  paid_amount: totalApproved,
+                  balance_fee: newBal,
+                  updated_at: now,
+                })
+                .eq("id", studentId);
+            }
+          } catch (feeErr) {
+            console.warn("Fee auto-sync notice:", feeErr);
+          }
         }
       } catch (e) {
         console.warn("Supabase payment update error:", e);

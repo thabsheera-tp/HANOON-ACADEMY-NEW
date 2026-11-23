@@ -46,6 +46,7 @@ import {
 } from "@/services/notificationService";
 import StudentNoticeBoard from "@/components/mobile/StudentNoticeBoard";
 import StudentOfTheMonthWidget from "@/components/mobile/StudentOfTheMonthWidget";
+import StudentFeeStatusCard from "@/components/mobile/StudentFeeStatusCard";
 import {
   getLocalAttendanceRecords,
   fetchStudentAttendanceMetrics,
@@ -976,6 +977,17 @@ export default function ScreenDashboard({
           studentId={userProfile.id}
           studentPhone={userProfile.phone}
           studentName={studentName}
+        />
+      )}
+
+      {/* 4.6. 💳 STUDENT FEE & INSTALLMENT STATUS CARD */}
+      {isApproved && (
+        <StudentFeeStatusCard
+          studentId={userProfile.id || ""}
+          studentPhone={userProfile.phone || ""}
+          studentName={studentName}
+          courseId={selectedCourse.id}
+          courseName={selectedCourse.title}
         />
       )}
 
