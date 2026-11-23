@@ -280,6 +280,49 @@ export async function updatePaymentStatus(
 
       if (error) {
         console.error("Error updating status in Supabase:", error.message);
+      } else {
+        // Sync student's paid_amount and balance_fee in Supabase
+        try {
+          const { data: pData } = await supabase
+            .from("payments")
+            .select("student_id, amount")
+            .eq("id", paymentId)
+            .maybeSingle();
+
+          const sId = pData?.student_id;
+          if (sId) {
+            const { data: payRows } = await supabase
+              .from("payments")
+              .select("amount, status")
+              .eq("student_id", sId);
+
+            if (payRows && Array.isArray(payRows)) {
+              const totalApproved = payRows
+                .filter((p: any) => ["APPROVED", "VERIFIED", "PAID"].includes((p.status || "").toUpperCase()))
+                .reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
+
+              const { data: sRecord } = await supabase
+                .from("students")
+                .select("total_fee")
+                .eq("id", sId)
+                .maybeSingle();
+
+              const totalCourseFee = Number(sRecord?.total_fee ?? 3000);
+              const newBal = Math.max(0, totalCourseFee - totalApproved);
+
+              await supabase
+                .from("students")
+                .update({
+                  paid_amount: totalApproved,
+                  balance_fee: newBal,
+                  updated_at: now,
+                })
+                .eq("id", sId);
+            }
+          }
+        } catch (syncErr) {
+          console.warn("Fee sync notice in paymentService:", syncErr);
+        }
       }
     } catch (err) {
       console.warn("Failed Supabase status update:", err);
