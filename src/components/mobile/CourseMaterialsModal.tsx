@@ -14,6 +14,7 @@ import {
   Eye,
   Lock,
   ArrowRight,
+  ExternalLink,
 } from "lucide-react";
 import { SelectedCourse } from "@/types/app";
 import {
@@ -21,6 +22,10 @@ import {
   fetchCourseMaterialsFromSupabase,
   getCourseMaterials,
 } from "@/services/teacherService";
+import {
+  fetchAllStudyMaterials,
+  StudyMaterial,
+} from "@/services/studyMaterialService";
 
 interface CourseMaterialsModalProps {
   isOpen: boolean;
@@ -54,10 +59,57 @@ export default function CourseMaterialsModal({
 
     const loadData = async () => {
       try {
-        const data = await fetchCourseMaterialsFromSupabase(selectedCourse.id);
-        setMaterials(data || []);
-        const videos = (data || []).filter(
-          (m) => m.type === "VIDEO" || m.fileOrUrl?.includes("youtube") || m.fileOrUrl?.includes("mp4")
+        const [legacyData, smData] = await Promise.all([
+          fetchCourseMaterialsFromSupabase(selectedCourse.id),
+          fetchAllStudyMaterials(selectedCourse.id),
+        ]);
+
+        const mappedStudyMaterials: CourseMaterial[] = (smData || []).map((sm) => {
+          const isLink = sm.type === "link";
+          let uploadDateFormatted = "Recent";
+          if (sm.created_at) {
+            try {
+              uploadDateFormatted = new Date(sm.created_at).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              });
+            } catch {}
+          }
+          return {
+            id: `sm-${sm.id}`,
+            dbId: sm.id,
+            title: sm.title,
+            courseId: sm.course,
+            courseName: selectedCourse.title,
+            subjectName: sm.subject || undefined,
+            type: isLink ? ("LINK" as const) : ("PDF" as const),
+            fileOrUrl: sm.file_url,
+            pdfUrl: !isLink ? sm.file_url : undefined,
+            recordingUrl: isLink ? sm.file_url : undefined,
+            sizeOrDuration: isLink ? "Drive Link" : "Official PDF",
+            uploadedAt: uploadDateFormatted,
+            downloadCount: 0,
+            teacherName: sm.uploaded_by || "Faculty Instructor",
+            sourceTable: "study_materials" as const,
+            studyMaterialType: sm.type,
+          };
+        });
+
+        const seenUrls = new Set(mappedStudyMaterials.map((s) => s.fileOrUrl));
+        const combined = [...mappedStudyMaterials];
+        (legacyData || []).forEach((item) => {
+          if (!seenUrls.has(item.fileOrUrl) && !(item.recordingUrl && seenUrls.has(item.recordingUrl))) {
+            combined.push(item);
+          }
+        });
+
+        setMaterials(combined);
+        const videos = combined.filter(
+          (m) =>
+            m.type === "VIDEO" ||
+            m.fileOrUrl?.includes("youtube") ||
+            m.fileOrUrl?.includes("mp4")
         );
         if (videos.length > 0) {
           setActiveVideoId(videos[0].id);
@@ -75,22 +127,28 @@ export default function CourseMaterialsModal({
       loadData();
     };
     window.addEventListener("hanoon_material_uploaded", handleUpdate);
+    window.addEventListener("hanoon_study_materials_updated", handleUpdate);
     return () => {
       window.removeEventListener("hanoon_material_uploaded", handleUpdate);
+      window.removeEventListener("hanoon_study_materials_updated", handleUpdate);
     };
   }, [isOpen, selectedCourse.id]);
 
   if (!isOpen) return null;
 
   const pdfMaterials = materials.filter(
-    (m) => m.type === "PDF" || Boolean(m.pdfUrl) || m.fileOrUrl?.toLowerCase().endsWith(".pdf")
+    (m) =>
+      m.type === "PDF" ||
+      Boolean(m.pdfUrl) ||
+      (m as any).studyMaterialType === "pdf" ||
+      (m as any).studyMaterialType === "link" ||
+      m.sourceTable === "study_materials" ||
+      m.fileOrUrl?.toLowerCase().endsWith(".pdf")
   );
   const videoMaterials = materials.filter(
     (m) =>
       m.type === "VIDEO" ||
-      m.fileOrUrl?.includes("youtube") ||
-      m.fileOrUrl?.includes("mp4") ||
-      m.fileOrUrl?.includes("drive")
+      (m.fileOrUrl?.includes("youtube") || m.fileOrUrl?.includes("mp4"))
   );
 
   const activeLesson = videoMaterials.find((c) => c.id === activeVideoId) || videoMaterials[0];
@@ -369,52 +427,60 @@ export default function CourseMaterialsModal({
                     key={ch.id}
                     className="p-3.5 rounded-2xl bg-white border border-purple-100 shadow-xs flex items-center justify-between gap-3"
                   >
-                    <div className="space-y-0.5">
+                    <div className="space-y-0.5 min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
-                        <FileText className="w-4 h-4 text-purple-600" />
+                        {(ch as any).studyMaterialType === "link" || ch.fileOrUrl?.includes("drive.google.com") ? (
+                          <ExternalLink className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        ) : (
+                          <FileText className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                        )}
                         <span className="text-[10px] font-bold text-purple-700 uppercase">
-                          Document #{idx + 1}
+                          {(ch as any).studyMaterialType === "link" ? "Drive Document" : `Document #${idx + 1}`}
                         </span>
+                        {(ch as any).studyMaterialType === "link" ? (
+                          <span className="text-[9px] font-black bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200 shrink-0">
+                            Drive Link
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-black bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-200 shrink-0">
+                            PDF
+                          </span>
+                        )}
                       </div>
-                      <h5 className="text-xs font-bold text-slate-900 leading-tight">
+                      <h5 className="text-xs font-bold text-slate-900 leading-tight truncate">
                         {ch.title}
                       </h5>
                       <p className="text-[10px] text-slate-400">
-                        {ch.sizeOrDuration} • {ch.uploadedAt}
+                        {ch.teacherName ? `${ch.teacherName} • ` : ""}{ch.sizeOrDuration} • {ch.uploadedAt}
                       </p>
                     </div>
 
                     {isPaid ? (
-                      <button
-                        type="button"
-                        disabled={isDownloading}
-                        onClick={() => handleDownload(ch.id, ch.pdfUrl || ch.fileOrUrl, ch.title)}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-xs shrink-0 ${
-                          isDownloaded
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                            : "bg-purple-600 hover:bg-purple-700 text-white"
-                        }`}
+                      <a
+                        href={ch.pdfUrl || ch.fileOrUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="py-2 px-3 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white shadow-xs transition-all cursor-pointer shrink-0"
+                        title="View / Download Notes in new tab"
                       >
-                        {isDownloaded ? (
+                        {(ch as any).studyMaterialType === "link" || ch.fileOrUrl?.includes("drive.google.com") ? (
                           <>
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Saved</span>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            <span>View Notes</span>
                           </>
-                        ) : isDownloading ? (
-                          <span>Saving...</span>
                         ) : (
                           <>
                             <Download className="w-3.5 h-3.5" />
-                            <span>Download</span>
+                            <span>View / Download Notes</span>
                           </>
                         )}
-                      </button>
+                      </a>
                     ) : (
                       <button
                         type="button"
                         disabled
                         aria-disabled="true"
-                        title="Enroll to unlock PDF material download"
+                        title="Enroll to unlock study material access"
                         className="py-2 px-3 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed select-none shrink-0"
                       >
                         <Lock className="w-3.5 h-3.5 text-slate-400" />

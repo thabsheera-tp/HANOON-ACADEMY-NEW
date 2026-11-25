@@ -36,7 +36,7 @@ export interface CourseMaterial {
   courseName: string;
   subjectId?: string;
   subjectName?: string;
-  type: "PDF" | "VIDEO";
+  type: "PDF" | "VIDEO" | "LINK";
   fileOrUrl: string;
   pdfUrl?: string;
   recordingUrl?: string;
@@ -48,7 +48,8 @@ export interface CourseMaterial {
   downloadCount: number;
   teacher_id?: string;
   teacherName?: string;
-  sourceTable?: "live_classes" | "special_classes" | "local";
+  sourceTable?: "live_classes" | "special_classes" | "local" | "study_materials";
+  studyMaterialType?: "pdf" | "link";
 }
 
 export interface TeacherStudentItem {

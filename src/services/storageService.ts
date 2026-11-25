@@ -11,13 +11,13 @@ export interface StorageUploadResult {
 /**
  * Exact canonical Supabase Storage bucket name used for PDF uploads in Hanoon Academy.
  */
-export const PRIMARY_STORAGE_BUCKET = "course-materials";
-export const FALLBACK_STORAGE_BUCKETS = ["pdf-notes"];
+export const PRIMARY_STORAGE_BUCKET = "notes";
+export const FALLBACK_STORAGE_BUCKETS = ["course-materials", "pdf-notes"];
 
 /**
- * Maximum allowed PDF size: 50MB (50 * 1024 * 1024 bytes)
+ * Maximum allowed PDF size: 60MB (60 * 1024 * 1024 bytes)
  */
-export const MAX_PDF_SIZE_BYTES = 50 * 1024 * 1024;
+export const MAX_PDF_SIZE_BYTES = 60 * 1024 * 1024;
 
 /**
  * Uploads a PDF document to Supabase Storage with strict try/catch error handling,
@@ -47,12 +47,12 @@ export async function uploadPdfToSupabaseStorage(
     };
   }
 
-  // 3. Validate file size (max 50MB)
+  // 3. Validate file size (max 60MB)
   if (file.size > MAX_PDF_SIZE_BYTES) {
     const sizeInMb = (file.size / (1024 * 1024)).toFixed(1);
     return {
       success: false,
-      error: `File size limit exceeded: Selected PDF is ${sizeInMb}MB, which exceeds the maximum limit of 50MB.`,
+      error: `File size limit exceeded: Selected PDF is ${sizeInMb}MB, which exceeds the maximum limit of 60MB.`,
     };
   }
 

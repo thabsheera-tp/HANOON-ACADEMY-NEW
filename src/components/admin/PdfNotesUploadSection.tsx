@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   FileText,
   Upload,
@@ -42,6 +42,12 @@ import {
   triggerRecordedClassNotification,
 } from "@/services/notificationService";
 import { uploadPdfToSupabaseStorage } from "@/services/storageService";
+import {
+  createStudyMaterial,
+  fetchAllStudyMaterials,
+  deleteStudyMaterial,
+  StudyMaterial,
+} from "@/services/studyMaterialService";
 import { SHOWCASE_COURSES } from "@/components/mobile/ScreenCoursesList";
 
 interface PdfNotesUploadSectionProps {
@@ -66,6 +72,8 @@ export default function PdfNotesUploadSection({
     () => new Date().toISOString().split("T")[0]
   );
   const [pdfEstimatedDuration, setPdfEstimatedDuration] = useState("25 mins read");
+  const [pdfUploadOption, setPdfUploadOption] = useState<"file" | "drive">("file");
+  const [googleDriveLink, setGoogleDriveLink] = useState("");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfFileName, setPdfFileName] = useState("");
   const [pdfFileSize, setPdfFileSize] = useState("");
@@ -98,18 +106,25 @@ export default function PdfNotesUploadSection({
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const [materials, setMaterials] = useState<CourseMaterial[]>([]);
+  const [studyMaterials, setStudyMaterials] = useState<StudyMaterial[]>([]);
   const [adaviyyaSubjects, setAdaviyyaSubjects] = useState<AdaviyyaSubject[]>([]);
 
-  // Real-time loader for full upload history directly from Supabase
+  // Real-time loader for full upload history directly from Supabase (study_materials table + materials)
   const loadUploadHistory = useCallback(async () => {
     setIsLoadingHistory(true);
     try {
-      const liveMaterials = await fetchCourseMaterialsFromSupabase();
+      const [liveMaterials, smList] = await Promise.all([
+        fetchCourseMaterialsFromSupabase(),
+        fetchAllStudyMaterials(),
+      ]);
       setMaterials(liveMaterials);
+      setStudyMaterials(smList);
       setAdaviyyaSubjects(getAdaviyyaSubjects());
     } catch (e) {
       console.warn("Failed loading upload history from Supabase:", e);
       setMaterials(getCourseMaterials());
+      const smList = await fetchAllStudyMaterials();
+      setStudyMaterials(smList);
       setAdaviyyaSubjects(getAdaviyyaSubjects());
     } finally {
       setIsLoadingHistory(false);
@@ -125,9 +140,11 @@ export default function PdfNotesUploadSection({
     };
 
     window.addEventListener("hanoon_material_uploaded", handleUpdate);
+    window.addEventListener("hanoon_study_materials_updated", handleUpdate);
     window.addEventListener("hanoon_subjects_updated", handleUpdate);
     return () => {
       window.removeEventListener("hanoon_material_uploaded", handleUpdate);
+      window.removeEventListener("hanoon_study_materials_updated", handleUpdate);
       window.removeEventListener("hanoon_subjects_updated", handleUpdate);
     };
   }, [loadUploadHistory]);
@@ -140,7 +157,7 @@ export default function PdfNotesUploadSection({
     SHOWCASE_COURSES.find((c) => c.id === recCourseId) || SHOWCASE_COURSES[0];
   const isRecAdaviyya = recCourseId === "adaviyya";
 
-  // PDF File Selection (Direct File binding for Supabase Storage, max 50MB)
+  // PDF File Selection (Direct File binding for Supabase Storage, max 60MB)
   const handlePdfFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -150,8 +167,8 @@ export default function PdfNotesUploadSection({
       return;
     }
 
-    if (file.size > 50 * 1024 * 1024) {
-      setErrorMessage("File exceeds 50MB limit. Please upload an optimized PDF (Max size: 50MB).");
+    if (file.size > 60 * 1024 * 1024) {
+      setErrorMessage("File exceeds 60MB limit. Please upload an optimized PDF (Max size: 60MB).");
       return;
     }
 
@@ -174,6 +191,8 @@ export default function PdfNotesUploadSection({
     setPdfChapterTitle("");
     setPdfSessionDate(new Date().toISOString().split("T")[0]);
     setPdfEstimatedDuration("25 mins read");
+    setPdfUploadOption("file");
+    setGoogleDriveLink("");
     setPdfFile(null);
     setPdfFileName("");
     setPdfFileSize("");
@@ -189,7 +208,8 @@ export default function PdfNotesUploadSection({
   };
 
   // =========================================================================
-  // SECTION 1: STANDALONE SUBMIT FOR PDF NOTES (NO VIDEO LINK REQUIRED)
+  // SECTION 1: STANDALONE SUBMIT FOR STUDY MATERIALS (PDF / DRIVE LINK)
+  // Saves strictly into public.study_materials table in Supabase
   // =========================================================================
   const handleSubmitPdfNotes = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -198,8 +218,13 @@ export default function PdfNotesUploadSection({
       return;
     }
 
-    if (!pdfFile && !customPdfUrl.trim()) {
-      setErrorMessage("Please select a PDF file (.pdf) to upload or provide a direct PDF document URL.");
+    if (pdfUploadOption === "file" && !pdfFile && !customPdfUrl.trim()) {
+      setErrorMessage("Please select a PDF file (.pdf) up to 60MB to upload.");
+      return;
+    }
+
+    if (pdfUploadOption === "drive" && !googleDriveLink.trim()) {
+      setErrorMessage("Please enter a valid Google Drive document link.");
       return;
     }
 
@@ -208,50 +233,79 @@ export default function PdfNotesUploadSection({
     setSuccessMessage(null);
 
     try {
-      let finalPdfUrl = customPdfUrl.trim();
+      let finalFileUrl = "";
+      let itemType: "pdf" | "link" = "pdf";
       let finalPdfTitle = pdfFileName || `${pdfChapterTitle.trim()}.pdf`;
       let finalSize = pdfFileSize || "Official PDF";
 
-      // 1. SUPABASE STORAGE UPLOAD WITH STRICT ERROR HANDLING
-      if (pdfFile) {
-        const uploadResult = await uploadPdfToSupabaseStorage(pdfFile, "notes");
-        if (!uploadResult.success || !uploadResult.publicUrl) {
-          // Stop loading and display exact storage/RLS error immediately
-          setErrorMessage(uploadResult.error || "Failed to upload PDF to Supabase Storage.");
-          setIsSubmittingPdf(false);
-          return;
+      if (pdfUploadOption === "drive") {
+        itemType = "link";
+        finalFileUrl = googleDriveLink.trim();
+        finalSize = "Google Drive Link";
+      } else {
+        // Option A: PDF File Upload (up to 60MB to 'notes' bucket)
+        itemType = "pdf";
+        if (pdfFile) {
+          const uploadResult = await uploadPdfToSupabaseStorage(pdfFile, "notes");
+          if (!uploadResult.success || !uploadResult.publicUrl) {
+            // Stop loading spinner immediately and show exact error message in red alert box
+            setErrorMessage(uploadResult.error || "Failed to upload PDF to Supabase Storage bucket 'notes'.");
+            setIsSubmittingPdf(false);
+            return;
+          }
+          finalFileUrl = uploadResult.publicUrl;
+          finalPdfTitle = pdfFile.name;
+          finalSize = pdfFileSize || `${(pdfFile.size / (1024 * 1024)).toFixed(1)} MB`;
+        } else if (customPdfUrl.trim()) {
+          finalFileUrl = customPdfUrl.trim();
         }
-        finalPdfUrl = uploadResult.publicUrl;
-        finalPdfTitle = pdfFile.name;
-        finalSize = pdfFileSize || `${(pdfFile.size / (1024 * 1024)).toFixed(1)} MB`;
+      }
+
+      if (!finalFileUrl) {
+        setErrorMessage("Please provide a valid PDF file or Google Drive link.");
+        setIsSubmittingPdf(false);
+        return;
       }
 
       const subjectObj = adaviyyaSubjects.find((s) => s.id === pdfSubjectId);
       const subjectName = isPdfAdaviyya && subjectObj ? subjectObj.name : undefined;
 
-      // 2. DATABASE INSERTION WITH STRICT ERROR CHECKING
-      const dbResult = await saveRecordedClassToSupabase({
+      // 1. SAVE STRICTLY TO public.study_materials TABLE IN SUPABASE
+      const smResult = await createStudyMaterial({
         title: pdfChapterTitle.trim(),
-        courseId: pdfCourseId,
-        courseName: selectedPdfCourse.title,
-        subjectId: isPdfAdaviyya ? pdfSubjectId : undefined,
-        subjectName,
-        date: pdfSessionDate,
-        time: "19:30",
-        pdfUrl: finalPdfUrl,
-        pdfTitle: finalPdfTitle,
-        pdfSize: finalSize,
-        teacherName: currentUserName,
-        duration: pdfEstimatedDuration,
+        course: pdfCourseId,
+        subject: subjectName,
+        file_url: finalFileUrl,
+        type: itemType,
+        uploaded_by: currentUserName || currentUserRole || "Staff",
       });
 
-      if (!dbResult.success) {
-        setErrorMessage(dbResult.error || "Database insertion failed for this PDF note.");
+      if (!smResult.success) {
+        // Stop loading immediately and display exact error message
+        setErrorMessage(smResult.error || "Failed to save record to study_materials table in Supabase.");
         setIsSubmittingPdf(false);
         return;
       }
 
-      // 3. Trigger instant PDF Notes notification to enrolled students
+      // Also sync to live_classes for backward compatibility
+      if (itemType === "pdf") {
+        saveRecordedClassToSupabase({
+          title: pdfChapterTitle.trim(),
+          courseId: pdfCourseId,
+          courseName: selectedPdfCourse.title,
+          subjectId: isPdfAdaviyya ? pdfSubjectId : undefined,
+          subjectName,
+          date: pdfSessionDate,
+          time: "19:30",
+          pdfUrl: finalFileUrl,
+          pdfTitle: finalPdfTitle,
+          pdfSize: finalSize,
+          teacherName: currentUserName,
+          duration: pdfEstimatedDuration,
+        }).catch(() => {});
+      }
+
+      // 2. Trigger instant PDF Notes notification to enrolled students
       triggerNotesUploadedNotification({
         chapterTitle: pdfChapterTitle.trim(),
         courseName: selectedPdfCourse.title,
@@ -259,21 +313,21 @@ export default function PdfNotesUploadSection({
         subjectName,
         pdfTitle: finalPdfTitle,
         pdfSize: finalSize,
-        pdfUrl: finalPdfUrl,
+        pdfUrl: finalFileUrl,
         senderName: currentUserName,
       });
 
-      // 4. REFRESH FULL UPLOAD HISTORY IMMEDIATELY
+      // 3. REFRESH FULL UPLOAD HISTORY IMMEDIATELY
       await loadUploadHistory();
 
-      // 5. SUCCESS FEEDBACK & FORM RESET
+      // 4. SUCCESS FEEDBACK & FORM RESET
       setSuccessMessage(
-        `📚 PDF Notes "${finalPdfTitle}" uploaded successfully to Supabase Storage and published to students!`
+        `📚 Study Material "${pdfChapterTitle.trim()}" (${itemType === "pdf" ? "PDF" : "Drive Link"}) saved to Supabase study_materials table and published to students!`
       );
       handleResetPdfForm();
       setTimeout(() => setSuccessMessage(null), 6000);
     } catch (err: any) {
-      console.error("Failed to upload PDF notes:", err);
+      console.error("Failed to upload study material:", err);
       setErrorMessage(`Upload Failed: ${err?.message || "Please check Supabase Storage RLS and network connection."}`);
     } finally {
       setIsSubmittingPdf(false);
@@ -383,10 +437,16 @@ export default function PdfNotesUploadSection({
     setTimeout(() => setSuccessMessage(null), 4000);
   };
 
-  // Delete material safely from Supabase and local cache
+  // Delete material safely from Supabase (study_materials or live_classes) and local cache
   const handleDeleteMaterial = async (item: CourseMaterial) => {
     const itemName = item.title || "this content";
-    const itemTypeLabel = item.type === "PDF" ? "PDF Study Notes" : "Recorded Class Video";
+    const itemTypeLabel =
+      (item as any).studyMaterialType === "link"
+        ? "Google Drive Link"
+        : item.type === "PDF"
+        ? "PDF Study Notes"
+        : "Recorded Class Video";
+
     if (
       !confirm(
         `Are you sure you want to permanently delete this ${itemTypeLabel} ("${itemName}") from the Supabase database?`
@@ -399,6 +459,20 @@ export default function PdfNotesUploadSection({
     setErrorMessage(null);
 
     try {
+      if (item.sourceTable === "study_materials" || item.id.startsWith("sm-")) {
+        const cleanId = item.dbId || item.id.replace(/^sm-/, "");
+        const smRes = await deleteStudyMaterial(cleanId);
+        if (smRes.success) {
+          setSuccessMessage(`🗑️ Successfully deleted "${itemName}" from Supabase study_materials table.`);
+          await loadUploadHistory();
+          setTimeout(() => setSuccessMessage(null), 4000);
+          return;
+        } else {
+          setErrorMessage(smRes.error || "Failed to remove study material from Supabase.");
+          return;
+        }
+      }
+
       const res = await deleteCourseMaterialFromSupabase(item.id, item);
       if (res.success) {
         setSuccessMessage(`🗑️ Successfully deleted "${itemName}" from Supabase database.`);
@@ -415,15 +489,67 @@ export default function PdfNotesUploadSection({
     }
   };
 
+  // Convert study_materials into unified display items
+  const mappedStudyMaterials: CourseMaterial[] = useMemo(() => {
+    return studyMaterials.map((sm) => {
+      const isDriveLink = sm.type === "link";
+      let uploadDateFormatted = "Recent";
+      if (sm.created_at) {
+        try {
+          uploadDateFormatted = new Date(sm.created_at).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          });
+        } catch {}
+      }
+
+      const courseObj = SHOWCASE_COURSES.find((c) => c.id === sm.course);
+
+      return {
+        id: `sm-${sm.id}`,
+        dbId: sm.id,
+        title: sm.title,
+        courseId: sm.course,
+        courseName: courseObj?.title || sm.course,
+        subjectName: sm.subject || undefined,
+        type: isDriveLink ? ("LINK" as const) : ("PDF" as const),
+        fileOrUrl: sm.file_url,
+        pdfUrl: !isDriveLink ? sm.file_url : undefined,
+        recordingUrl: isDriveLink ? sm.file_url : undefined,
+        sizeOrDuration: isDriveLink ? "Drive Link" : "PDF Document (notes)",
+        uploadedAt: uploadDateFormatted,
+        downloadCount: 0,
+        teacherName: sm.uploaded_by || "Staff",
+        sourceTable: "study_materials" as const,
+        studyMaterialType: sm.type,
+      };
+    });
+  }, [studyMaterials]);
+
+  // Combined materials with public.study_materials taking precedence at top of list
+  const allHistoryItems: CourseMaterial[] = useMemo(() => {
+    const combined = [...mappedStudyMaterials];
+    const seen = new Set(mappedStudyMaterials.map((s) => s.fileOrUrl));
+    materials.forEach((m: CourseMaterial) => {
+      if (!seen.has(m.fileOrUrl) && !(m.recordingUrl && seen.has(m.recordingUrl))) {
+        combined.push(m);
+      }
+    });
+    return combined;
+  }, [mappedStudyMaterials, materials]);
+
   // Filtered materials for full history view
-  const filteredMaterials = materials.filter((m) => {
+  const filteredMaterials = allHistoryItems.filter((m: CourseMaterial) => {
     const matchesCourse = filterCourse === "ALL" || m.courseId === filterCourse;
-    const isVideo = m.type === "VIDEO" || Boolean(m.recordingUrl || (m as any).recorded_video_link || (m as any).recording_url);
+    const isVideo =
+      m.type === "VIDEO" ||
+      Boolean(m.recordingUrl || (m as any).recorded_video_link || (m as any).recording_url);
     const isPdf = m.type === "PDF" || Boolean(m.pdfUrl);
 
     let matchesType = true;
-    if (filterType === "PDF") matchesType = isPdf;
-    if (filterType === "VIDEO") matchesType = isVideo;
+    if (filterType === "PDF") matchesType = isPdf || m.studyMaterialType === "pdf";
+    if (filterType === "VIDEO") matchesType = isVideo || m.studyMaterialType === "link";
 
     const query = searchQuery.trim().toLowerCase();
     const matchesSearch =
@@ -437,9 +563,14 @@ export default function PdfNotesUploadSection({
     return matchesCourse && matchesType && matchesSearch;
   });
 
-  const pdfCount = materials.filter((m) => m.type === "PDF" || Boolean(m.pdfUrl)).length;
-  const recordedCount = materials.filter(
-    (m) => m.type === "VIDEO" || Boolean(m.recordingUrl || (m as any).recorded_video_link || (m as any).recording_url)
+  const pdfCount = allHistoryItems.filter(
+    (m: CourseMaterial) => m.type === "PDF" || Boolean(m.pdfUrl) || m.studyMaterialType === "pdf"
+  ).length;
+  const recordedCount = allHistoryItems.filter(
+    (m: CourseMaterial) =>
+      m.type === "VIDEO" ||
+      m.studyMaterialType === "link" ||
+      Boolean(m.recordingUrl || (m as any).recorded_video_link || (m as any).recording_url)
   ).length;
 
   return (
@@ -673,81 +804,141 @@ export default function PdfNotesUploadSection({
                   />
                 </div>
 
-                {/* 5. PDF File Upload */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-extrabold text-slate-700 flex items-center gap-1.5">
-                      <FileText className="w-3.5 h-3.5 text-purple-600" />
-                      <span>PDF Document File <span className="text-rose-500">*</span></span>
-                    </label>
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                      PDF Only (Max size: 50MB)
-                    </span>
-                  </div>
-
-                  <div className="border-2 border-dashed border-purple-200 hover:border-purple-400 rounded-2xl p-4 text-center bg-purple-50/30 hover:bg-purple-50/60 transition-all cursor-pointer relative">
-                    <input
-                      type="file"
-                      accept=".pdf,application/pdf"
-                      onChange={handlePdfFileChange}
-                      className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
-                    />
-                    <div className="flex flex-col items-center gap-1.5 pointer-events-none">
-                      <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center">
-                        <FileText className="w-5 h-5" />
-                      </div>
-                      {pdfFileName ? (
-                        <div className="space-y-0.5">
-                          <span className="text-xs font-black text-purple-700 block">
-                            {pdfFileName}
-                          </span>
-                          <span className="text-[10px] text-slate-500 font-semibold">
-                            Size: {pdfFileSize} • Ready for Upload
-                          </span>
-                        </div>
-                      ) : (
-                        <div>
-                          <span className="text-xs font-bold text-slate-800 block">
-                            Click or drag PDF study notes here
-                          </span>
-                          <span className="text-[10px] text-slate-400">
-                            Strictly for official student PDF handbooks (Max size: 50MB)
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {pdfFileName && (
-                    <div className="flex items-center justify-between text-xs pt-1">
-                      <span className="text-[11px] font-semibold text-purple-700 truncate max-w-[200px]">
-                        Attached: {pdfFileName}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleClearPdfFile}
-                        className="text-[11px] font-bold text-rose-600 hover:text-rose-800 flex items-center gap-1 cursor-pointer"
-                      >
-                        <X className="w-3 h-3" />
-                        <span>Remove</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* 6. Alternative: Direct PDF URL */}
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-slate-500 block">
-                    Or Direct PDF Document URL (Optional)
+                {/* 5. Dual Upload Option Switcher */}
+                <div className="space-y-2">
+                  <label className="text-xs font-extrabold text-slate-700 block">
+                    Choose Notes Format <span className="text-rose-500">*</span>
                   </label>
-                  <input
-                    type="url"
-                    value={customPdfUrl}
-                    onChange={(e) => setCustomPdfUrl(e.target.value)}
-                    placeholder="https://example.com/notes.pdf"
-                    className="w-full py-2 px-3 rounded-xl bg-purple-50/30 border border-purple-200/60 focus:border-purple-600 focus:bg-white text-xs font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400"
-                  />
+                  <div className="grid grid-cols-2 gap-2 p-1 bg-purple-50 rounded-2xl border border-purple-200">
+                    <button
+                      type="button"
+                      onClick={() => setPdfUploadOption("file")}
+                      className={`py-2 px-3 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        pdfUploadOption === "file"
+                          ? "bg-white text-purple-700 shadow-xs border border-purple-200"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      <FileUp className="w-3.5 h-3.5" />
+                      <span>Upload PDF File</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPdfUploadOption("drive")}
+                      className={`py-2 px-3 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        pdfUploadOption === "drive"
+                          ? "bg-white text-blue-700 shadow-xs border border-blue-200"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Paste Drive Link</span>
+                    </button>
+                  </div>
                 </div>
+
+                {/* Option A: Upload PDF File (<input type="file" accept=".pdf"> up to 60MB) */}
+                {pdfUploadOption === "file" && (
+                  <div className="space-y-2 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-extrabold text-slate-700 flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5 text-purple-600" />
+                        <span>PDF Document File <span className="text-rose-500">*</span></span>
+                      </label>
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                        Max: 60MB • Bucket: notes
+                      </span>
+                    </div>
+
+                    <div className="border-2 border-dashed border-purple-200 hover:border-purple-400 rounded-2xl p-4 text-center bg-purple-50/30 hover:bg-purple-50/60 transition-all cursor-pointer relative">
+                      <input
+                        type="file"
+                        accept=".pdf,application/pdf"
+                        onChange={handlePdfFileChange}
+                        className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
+                      />
+                      <div className="flex flex-col items-center gap-1.5 pointer-events-none">
+                        <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center">
+                          <FileText className="w-5 h-5" />
+                        </div>
+                        {pdfFileName ? (
+                          <div className="space-y-0.5">
+                            <span className="text-xs font-black text-purple-700 block">
+                              {pdfFileName}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-semibold">
+                              Size: {pdfFileSize} • Ready for Supabase Storage
+                            </span>
+                          </div>
+                        ) : (
+                          <div>
+                            <span className="text-xs font-bold text-slate-800 block">
+                              Click or drag PDF study notes here
+                            </span>
+                            <span className="text-[10px] text-slate-400">
+                              Uploads to 'notes' bucket & saves to study_materials (Max 60MB)
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {pdfFileName && (
+                      <div className="flex items-center justify-between text-xs pt-1">
+                        <span className="text-[11px] font-semibold text-purple-700 truncate max-w-[200px]">
+                          Attached: {pdfFileName}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleClearPdfFile}
+                          className="text-[11px] font-bold text-rose-600 hover:text-rose-800 flex items-center gap-1 cursor-pointer"
+                        >
+                          <X className="w-3 h-3" />
+                          <span>Remove</span>
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="space-y-1 pt-1">
+                      <label className="text-[11px] font-bold text-slate-500 block">
+                        Or Direct Document URL (Optional)
+                      </label>
+                      <input
+                        type="url"
+                        value={customPdfUrl}
+                        onChange={(e) => setCustomPdfUrl(e.target.value)}
+                        placeholder="https://example.com/notes.pdf"
+                        className="w-full py-2 px-3 rounded-xl bg-purple-50/30 border border-purple-200/60 focus:border-purple-600 focus:bg-white text-xs font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Option B: Paste Google Drive Link (<input type="url">) */}
+                {pdfUploadOption === "drive" && (
+                  <div className="space-y-1.5 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-extrabold text-slate-700 flex items-center gap-1.5">
+                        <ExternalLink className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Google Drive Document Link <span className="text-rose-500">*</span></span>
+                      </label>
+                      <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                        Type: link
+                      </span>
+                    </div>
+                    <input
+                      type="url"
+                      required
+                      value={googleDriveLink}
+                      onChange={(e) => setGoogleDriveLink(e.target.value)}
+                      placeholder="https://drive.google.com/file/d/.../view?usp=sharing"
+                      className="w-full py-2.5 px-3.5 rounded-xl bg-purple-50/50 border border-purple-200/80 focus:border-purple-600 focus:bg-white text-xs sm:text-sm font-semibold text-slate-900 outline-none transition-all placeholder:text-slate-400"
+                    />
+                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                      Saves directly into <code className="text-purple-700 bg-purple-100/70 px-1 rounded">public.study_materials</code> with <code className="text-purple-700 bg-purple-100/70 px-1 rounded">type = 'link'</code>. Make sure the Drive link access is set to "Anyone with the link".
+                    </p>
+                  </div>
+                )}
 
                 {/* 7. Estimated Reading Duration */}
                 <div className="space-y-1.5">
@@ -1046,7 +1237,7 @@ export default function PdfNotesUploadSection({
                         : "text-slate-600 hover:text-slate-900"
                     }`}
                   >
-                    All ({materials.length})
+                    All ({allHistoryItems.length})
                   </button>
                   <button
                     type="button"
@@ -1110,7 +1301,7 @@ export default function PdfNotesUploadSection({
               </div>
             ) : (
               <div className="space-y-3 max-h-[560px] overflow-y-auto pr-1">
-                {filteredMaterials.map((item) => {
+                {filteredMaterials.map((item: CourseMaterial) => {
                   const isVideo = item.type === "VIDEO" || Boolean(item.recordingUrl || (item as any).recorded_video_link || (item as any).recording_url);
                   const isPdf = item.type === "PDF" || Boolean(item.pdfUrl);
                   const videoLink = (item as any).recorded_video_link || item.recordingUrl || (item as any).recording_url || (isVideo ? item.fileOrUrl : null);
@@ -1141,17 +1332,23 @@ export default function PdfNotesUploadSection({
                         <div className="min-w-0 space-y-1.5 flex-1">
                           {/* Badges: Course, Subject, Type, Date */}
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            {/* Type Badge */}
-                            {isVideo && (
+                            {/* Type Badge (PDF / Drive Link / Recorded Video) */}
+                            {((item as any).studyMaterialType === "link" || (!isVideo && !isPdf && item.fileOrUrl.includes("drive"))) && (
+                              <span className="text-[10px] font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 flex items-center gap-1">
+                                <ExternalLink className="w-2.5 h-2.5" />
+                                <span>Drive Link</span>
+                              </span>
+                            )}
+                            {((item as any).studyMaterialType === "pdf" || (isPdf && (item as any).studyMaterialType !== "link")) && (
+                              <span className="text-[10px] font-black text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200 flex items-center gap-1">
+                                <FileText className="w-2.5 h-2.5" />
+                                <span>PDF</span>
+                              </span>
+                            )}
+                            {isVideo && !(item as any).studyMaterialType && (
                               <span className="text-[10px] font-black text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200 flex items-center gap-1">
                                 <Play className="w-2.5 h-2.5 fill-current" />
                                 <span>Recorded Video</span>
-                              </span>
-                            )}
-                            {isPdf && (
-                              <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1">
-                                <FileText className="w-2.5 h-2.5" />
-                                <span>PDF Notes</span>
                               </span>
                             )}
 
@@ -1222,8 +1419,20 @@ export default function PdfNotesUploadSection({
                           </button>
                         )}
 
-                        {/* Watch Replay Button */}
-                        {videoLink && (
+                        {/* Universal Working View Button (target="_blank" rel="noopener noreferrer") */}
+                        <a
+                          href={item.fileOrUrl || pdfLink || videoLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="py-1.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
+                          title="Open or View in new tab"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>View</span>
+                        </a>
+
+                        {/* Watch Replay Button for recorded video */}
+                        {videoLink && !(item as any).studyMaterialType && (
                           <a
                             href={videoLink}
                             target="_blank"
@@ -1233,21 +1442,6 @@ export default function PdfNotesUploadSection({
                           >
                             <Play className="w-3 h-3 fill-current" />
                             <span>Watch</span>
-                          </a>
-                        )}
-
-                        {/* View / Download PDF Button */}
-                        {pdfLink && (
-                          <a
-                            href={pdfLink}
-                            download={item.fileOrUrl || "notes.pdf"}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="py-1.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs active:scale-95"
-                            title="Download or View PDF Handbook"
-                          >
-                            <Download className="w-3 h-3" />
-                            <span>PDF</span>
                           </a>
                         )}
 
@@ -1282,7 +1476,7 @@ export default function PdfNotesUploadSection({
           {/* Footer: Count and Sync Status */}
           <div className="pt-3 border-t border-purple-100 flex items-center justify-between text-[11px] text-slate-500 flex-wrap gap-2">
             <span className="font-semibold">
-              Showing {filteredMaterials.length} of {materials.length} uploaded items
+              Showing {filteredMaterials.length} of {allHistoryItems.length} uploaded items
             </span>
             <span className="font-bold text-emerald-700 flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
               <Check className="w-3.5 h-3.5" />

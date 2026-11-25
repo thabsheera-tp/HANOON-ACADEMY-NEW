@@ -41,6 +41,7 @@ import {
   triggerClassLiveNotification,
 } from "@/services/notificationService";
 import { uploadPdfToSupabaseStorage } from "@/services/storageService";
+import { createStudyMaterial } from "@/services/studyMaterialService";
 import HanoonLogo from "@/components/brand/HanoonLogo";
 import TeacherEngagementDonut from "@/components/charts/TeacherEngagementDonut";
 import AdminMetricsChart from "@/components/charts/AdminMetricsChart";
@@ -130,6 +131,8 @@ export default function TeacherDashboardPage() {
     customUrl: "",
     duration: "25 mins read",
   });
+  const [teacherPdfOption, setTeacherPdfOption] = useState<"file" | "drive">("file");
+  const [teacherDriveLink, setTeacherDriveLink] = useState("");
   const [teacherPdfFile, setTeacherPdfFile] = useState<File | null>(null);
   const [teacherPdfFileName, setTeacherPdfFileName] = useState("");
   const [teacherPdfFileSize, setTeacherPdfFileSize] = useState("");
@@ -445,7 +448,7 @@ export default function TeacherDashboardPage() {
     }
 
     if (file.size > 60 * 1024 * 1024) {
-      alert("File exceeds 50MB limit. Please upload an optimized PDF (Max size: 50MB).");
+      alert("File exceeds 60MB limit. Please upload an optimized PDF (Max size: 60MB).");
       return;
     }
 
@@ -477,8 +480,13 @@ export default function TeacherDashboardPage() {
       return;
     }
 
-    if (!teacherPdfFile && !teacherPdfForm.customUrl.trim()) {
-      setUploadErrorMsg("Please attach a PDF document file (.pdf) or provide a direct PDF link.");
+    if (teacherPdfOption === "file" && !teacherPdfFile && !teacherPdfForm.customUrl.trim()) {
+      setUploadErrorMsg("Please attach a PDF document file (.pdf) up to 60MB or provide a direct PDF link.");
+      return;
+    }
+
+    if (teacherPdfOption === "drive" && !teacherDriveLink.trim()) {
+      setUploadErrorMsg("Please enter a valid Google Drive document link.");
       return;
     }
 
@@ -495,46 +503,69 @@ export default function TeacherDashboardPage() {
     const courseName = courseMap[teacherPdfForm.courseId] || "Adaviyya";
     const teacherId = resolveTeacherId(currentUser);
     let finalPdfTitle = teacherPdfFileName || `${teacherPdfForm.title.trim()}.pdf`;
-    let finalSize = teacherPdfFileSize || "3.5 MB";
-    let finalPdfUrl = teacherPdfForm.customUrl.trim();
+    let finalSize = teacherPdfFileSize || "Official PDF";
+    let finalFileUrl = "";
+    let itemType: "pdf" | "link" = "pdf";
 
     try {
-      if (teacherPdfFile) {
-        const uploadRes = await uploadPdfToSupabaseStorage(teacherPdfFile, "notes");
-        if (!uploadRes.success || !uploadRes.publicUrl) {
-          setUploadErrorMsg(uploadRes.error || "Failed to upload PDF to Supabase Storage.");
-          setIsSubmittingTeacherPdf(false);
-          return;
+      if (teacherPdfOption === "drive") {
+        itemType = "link";
+        finalFileUrl = teacherDriveLink.trim();
+        finalSize = "Google Drive Link";
+      } else {
+        itemType = "pdf";
+        if (teacherPdfFile) {
+          const uploadRes = await uploadPdfToSupabaseStorage(teacherPdfFile, "notes");
+          if (!uploadRes.success || !uploadRes.publicUrl) {
+            setUploadErrorMsg(uploadRes.error || "Failed to upload PDF to Supabase Storage bucket 'notes'.");
+            setIsSubmittingTeacherPdf(false);
+            return;
+          }
+          finalFileUrl = uploadRes.publicUrl;
+          finalPdfTitle = teacherPdfFile.name;
+          finalSize = teacherPdfFileSize || `${(teacherPdfFile.size / (1024 * 1024)).toFixed(1)} MB`;
+        } else if (teacherPdfForm.customUrl.trim()) {
+          finalFileUrl = teacherPdfForm.customUrl.trim();
         }
-        finalPdfUrl = uploadRes.publicUrl;
-        finalPdfTitle = teacherPdfFile.name;
-        finalSize = teacherPdfFileSize || `${(teacherPdfFile.size / (1024 * 1024)).toFixed(1)} MB`;
       }
 
-      if (!finalPdfUrl) {
-        setUploadErrorMsg("Please provide a valid PDF file or direct document URL.");
+      if (!finalFileUrl) {
+        setUploadErrorMsg("Please provide a valid PDF file or Google Drive link.");
         setIsSubmittingTeacherPdf(false);
         return;
       }
 
-      const saveRes = await saveRecordedClassToSupabase({
+      // 1. SAVE STRICTLY TO public.study_materials TABLE IN SUPABASE
+      const smRes = await createStudyMaterial({
         title: teacherPdfForm.title.trim(),
-        courseId: teacherPdfForm.courseId,
-        courseName,
-        date: teacherPdfForm.sessionDate || new Date().toISOString().split("T")[0],
-        time: "19:30",
-        pdfUrl: finalPdfUrl,
-        pdfTitle: finalPdfTitle,
-        pdfSize: finalSize,
-        teacherId,
-        teacherName: currentUser?.full_name || "Faculty",
-        duration: teacherPdfForm.duration,
+        course: teacherPdfForm.courseId,
+        subject: courseName,
+        file_url: finalFileUrl,
+        type: itemType,
+        uploaded_by: currentUser?.full_name || "Faculty Instructor",
       });
 
-      if (!saveRes.success) {
-        setUploadErrorMsg(saveRes.error || "Database insertion failed for this PDF note.");
+      if (!smRes.success) {
+        setUploadErrorMsg(smRes.error || "Database insertion failed for public.study_materials table.");
         setIsSubmittingTeacherPdf(false);
         return;
+      }
+
+      // Sync to live_classes for backward compatibility
+      if (itemType === "pdf") {
+        saveRecordedClassToSupabase({
+          title: teacherPdfForm.title.trim(),
+          courseId: teacherPdfForm.courseId,
+          courseName,
+          date: teacherPdfForm.sessionDate || new Date().toISOString().split("T")[0],
+          time: "19:30",
+          pdfUrl: finalFileUrl,
+          pdfTitle: finalPdfTitle,
+          pdfSize: finalSize,
+          teacherId,
+          teacherName: currentUser?.full_name || "Faculty",
+          duration: teacherPdfForm.duration,
+        }).catch(() => {});
       }
 
       uploadCourseMaterial({
@@ -543,7 +574,7 @@ export default function TeacherDashboardPage() {
         courseName,
         type: "PDF",
         fileOrUrl: finalPdfTitle,
-        pdfUrl: finalPdfUrl,
+        pdfUrl: finalFileUrl,
         sessionDate: teacherPdfForm.sessionDate || new Date().toISOString().split("T")[0],
         sizeOrDuration: finalSize,
         teacher_id: teacherId,
@@ -556,12 +587,12 @@ export default function TeacherDashboardPage() {
         courseId: teacherPdfForm.courseId,
         pdfTitle: finalPdfTitle,
         pdfSize: finalSize,
-        pdfUrl: finalPdfUrl,
+        pdfUrl: finalFileUrl,
         senderName: currentUser?.full_name || "Faculty Instructor",
       });
 
       setMaterials(getCourseMaterials());
-      setUploadSuccessMsg(`📚 PDF Notes "${finalPdfTitle}" published successfully! Enrolled students notified.`);
+      setUploadSuccessMsg(`📚 Study Material "${teacherPdfForm.title.trim()}" (${itemType === "pdf" ? "PDF" : "Drive Link"}) published successfully to Supabase! Enrolled students notified.`);
       setTeacherPdfForm({
         courseId: availableTracks[0]?.id || "adaviyya",
         title: "",
@@ -569,12 +600,14 @@ export default function TeacherDashboardPage() {
         customUrl: "",
         duration: "25 mins read",
       });
+      setTeacherPdfOption("file");
+      setTeacherDriveLink("");
       setTeacherPdfFile(null);
       setTeacherPdfFileName("");
       setTeacherPdfFileSize("");
       setTeacherPdfDataUrl("");
     } catch (err: any) {
-      console.error("Failed to upload PDF notes:", err);
+      console.error("Failed to upload study material:", err);
       setUploadErrorMsg(`Upload Failed: ${err?.message || "Please check Supabase Storage connection."}`);
     } finally {
       setIsSubmittingTeacherPdf(false);
@@ -1657,61 +1690,113 @@ export default function TeacherDashboardPage() {
                       />
                     </div>
 
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="font-bold text-slate-700">
-                          PDF Document File *
-                        </label>
-                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
-                          PDF Only (Max size: 50MB)
-                        </span>
-                      </div>
-                      <div className="border-2 border-dashed border-purple-200 hover:border-purple-400 rounded-xl p-4 text-center bg-purple-50/30 hover:bg-purple-50/60 transition-all cursor-pointer relative">
-                        <input
-                          type="file"
-                          accept=".pdf,application/pdf"
-                          onChange={handleTeacherPdfFileChange}
-                          className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
-                        />
-                        <div className="flex flex-col items-center gap-1.5 pointer-events-none">
-                          <FileText className="w-6 h-6 text-purple-600" />
-                          {teacherPdfFileName ? (
-                            <div>
-                              <span className="text-xs font-black text-purple-700 block">
-                                {teacherPdfFileName}
-                              </span>
-                              <span className="text-[10px] text-slate-500 font-semibold">
-                                Size: {teacherPdfFileSize} • Attached
-                              </span>
-                            </div>
-                          ) : (
-                            <div>
-                              <span className="text-slate-700 font-semibold block text-xs">
-                                Click or drag PDF handbook here
-                              </span>
-                              <span className="text-[10px] text-slate-400">
-                                Direct file upload reserved strictly for PDF notes (Max size: 50MB)
-                              </span>
-                            </div>
-                          )}
-                        </div>
+                    {/* Dual Option Switcher: Upload PDF vs Google Drive Link */}
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-slate-700 block">
+                        Material Format Option *
+                      </label>
+                      <div className="grid grid-cols-2 gap-2 p-1 bg-purple-50 rounded-xl border border-purple-200">
+                        <button
+                          type="button"
+                          onClick={() => setTeacherPdfOption("file")}
+                          className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                            teacherPdfOption === "file"
+                              ? "bg-white text-purple-700 shadow-xs border border-purple-200"
+                              : "text-slate-600 hover:text-slate-900"
+                          }`}
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>Upload PDF</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTeacherPdfOption("drive")}
+                          className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                            teacherPdfOption === "drive"
+                              ? "bg-white text-blue-700 shadow-xs border border-blue-200"
+                              : "text-slate-600 hover:text-slate-900"
+                          }`}
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>Drive Link</span>
+                        </button>
                       </div>
                     </div>
 
-                    <div>
-                      <label className="font-bold text-slate-700 block mb-1">
-                        Or Direct PDF Document URL (Optional)
-                      </label>
-                      <input
-                        type="url"
-                        placeholder="https://example.com/notes.pdf"
-                        value={teacherPdfForm.customUrl}
-                        onChange={(e) =>
-                          setTeacherPdfForm({ ...teacherPdfForm, customUrl: e.target.value })
-                        }
-                        className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none focus:border-purple-400"
-                      />
-                    </div>
+                    {teacherPdfOption === "file" ? (
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="font-bold text-slate-700">
+                            PDF Document File *
+                          </label>
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
+                            Max: 60MB • Bucket: notes
+                          </span>
+                        </div>
+                        <div className="border-2 border-dashed border-purple-200 hover:border-purple-400 rounded-xl p-4 text-center bg-purple-50/30 hover:bg-purple-50/60 transition-all cursor-pointer relative">
+                          <input
+                            type="file"
+                            accept=".pdf,application/pdf"
+                            onChange={handleTeacherPdfFileChange}
+                            className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
+                          />
+                          <div className="flex flex-col items-center gap-1.5 pointer-events-none">
+                            <FileText className="w-6 h-6 text-purple-600" />
+                            {teacherPdfFileName ? (
+                              <div>
+                                <span className="text-xs font-black text-purple-700 block">
+                                  {teacherPdfFileName}
+                                </span>
+                                <span className="text-[10px] text-slate-500 font-semibold">
+                                  Size: {teacherPdfFileSize} • Attached
+                                </span>
+                              </div>
+                            ) : (
+                              <div>
+                                <span className="text-slate-700 font-semibold block text-xs">
+                                  Click or drag PDF handbook here
+                                </span>
+                                <span className="text-[10px] text-slate-400">
+                                  Uploads to 'notes' bucket & saves to study_materials (Max 60MB)
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="mt-2">
+                          <label className="font-bold text-slate-500 block text-[11px] mb-1">
+                            Or Direct Document URL (Optional)
+                          </label>
+                          <input
+                            type="url"
+                            placeholder="https://example.com/notes.pdf"
+                            value={teacherPdfForm.customUrl}
+                            onChange={(e) =>
+                              setTeacherPdfForm({ ...teacherPdfForm, customUrl: e.target.value })
+                            }
+                            className="w-full p-2 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none focus:border-purple-400 text-xs"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">
+                          Google Drive Link *
+                        </label>
+                        <input
+                          type="url"
+                          required
+                          placeholder="https://drive.google.com/file/d/.../view?usp=sharing"
+                          value={teacherDriveLink}
+                          onChange={(e) => setTeacherDriveLink(e.target.value)}
+                          className="w-full p-2.5 rounded-xl bg-purple-50/50 border border-purple-100 text-slate-900 font-medium outline-none focus:border-purple-400"
+                        />
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          Saves directly into public.study_materials with type = 'link'. Ensure permission is set to "Anyone with the link".
+                        </p>
+                      </div>
+                    )}
 
                     <div>
                       <label className="font-bold text-slate-700 block mb-1">
