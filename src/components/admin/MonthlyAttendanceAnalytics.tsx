@@ -42,14 +42,33 @@ export default function MonthlyAttendanceAnalytics({
   registrations,
 }: MonthlyAttendanceAnalyticsProps) {
   const now = new Date();
-  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-  const [selectedMonth, setSelectedMonth] = useState<string>(defaultMonth);
+  // Default to "all" so all previously recorded attendance (including 17+ classes from last month) display immediately
+  const [selectedMonth, setSelectedMonth] = useState<string>("all");
   const [selectedCourseId, setSelectedCourseId] = useState<string>("all");
+  const [isCustomMonth, setIsCustomMonth] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [tierFilter, setTierFilter] = useState<"all" | "high" | "low">("all");
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [summary, setSummary] = useState<MonthlyAttendanceSummary | null>(null);
+
+  // Dynamic month options for easy 1-click filtering
+  const monthOptions = useMemo(() => {
+    const options = [
+      { id: "all", label: "🌟 All Time (All Recorded Sessions)" },
+    ];
+    // Generate past 8 months
+    for (let i = 0; i < 8; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const lbl = d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+      const tag = i === 0 ? " (Current Month)" : i === 1 ? " (Last Month - 17+ Classes)" : "";
+      options.push({ id: val, label: `📅 ${lbl}${tag}` });
+    }
+    options.push({ id: "custom", label: "🔍 Custom Month Picker..." });
+    return options;
+  }, []);
 
   // Load monthly summary whenever month or course changes
   const loadAnalytics = async () => {
@@ -219,12 +238,51 @@ export default function MonthlyAttendanceAnalytics({
               <Calendar className="w-3.5 h-3.5 text-purple-600" />
               <span>Select Month & Year</span>
             </label>
-            <input
-              type="month"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-2xl bg-purple-50/50 border border-purple-200 text-xs font-black text-slate-800 outline-none focus:border-purple-600 focus:bg-white transition-all"
-            />
+            <div className="flex flex-col gap-2">
+              <select
+                value={isCustomMonth ? "custom" : selectedMonth}
+                onChange={(e) => {
+                  if (e.target.value === "custom") {
+                    setIsCustomMonth(true);
+                    if (selectedMonth === "all") {
+                      setSelectedMonth(currentMonthStr);
+                    }
+                  } else {
+                    setIsCustomMonth(false);
+                    setSelectedMonth(e.target.value);
+                  }
+                }}
+                className="w-full px-3.5 py-2.5 rounded-2xl bg-purple-50/50 border border-purple-200 text-xs font-black text-slate-800 outline-none focus:border-purple-600 focus:bg-white transition-all cursor-pointer"
+              >
+                {monthOptions.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+
+              {isCustomMonth && (
+                <div className="flex items-center gap-2 animate-fade-in">
+                  <input
+                    type="month"
+                    value={selectedMonth === "all" ? currentMonthStr : selectedMonth}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                    className="w-full px-3.5 py-2 rounded-xl bg-purple-50/50 border border-purple-200 text-xs font-black text-slate-800 outline-none focus:border-purple-600 focus:bg-white transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomMonth(false);
+                      setSelectedMonth("all");
+                    }}
+                    className="px-3 py-2 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-800 text-xs font-bold transition-all shrink-0 cursor-pointer"
+                    title="Switch to All Time"
+                  >
+                    All Time
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Course Selector */}
@@ -236,7 +294,7 @@ export default function MonthlyAttendanceAnalytics({
             <select
               value={selectedCourseId}
               onChange={(e) => setSelectedCourseId(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-2xl bg-purple-50/50 border border-purple-200 text-xs font-black text-slate-800 outline-none focus:border-purple-600 focus:bg-white transition-all"
+              className="w-full px-3.5 py-2.5 rounded-2xl bg-purple-50/50 border border-purple-200 text-xs font-black text-slate-800 outline-none focus:border-purple-600 focus:bg-white transition-all cursor-pointer"
             >
               {COURSES_CONFIG.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -247,6 +305,22 @@ export default function MonthlyAttendanceAnalytics({
           </div>
         </div>
       </div>
+
+      {/* Database Error Banner if Supabase returned an error */}
+      {summary?.errorMessage && (
+        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-3 shadow-sm animate-fade-in">
+          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="space-y-1 flex-1">
+            <p className="font-extrabold text-amber-900">Database Query Notice</p>
+            <p className="font-mono text-[11px] text-amber-800 bg-amber-100/70 p-2 rounded-xl break-all">
+              {summary.errorMessage}
+            </p>
+            <p className="text-[11px] text-amber-700">
+              Showing locally cached records. Please verify database connectivity or permissions.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* 3. KPI Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -299,14 +373,26 @@ export default function MonthlyAttendanceAnalytics({
         </div>
 
         {!summary || summary.topAttendees.length === 0 ? (
-          <div className="p-8 rounded-3xl bg-white border border-purple-100 text-center space-y-2">
+          <div className="p-8 rounded-3xl bg-white border border-purple-100 text-center space-y-3">
             <Trophy className="w-8 h-8 mx-auto text-slate-300" />
-            <p className="text-xs font-bold text-slate-500">
+            <p className="text-xs font-bold text-slate-600">
               No attendance records logged for {summary?.monthLabel || selectedMonth}.
             </p>
-            <p className="text-[11px] text-slate-400">
-              Mark attendance in the Daily Register tab or join live classes to populate the leaderboard.
+            <p className="text-[11px] text-slate-400 max-w-md mx-auto">
+              Mark attendance in the Daily Register tab or switch to All Time to view previously recorded attendance sessions.
             </p>
+            {selectedMonth !== "all" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedMonth("all");
+                  setIsCustomMonth(false);
+                }}
+                className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-md transition-all cursor-pointer"
+              >
+                <span>🌟 View All-Time Records (17+ Sessions)</span>
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">

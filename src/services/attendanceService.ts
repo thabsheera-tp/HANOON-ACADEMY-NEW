@@ -65,6 +65,123 @@ export function getLocalAttendanceRecords(): AttendanceRecord[] {
   return [];
 }
 
+/**
+ * Flexible case-insensitive status normalization.
+ * Handles 'P', 'p', 'Present', 'present', 'attended', 'attended', '1', 'yes' as PRESENT.
+ * Handles 'A', 'a', 'Absent', 'absent', '0', 'no' as ABSENT.
+ * Handles 'L', 'l', 'Leave', 'leave', 'EXCUSED', 'excused' as EXCUSED.
+ * Handles 'LATE', 'late' as LATE.
+ */
+export function normalizeAttendanceStatus(rawStatus?: string): AttendanceStatus {
+  if (!rawStatus) return "PRESENT";
+  const s = String(rawStatus).trim().toUpperCase();
+  if (s === "A" || s === "ABSENT" || s === "NO" || s === "0" || s === "FALSE") {
+    return "ABSENT";
+  }
+  if (s === "L" || s === "LEAVE" || s === "EXCUSED" || s === "PERMITTED") {
+    return "EXCUSED";
+  }
+  if (s === "LATE") {
+    return "LATE";
+  }
+  return "PRESENT";
+}
+
+export function isPresentStatus(status?: string): boolean {
+  if (!status) return false;
+  const s = String(status).trim().toUpperCase();
+  return (
+    s === "P" ||
+    s === "PRESENT" ||
+    s === "ATTENDED" ||
+    s === "ATTEND" ||
+    s === "JOINED" ||
+    s === "LATE" ||
+    s === "YES" ||
+    s === "1" ||
+    s === "TRUE"
+  );
+}
+
+export function isLateStatus(status?: string): boolean {
+  if (!status) return false;
+  return String(status).trim().toUpperCase() === "LATE";
+}
+
+export function isLeaveStatus(status?: string): boolean {
+  if (!status) return false;
+  const s = String(status).trim().toUpperCase();
+  return s === "L" || s === "LEAVE" || s === "EXCUSED" || s === "PERMITTED";
+}
+
+export function isAbsentStatus(status?: string): boolean {
+  if (!status) return false;
+  const s = String(status).trim().toUpperCase();
+  return s === "A" || s === "ABSENT" || s === "NO" || s === "0" || s === "FALSE";
+}
+
+/**
+ * Flexible date extractor: falls back to attendance_date, date, created_at, marked_at, submitted_at.
+ * Always formats as standard 'YYYY-MM-DD'.
+ */
+export function extractRecordDate(row: any): string {
+  if (!row) return new Date().toISOString().split("T")[0];
+  const candidate =
+    row.attendance_date ||
+    row.date ||
+    row.marked_at ||
+    row.created_at ||
+    row.submitted_at;
+
+  if (!candidate) return new Date().toISOString().split("T")[0];
+
+  if (typeof candidate === "string") {
+    if (candidate.includes("T")) {
+      return candidate.split("T")[0];
+    }
+    if (/^\d{4}-\d{2}-\d{2}/.test(candidate)) {
+      return candidate.slice(0, 10);
+    }
+  }
+
+  try {
+    const d = new Date(candidate);
+    if (!isNaN(d.getTime())) {
+      return d.toISOString().split("T")[0];
+    }
+  } catch {}
+
+  return String(candidate).slice(0, 10);
+}
+
+/**
+ * Safe mapper for Supabase raw rows into clean AttendanceRecord without relational inner join failure.
+ */
+export function mapDbAttendanceRow(row: any): AttendanceRecord {
+  const normStatus = normalizeAttendanceStatus(row.status);
+  const recDate = extractRecordDate(row);
+  const sPhone = row.student_phone || row.phone || row.whatsapp_num || "";
+  const sId = row.student_id || (sPhone ? `std-${sPhone.replace(/\D/g, "")}` : row.id);
+  const sName =
+    row.student_name ||
+    row.name ||
+    row.full_name ||
+    (sPhone ? `Student (${sPhone.slice(-4)})` : "Enrolled Student");
+
+  return {
+    id: row.id || `att-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    studentId: sId,
+    studentName: sName,
+    studentPhone: sPhone,
+    courseId: row.course_id || "adaviyya",
+    subjectId: row.subject_id || "core",
+    date: recDate,
+    status: normStatus,
+    notes: row.notes || undefined,
+    markedAt: row.marked_at || row.created_at || new Date().toISOString(),
+  };
+}
+
 export function saveLocalAttendanceRecords(records: AttendanceRecord[]): void {
   if (typeof window === "undefined") return;
   try {
@@ -217,7 +334,93 @@ export async function batchRecordAttendance(
   }
 
   saveLocalAttendanceRecords(local);
+
+  // Background sync batch records to Supabase 'attendance' table
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const isUuid = (val?: string) =>
+        Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val));
+
+      const payloads = results.map((r) => ({
+        id: r.id,
+        student_id: isUuid(r.studentId) ? r.studentId : null,
+        student_phone: r.studentPhone || null,
+        student_name: r.studentName || null,
+        course_id: r.courseId,
+        subject_id: r.subjectId,
+        attendance_date: r.date,
+        status: r.status,
+        notes: r.notes || null,
+        marked_at: r.markedAt,
+      }));
+
+      await supabase.from("attendance").upsert(payloads);
+    } catch (err) {
+      console.warn("Could not batch sync attendance records to Supabase:", err);
+    }
+  }
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("hanoon_attendance_updated"));
+  }
+
   return results;
+}
+
+/**
+ * Loads all attendance records from Supabase and merges with local storage.
+ * Ensures previously saved attendance (including 17+ classes from last month)
+ * is fully populated in memory across devices and tabs.
+ */
+export async function fetchAllAttendanceRecords(): Promise<AttendanceRecord[]> {
+  let dbRecords: AttendanceRecord[] = [];
+
+  // 1. Try server-side admin data route first (bypasses RLS with service role)
+  if (typeof window !== "undefined") {
+    try {
+      const res = await fetch("/api/admin/data");
+      if (res.ok) {
+        const json = await res.json();
+        if (json && Array.isArray(json.attendance) && json.attendance.length > 0) {
+          dbRecords = json.attendance.map((row: any) => mapDbAttendanceRow(row));
+        }
+      }
+    } catch {}
+  }
+
+  // 2. Direct Supabase Client fallback
+  if (dbRecords.length === 0 && isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase
+        .from("attendance")
+        .select("*")
+        .order("attendance_date", { ascending: false });
+
+      if (!error && Array.isArray(data)) {
+        dbRecords = data.map((row: any) => mapDbAttendanceRow(row));
+      }
+    } catch (err) {
+      console.warn("Direct Supabase attendance query notice:", err);
+    }
+  }
+
+  // Merge with local records
+  const local = getLocalAttendanceRecords();
+  const map = new Map<string, AttendanceRecord>();
+  for (const r of dbRecords) {
+    map.set(r.id, r);
+  }
+  for (const r of local) {
+    if (!map.has(r.id)) {
+      map.set(r.id, r);
+    }
+  }
+
+  const merged = Array.from(map.values());
+  if (merged.length > local.length) {
+    saveLocalAttendanceRecords(merged);
+  }
+  return merged;
 }
 
 /**
@@ -432,8 +635,8 @@ export interface MonthlyStudentAttendance {
 }
 
 export interface MonthlyAttendanceSummary {
-  month: string; // e.g. "2026-11"
-  monthLabel: string; // e.g. "November 2026"
+  month: string; // e.g. "2026-11" or "all"
+  monthLabel: string; // e.g. "November 2026" or "All Time (All Recorded Sessions)"
   courseId: string;
   totalClassesHeld: number;
   averageAttendanceRate: number;
@@ -441,12 +644,17 @@ export interface MonthlyAttendanceSummary {
   lowAttendanceCount: number; // < 75%
   topAttendees: MonthlyStudentAttendance[]; // Top 3
   allStudents: MonthlyStudentAttendance[];
+  errorMessage?: string | null;
 }
 
 /**
  * Format a YYYY-MM string into a human readable Month Year (e.g. "2026-11" -> "November 2026")
+ * Supports 'all' -> "All Time (All Recorded Sessions)"
  */
 export function formatMonthYearLabel(monthStr: string): string {
+  if (!monthStr || monthStr.toLowerCase() === "all") {
+    return "All Time (All Recorded Sessions)";
+  }
   try {
     const [y, m] = monthStr.split("-").map(Number);
     if (!y || !m) return monthStr;
@@ -458,13 +666,16 @@ export function formatMonthYearLabel(monthStr: string): string {
 }
 
 /**
- * Accurately aggregates monthly attendance from Supabase and local cache.
+ * Accurately aggregates attendance from Supabase and local cache.
  * Grouped strictly by student_id with deduplication on same date/session.
- * Calculates total classes held, present days, absent/leave days, exact %, and ranks.
+ * Flexible status matching ('P', 'Present', 'attended', 'A', 'Absent', 'L', 'Leave').
+ * Date fallback to attendance_date, date, created_at, or marked_at.
+ * Never drops students due to missing profile/inner joins.
+ * Surfaces Supabase query or RLS errors cleanly.
  */
 export async function fetchMonthlyAttendanceAnalytics(params: {
-  month?: string; // YYYY-MM, defaults to current month
-  courseId?: string; // 'all' or specific course id
+  month?: string; // YYYY-MM, 'all', or defaults to 'all'
+  courseId?: string; // 'all' or specific course id (defaults to 'all')
   subjectId?: string; // 'all' or specific subject id
   enrolledStudents?: {
     studentId: string;
@@ -476,104 +687,112 @@ export async function fetchMonthlyAttendanceAnalytics(params: {
     paymentStatus?: string;
   }[];
 }): Promise<MonthlyAttendanceSummary> {
-  const now = new Date();
-  const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const targetMonth = params.month || currentMonthStr;
-  const courseFilter = params.courseId || "all";
-  const subjectFilter = params.subjectId || "all";
+  const targetMonth = (params.month || "all").trim();
+  const isAllTime = targetMonth.toLowerCase() === "all" || !targetMonth;
+  const courseFilter = (params.courseId || "all").trim();
+  const subjectFilter = (params.subjectId || "all").trim();
 
-  const [yearStr, monthNumStr] = targetMonth.split("-");
-  const year = parseInt(yearStr, 10) || now.getFullYear();
-  const monthNum = parseInt(monthNumStr, 10) || now.getMonth() + 1;
-  const lastDay = new Date(year, monthNum, 0).getDate();
-  const startDate = `${yearStr}-${String(monthNum).padStart(2, "0")}-01`;
-  const endDate = `${yearStr}-${String(monthNum).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+  let queryErrorMessage: string | null = null;
+  let rawAttendanceRows: any[] = [];
 
-  let dbRecords: AttendanceRecord[] = [];
-
-  // 1. Query Supabase 'attendance' table strictly for the given month
-  if (isSupabaseConfigured && supabase) {
+  // 1. Attempt 1: Fetch from server-side admin data route (bypasses RLS with service role)
+  if (typeof window !== "undefined") {
     try {
-      let query = supabase
+      const res = await fetch("/api/admin/data");
+      if (res.ok) {
+        const json = await res.json();
+        if (json && Array.isArray(json.attendance)) {
+          rawAttendanceRows = json.attendance;
+        }
+      }
+    } catch {}
+  }
+
+  // 2. Attempt 2: Direct Supabase Client query (without inner join to prevent dropping un-joined rows)
+  if (rawAttendanceRows.length === 0 && isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase
         .from("attendance")
         .select("*")
-        .gte("attendance_date", startDate)
-        .lte("attendance_date", endDate);
+        .order("attendance_date", { ascending: false });
 
-      if (courseFilter && courseFilter !== "all") {
-        query = query.ilike("course_id", `%${courseFilter}%`);
+      if (error) {
+        queryErrorMessage = error.message;
+        console.warn("Supabase attendance fetch notice:", error.message);
+      } else if (Array.isArray(data)) {
+        rawAttendanceRows = data;
       }
-      if (subjectFilter && subjectFilter !== "all") {
-        query = query.eq("subject_id", subjectFilter);
-      }
-
-      const { data, error } = await query.order("attendance_date", { ascending: true });
-
-      if (!error && Array.isArray(data)) {
-        dbRecords = data
-          .filter((row: any) => {
-            if (!row) return false;
-            if (DUMMY_ATTENDANCE_STUDENT_IDS.has(row.student_id)) return false;
-            if (DUMMY_ATTENDANCE_RECORD_IDS.has(row.id)) return false;
-            const name = (row.student_name || "").trim().toLowerCase();
-            if (DUMMY_STUDENT_NAMES.has(name)) return false;
-            return true;
-          })
-          .map((row: any) => ({
-            id: row.id,
-            studentId: row.student_id || (row.student_phone ? `std-${row.student_phone.replace(/\D/g, "")}` : row.id),
-            studentName: row.student_name || "Student",
-            studentPhone: row.student_phone || "",
-            courseId: row.course_id || "adaviyya",
-            subjectId: row.subject_id || "core",
-            date: row.attendance_date,
-            status: row.status as AttendanceStatus,
-            notes: row.notes || undefined,
-            markedAt: row.marked_at || new Date().toISOString(),
-          }));
-      }
-    } catch (err) {
-      console.warn("Could not query Supabase monthly attendance:", err);
+    } catch (err: any) {
+      queryErrorMessage = err?.message || "Failed to query Supabase attendance table";
+      console.warn("Attendance query exception:", err);
     }
   }
 
-  // 2. Merge with local records filtered by month & course
-  const localRecords = getLocalAttendanceRecords().filter((r) => {
-    if (!r || !r.date) return false;
-    if (r.date < startDate || r.date > endDate) return false;
-    if (courseFilter && courseFilter !== "all") {
-      const rC = (r.courseId || "").toLowerCase();
-      const targetC = courseFilter.toLowerCase();
-      if (!rC.includes(targetC) && !targetC.includes(rC)) return false;
-    }
-    if (subjectFilter && subjectFilter !== "all") {
-      if (r.subjectId !== subjectFilter) return false;
-    }
-    return true;
-  });
+  // Map raw DB rows safely into clean AttendanceRecord objects
+  const dbRecords: AttendanceRecord[] = rawAttendanceRows
+    .filter((row: any) => {
+      if (!row) return false;
+      if (DUMMY_ATTENDANCE_STUDENT_IDS.has(row.student_id)) return false;
+      if (DUMMY_ATTENDANCE_RECORD_IDS.has(row.id)) return false;
+      const name = (row.student_name || "").trim().toLowerCase();
+      if (DUMMY_STUDENT_NAMES.has(name)) return false;
+      return true;
+    })
+    .map((row: any) => mapDbAttendanceRow(row));
 
-  // 3. Deduplicate across DB and local records by unique id or (studentId + date + subjectId)
-  const dedupedRecordMap = new Map<string, AttendanceRecord>();
+  // Merge with local records
+  const localRecords = getLocalAttendanceRecords();
+  const mergedMap = new Map<string, AttendanceRecord>();
+
   for (const r of dbRecords) {
     const sId = r.studentId || r.studentPhone || r.studentName.toLowerCase().trim();
-    dedupedRecordMap.set(`${sId}_${r.date}_${r.subjectId}`, r);
+    mergedMap.set(`${sId}_${r.date}_${r.subjectId}`, r);
   }
   for (const r of localRecords) {
     const sId = r.studentId || r.studentPhone || r.studentName.toLowerCase().trim();
     const key = `${sId}_${r.date}_${r.subjectId}`;
-    if (!dedupedRecordMap.has(key)) {
-      dedupedRecordMap.set(key, r);
+    if (!mergedMap.has(key)) {
+      mergedMap.set(key, r);
     }
   }
 
-  const mergedRecords = Array.from(dedupedRecordMap.values());
+  // Filter records by Month (if not 'all') and Course (if not 'all')
+  const mergedRecords = Array.from(mergedMap.values()).filter((r) => {
+    if (!r || !r.date) return false;
 
-  // 4. Determine total distinct class sessions held across the course in that month
+    // Month filter: if 'all', include everything. Otherwise match YYYY-MM
+    if (!isAllTime) {
+      if (!r.date.startsWith(targetMonth)) {
+        return false;
+      }
+    }
+
+    // Course filter: if 'all', include everything. Otherwise match course loosely or allow unassigned
+    if (courseFilter && courseFilter !== "all") {
+      const rC = (r.courseId || "").toLowerCase();
+      const targetC = courseFilter.toLowerCase();
+      const matches =
+        !rC ||
+        rC.includes(targetC) ||
+        targetC.includes(rC) ||
+        (targetC === "adaviyya" && !rC.includes("tuition") && !rC.includes("fashion"));
+      if (!matches) return false;
+    }
+
+    // Subject filter
+    if (subjectFilter && subjectFilter !== "all") {
+      if (r.subjectId !== subjectFilter) return false;
+    }
+
+    return true;
+  });
+
+  // 4. Determine total distinct class sessions held across the course
   const courseSessionsSet = new Set<string>();
   for (const r of mergedRecords) {
     courseSessionsSet.add(`${r.date}_${r.subjectId || "core"}`);
   }
-  const totalClassesHeld = courseSessionsSet.size;
+  let totalClassesHeld = courseSessionsSet.size;
 
   // 5. Group records strictly by student
   const studentMap = new Map<
@@ -589,13 +808,14 @@ export async function fetchMonthlyAttendanceAnalytics(params: {
 
   for (const r of mergedRecords) {
     const cleanPhone = (r.studentPhone || "").replace(/\D/g, "");
-    const studentKey = r.studentId || cleanPhone || r.studentName.trim().toLowerCase();
+    const studentKey =
+      r.studentId || (cleanPhone ? `std-${cleanPhone}` : r.studentName.trim().toLowerCase());
     if (!studentKey) continue;
 
     if (!studentMap.has(studentKey)) {
       studentMap.set(studentKey, {
         studentId: r.studentId || (cleanPhone ? `std-${cleanPhone}` : studentKey),
-        studentName: r.studentName,
+        studentName: r.studentName || "Registered Student",
         studentPhone: r.studentPhone,
         courseId: r.courseId,
         sessions: new Map(),
@@ -608,7 +828,7 @@ export async function fetchMonthlyAttendanceAnalytics(params: {
     studentEntry.sessions.set(sessionKey, r);
   }
 
-  // 6. Enrich with enrolled students list if provided (ensures complete course roster)
+  // 6. Enrich with enrolled students list if provided (ensures complete course roster without dropping anyone)
   if (params.enrolledStudents && params.enrolledStudents.length > 0) {
     for (const enr of params.enrolledStudents) {
       if (enr.paymentStatus === "REJECTED") continue;
@@ -617,18 +837,21 @@ export async function fetchMonthlyAttendanceAnalytics(params: {
         const cId = (enr.courseId || "").toLowerCase();
         const choice = (enr.courseChoice || "").toLowerCase();
         const target = courseFilter.toLowerCase();
-        const matches = cId.includes(target) || choice.includes(target) ||
+        const matches =
+          cId.includes(target) ||
+          choice.includes(target) ||
           (target === "adaviyya" && !cId.includes("tuition") && !cId.includes("fashion"));
         if (!matches) continue;
       }
 
       const cleanPhone = (enr.whatsappNum || "").replace(/\D/g, "");
-      const studentKey = enr.studentId || cleanPhone || enr.fullName.trim().toLowerCase();
+      const studentKey =
+        enr.studentId || (cleanPhone ? `std-${cleanPhone}` : enr.fullName.trim().toLowerCase());
 
       if (!studentMap.has(studentKey)) {
         studentMap.set(studentKey, {
           studentId: enr.studentId || (cleanPhone ? `std-${cleanPhone}` : studentKey),
-          studentName: enr.fullName,
+          studentName: enr.fullName || "Enrolled Student",
           studentPhone: enr.whatsappNum,
           courseId: enr.courseId || courseFilter,
           sessions: new Map(),
@@ -637,16 +860,25 @@ export async function fetchMonthlyAttendanceAnalytics(params: {
     }
   }
 
-  // 7. Calculate exact metrics per student
+  // If totalClassesHeld is 0 but some students have sessions, use the max session count
+  if (totalClassesHeld === 0) {
+    for (const entry of studentMap.values()) {
+      if (entry.sessions.size > totalClassesHeld) {
+        totalClassesHeld = entry.sessions.size;
+      }
+    }
+  }
+
+  // 7. Calculate exact metrics per student with flexible status matching
   const studentsList: MonthlyStudentAttendance[] = [];
 
   for (const entry of studentMap.values()) {
     const studentSessions = Array.from(entry.sessions.values());
-    const daysPresent = studentSessions.filter((s) => s.status === "PRESENT" || s.status === "LATE").length;
-    const daysLate = studentSessions.filter((s) => s.status === "LATE").length;
-    const daysExcused = studentSessions.filter((s) => s.status === "EXCUSED").length;
+    const daysPresent = studentSessions.filter((s) => isPresentStatus(s.status)).length;
+    const daysLate = studentSessions.filter((s) => isLateStatus(s.status)).length;
+    const daysExcused = studentSessions.filter((s) => isLeaveStatus(s.status)).length;
 
-    // Total classes for student: at least the total classes held in this course for the month
+    // Total classes for student: at least the total classes held in this course for the selected period
     const totalClasses = Math.max(totalClassesHeld, studentSessions.length);
     const daysAbsent = Math.max(0, totalClasses - daysPresent);
 
@@ -654,17 +886,18 @@ export async function fetchMonthlyAttendanceAnalytics(params: {
     const percentage = totalClasses > 0 ? (daysPresent / totalClasses) * 100 : 0;
     const roundedPercentage = Math.round(percentage * 10) / 10;
 
-    // Cross-reference district from enrolled list if available
+    // Cross-reference district and full name from enrolled list if available
     const enrolledMatch = params.enrolledStudents?.find(
       (e) =>
         e.studentId === entry.studentId ||
-        (entry.studentPhone && e.whatsappNum.replace(/\D/g, "") === entry.studentPhone.replace(/\D/g, ""))
+        (entry.studentPhone &&
+          e.whatsappNum.replace(/\D/g, "") === entry.studentPhone.replace(/\D/g, ""))
     );
 
     studentsList.push({
       studentId: entry.studentId,
-      studentName: enrolledMatch?.fullName || entry.studentName,
-      studentPhone: enrolledMatch?.whatsappNum || entry.studentPhone,
+      studentName: enrolledMatch?.fullName || entry.studentName || "Registered Student",
+      studentPhone: enrolledMatch?.whatsappNum || entry.studentPhone || "",
       district: enrolledMatch?.district || undefined,
       courseId: entry.courseId || courseFilter,
       totalClasses,
@@ -713,6 +946,7 @@ export async function fetchMonthlyAttendanceAnalytics(params: {
     lowAttendanceCount,
     topAttendees,
     allStudents: studentsList,
+    errorMessage: queryErrorMessage,
   };
 }
 
@@ -747,10 +981,21 @@ export async function fetchStudentOfTheMonthLeaderboard(params: {
     rank?: number;
   } | null;
 }> {
-  const analytics = await fetchMonthlyAttendanceAnalytics({
+  let analytics = await fetchMonthlyAttendanceAnalytics({
     month: params.month,
     courseId: params.courseId,
   });
+
+  // If specific month was not requested and current month has 0 sessions, fallback to 'all' so historical sessions appear
+  if (analytics.totalClassesHeld === 0 && !params.month) {
+    const allAnalytics = await fetchMonthlyAttendanceAnalytics({
+      month: "all",
+      courseId: params.courseId,
+    });
+    if (allAnalytics.totalClassesHeld > 0) {
+      analytics = allAnalytics;
+    }
+  }
 
   // Top 3 formatted strictly with minimal public info
   const top3 = analytics.topAttendees.map((s, idx) => ({

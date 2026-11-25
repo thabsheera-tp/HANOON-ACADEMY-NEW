@@ -66,11 +66,12 @@ export async function GET() {
       }
     }
 
-    // Concurrently fetch students, profiles, and courses
-    const [studentsData, profilesData, coursesData] = await Promise.all([
+    // Concurrently fetch students, profiles, courses, and attendance
+    const [studentsData, profilesData, coursesData, attendanceData] = await Promise.all([
       safeFetch(adminSupabase.from("students").select("*").order("created_at", { ascending: false })),
       safeFetch(adminSupabase.from("profiles").select("*")),
       safeFetch(adminSupabase.from("courses").select("*")),
+      safeFetch(adminSupabase.from("attendance").select("*").order("attendance_date", { ascending: false })),
     ]);
 
     return NextResponse.json({
@@ -78,6 +79,7 @@ export async function GET() {
       students: studentsData,
       profiles: profilesData,
       courses: coursesData,
+      attendance: attendanceData,
       bypassedRls: Boolean(serviceRoleKey),
     });
   } catch (err: any) {

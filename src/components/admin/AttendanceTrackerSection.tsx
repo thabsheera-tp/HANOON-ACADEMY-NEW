@@ -23,6 +23,7 @@ import {
   AttendanceRecord,
   AttendanceStatus,
   getLocalAttendanceRecords,
+  fetchAllAttendanceRecords,
   recordStudentAttendance,
   batchRecordAttendance,
   getWhatsAppAttendanceAlertUrl,
@@ -88,10 +89,21 @@ export default function AttendanceTrackerSection({
   const [isSaving, setIsSaving] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
 
-  // Load existing records
+  // Load existing records from local storage and sync from Supabase
   useEffect(() => {
     const records = getLocalAttendanceRecords();
     setAllAttendanceRecords(records);
+
+    let isMounted = true;
+    fetchAllAttendanceRecords().then((allRecs) => {
+      if (isMounted && allRecs && allRecs.length > 0) {
+        setAllAttendanceRecords(allRecs);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const currentCourse = useMemo(() => {
