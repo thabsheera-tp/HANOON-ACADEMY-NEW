@@ -25,6 +25,8 @@ import {
 import {
   fetchAllStudyMaterials,
   StudyMaterial,
+  isStudyMaterialPdf,
+  isStudyMaterialVideo,
 } from "@/services/studyMaterialService";
 
 interface CourseMaterialsModalProps {
@@ -74,7 +76,7 @@ export default function CourseMaterialsModal({
                 day: "numeric",
                 year: "numeric",
               });
-            } catch {}
+            } catch { }
           }
           return {
             id: `sm-${sm.id}`,
@@ -83,7 +85,7 @@ export default function CourseMaterialsModal({
             courseId: sm.course,
             courseName: selectedCourse.title,
             subjectName: sm.subject || undefined,
-            type: isLink ? ("LINK" as const) : ("PDF" as const),
+            type: isLink ? ("LINK" as any) : "PDF",
             fileOrUrl: sm.file_url,
             pdfUrl: !isLink ? sm.file_url : undefined,
             recordingUrl: isLink ? sm.file_url : undefined,
@@ -91,9 +93,9 @@ export default function CourseMaterialsModal({
             uploadedAt: uploadDateFormatted,
             downloadCount: 0,
             teacherName: sm.uploaded_by || "Faculty Instructor",
-            sourceTable: "study_materials" as const,
+            sourceTable: "study_materials",
             studyMaterialType: sm.type,
-          };
+          } as CourseMaterial & { studyMaterialType?: "pdf" | "link" };
         });
 
         const seenUrls = new Set(mappedStudyMaterials.map((s) => s.fileOrUrl));
@@ -136,45 +138,23 @@ export default function CourseMaterialsModal({
 
   if (!isOpen) return null;
 
-  const pdfMaterials = materials.filter((m) => {
-    if ((m as any).studyMaterialType === "link") return false;
-    if (m.type === "LINK" || m.type === "VIDEO") return false;
-    const url = (m.pdfUrl || m.fileOrUrl || "").toLowerCase();
-    if (
-      url.includes("youtube.com") ||
-      url.includes("youtu.be") ||
-      url.includes("meet.google.com") ||
-      url.includes("zoom.us")
-    ) {
-      return false;
-    }
-    return (
-      (m as any).studyMaterialType === "pdf" ||
-      m.type === "PDF" ||
-      url.endsWith(".pdf") ||
-      url.includes(".pdf?") ||
-      url.includes("/notes/") ||
-      url.includes("/course-materials/")
-    );
-  });
+  const pdfMaterials = materials.filter((m) =>
+    isStudyMaterialPdf({
+      type: (m as any).studyMaterialType || m.type,
+      file_url: m.fileOrUrl,
+      pdfUrl: m.pdfUrl,
+      recordingUrl: m.recordingUrl,
+    })
+  );
 
-  const videoMaterials = materials.filter((m) => {
-    if ((m as any).studyMaterialType === "pdf") return false;
-    const url = (m.recordingUrl || m.fileOrUrl || "").toLowerCase();
-    if (url.endsWith(".pdf") || url.includes(".pdf?")) return false;
-    return (
-      (m as any).studyMaterialType === "link" ||
-      m.type === "LINK" ||
-      m.type === "VIDEO" ||
-      url.includes("youtube.com") ||
-      url.includes("youtu.be") ||
-      url.includes("drive.google.com") ||
-      url.includes("vimeo.com") ||
-      url.endsWith(".mp4") ||
-      url.endsWith(".webm") ||
-      url.endsWith(".mov")
-    );
-  });
+  const videoMaterials = materials.filter((m) =>
+    isStudyMaterialVideo({
+      type: (m as any).studyMaterialType || m.type,
+      file_url: m.fileOrUrl,
+      pdfUrl: m.pdfUrl,
+      recordingUrl: m.recordingUrl,
+    })
+  );
 
   const activeLesson = videoMaterials.find((c) => c.id === activeVideoId) || videoMaterials[0];
 
@@ -273,22 +253,20 @@ export default function CourseMaterialsModal({
           <button
             type="button"
             onClick={() => setActiveTab("videos")}
-            className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-              activeTab === "videos"
-                ? "bg-purple-600 text-white shadow-xs"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
+            className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${activeTab === "videos"
+              ? "bg-purple-600 text-white shadow-xs"
+              : "text-slate-600 hover:text-slate-900"
+              }`}
           >
             Video Recordings ({videoMaterials.length})
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("pdfs")}
-            className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-              activeTab === "pdfs"
-                ? "bg-purple-600 text-white shadow-xs"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
+            className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${activeTab === "pdfs"
+              ? "bg-purple-600 text-white shadow-xs"
+              : "text-slate-600 hover:text-slate-900"
+              }`}
           >
             Offline PDF Notes ({pdfMaterials.length})
           </button>
@@ -388,11 +366,10 @@ export default function CourseMaterialsModal({
                           setActiveVideoId(ch.id);
                           setIsPlaying(true);
                         }}
-                        className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
-                          activeVideoId === ch.id
-                            ? "bg-purple-50 border-purple-300"
-                            : "bg-white border-purple-100 hover:bg-purple-50/40"
-                        }`}
+                        className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 ${activeVideoId === ch.id
+                          ? "bg-purple-50 border-purple-300"
+                          : "bg-white border-purple-100 hover:bg-purple-50/40"
+                          }`}
                       >
                         <div className="space-y-0.5 flex-1 min-w-0">
                           <span className="text-[10px] font-bold text-purple-700 uppercase">

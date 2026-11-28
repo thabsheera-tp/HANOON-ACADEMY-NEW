@@ -25,6 +25,8 @@ import { SpecialClass, getSpecialClasses } from "@/services/specialClassService"
 import {
   fetchAllStudyMaterials,
   StudyMaterial,
+  isStudyMaterialPdf,
+  isStudyMaterialVideo,
 } from "@/services/studyMaterialService";
 import SubjectClassHubModal from "@/components/mobile/SubjectClassHubModal";
 import SpecialClassModal from "@/components/mobile/SpecialClassModal";
@@ -309,48 +311,60 @@ export default function ScreenCourseDetails({
             </div>
           ) : (
             <div className="space-y-2">
-              {courseMaterials.map((mat) => (
-                <div
-                  key={mat.id}
-                  className="neumorphic-card p-3.5 rounded-2xl flex items-center justify-between gap-3"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 border border-purple-100">
-                      {mat.type === "link" ? (
-                        <Radio className="w-4 h-4 text-purple-600" />
-                      ) : (
-                        <BookOpen className="w-4 h-4 text-purple-600" />
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="text-xs font-extrabold text-slate-900 truncate">
-                        {mat.title}
-                      </h3>
-                      <p className="text-[10px] text-slate-500 font-medium">
-                        {mat.subject ? `${mat.subject} • ` : ""}
-                        {mat.type === "link" ? "Recorded Class Link" : "Official PDF Notes"}
-                      </p>
-                    </div>
-                  </div>
+              {courseMaterials.map((mat) => {
+                const isVideo = isStudyMaterialVideo({ type: mat.type, file_url: mat.file_url });
 
-                  {isPaid ? (
-                    <a
-                      href={mat.file_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="py-1.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-95 text-white font-bold text-[11px] shrink-0 transition-all cursor-pointer flex items-center gap-1 shadow-xs"
-                    >
-                      <span>{mat.type === "link" ? "Watch" : "View"}</span>
-                      <ChevronRight className="w-3 h-3" />
-                    </a>
-                  ) : (
-                    <span className="py-1 px-2.5 rounded-xl bg-slate-100 text-slate-400 font-bold text-[10px] shrink-0 border border-slate-200 flex items-center gap-1">
-                      <Lock className="w-3 h-3 text-slate-400" />
-                      <span>Locked</span>
-                    </span>
-                  )}
-                </div>
-              ))}
+                return (
+                  <div
+                    key={mat.id}
+                    className="neumorphic-card p-3.5 rounded-2xl flex items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border ${
+                        isVideo
+                          ? "bg-rose-50 text-rose-600 border-rose-100"
+                          : "bg-purple-50 text-purple-600 border-purple-100"
+                      }`}>
+                        {isVideo ? (
+                          <Radio className="w-4 h-4 text-rose-600" />
+                        ) : (
+                          <BookOpen className="w-4 h-4 text-purple-600" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="text-xs font-extrabold text-slate-900 truncate">
+                          {mat.title}
+                        </h3>
+                        <p className="text-[10px] text-slate-500 font-medium">
+                          {mat.subject ? `${mat.subject} • ` : ""}
+                          {isVideo ? "Recorded Class Link" : "Official PDF Notes"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {isPaid ? (
+                      <a
+                        href={mat.file_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`py-1.5 px-3 rounded-xl active:scale-95 text-white font-bold text-[11px] shrink-0 transition-all cursor-pointer flex items-center gap-1 shadow-xs ${
+                          isVideo
+                            ? "bg-rose-600 hover:bg-rose-700"
+                            : "bg-purple-600 hover:bg-purple-700"
+                        }`}
+                      >
+                        <span>{isVideo ? "Watch" : "View"}</span>
+                        <ChevronRight className="w-3 h-3" />
+                      </a>
+                    ) : (
+                      <span className="py-1 px-2.5 rounded-xl bg-slate-100 text-slate-400 font-bold text-[10px] shrink-0 border border-slate-200 flex items-center gap-1">
+                        <Lock className="w-3 h-3 text-slate-400" />
+                        <span>Locked</span>
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

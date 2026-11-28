@@ -48,6 +48,7 @@ import {
   subscribeToFacultyTeachers,
 } from "@/services/teacherFacultyService";
 import { addSpecialClass } from "@/services/specialClassService";
+import { createStudyMaterial } from "@/services/studyMaterialService";
 import { getAdaviyyaSubjects } from "@/services/subjectService";
 import {
   getLiveClassEnrolledRecipients,
@@ -348,6 +349,15 @@ export default function ClassScheduleManagerSection({
             teacherId: resolvedTeacherId,
             liveClassId: newClass.id,
           });
+
+          await createStudyMaterial({
+            title: combinedTitle,
+            course: resolvedCourseId,
+            subject: isCustomSubject ? customSubjectName.trim() : (isAdaviyya ? adaviyyaSubjects.find(s => s.id === subjectId)?.name : undefined),
+            file_url: recordedClassLink.trim(),
+            type: "video",
+            uploaded_by: resolvedTeacherName || "Faculty Instructor",
+          }).catch(() => {});
         } catch (recErr) {
           console.warn("Could not sync recorded class link to Supabase:", recErr);
         }

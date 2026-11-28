@@ -17,6 +17,8 @@ import { SelectedCourse } from "@/types/app";
 import {
   fetchAllStudyMaterials,
   StudyMaterial,
+  isStudyMaterialPdf,
+  isStudyMaterialVideo,
 } from "@/services/studyMaterialService";
 import {
   fetchCourseMaterialsFromSupabase,
@@ -66,24 +68,6 @@ export default function RecordedClassesModal({
           fetchLiveClassesFromSupabase(selectedCourse.id),
         ]);
 
-        const isVideoUrl = (url?: string | null): boolean => {
-          if (!url) return false;
-          const lower = url.trim().toLowerCase();
-          if (lower.endsWith(".pdf") || lower.includes(".pdf?") || lower.includes("/notes/")) {
-            return false;
-          }
-          return (
-            lower.includes("drive.google.com") ||
-            lower.includes("youtube.com") ||
-            lower.includes("youtu.be") ||
-            lower.includes("vimeo.com") ||
-            lower.includes("zoom.us/rec") ||
-            lower.endsWith(".mp4") ||
-            lower.endsWith(".webm") ||
-            lower.endsWith(".mov")
-          );
-        };
-
         const detectProvider = (url: string): RecordedItem["provider"] => {
           const lower = url.toLowerCase();
           if (lower.includes("youtube.com") || lower.includes("youtu.be")) return "YouTube";
@@ -94,15 +78,17 @@ export default function RecordedClassesModal({
         const list: RecordedItem[] = [];
         const seenUrls = new Set<string>();
 
-        // 1. Ingest from study_materials (ONLY links and video URLs, STRICTLY NO PDFs)
+        // 1. Ingest from study_materials (ONLY VIDEO / RECORDED CLASSES, STRICTLY ZERO PDFs)
         (studyMaterials || []).forEach((sm) => {
-          if (sm.type === "pdf") return;
           const url = (sm.file_url || "").trim();
           if (!url || seenUrls.has(url)) return;
-          if (url.toLowerCase().endsWith(".pdf")) return;
 
-          // If type === 'link' or is video URL
-          if (sm.type === "link" || isVideoUrl(url)) {
+          // Never display PDF items here
+          if (isStudyMaterialPdf({ type: sm.type, file_url: url })) {
+            return;
+          }
+
+          if (isStudyMaterialVideo({ type: sm.type, file_url: url })) {
             seenUrls.add(url);
             let formattedDate = "Recent";
             if (sm.created_at) {
@@ -132,7 +118,10 @@ export default function RecordedClassesModal({
         (liveClasses || []).forEach((cls) => {
           const recUrl = (cls.recorded_video_link || cls.recording_url || "").trim();
           if (!recUrl || seenUrls.has(recUrl)) return;
-          if (isVideoUrl(recUrl)) {
+
+          if (isStudyMaterialPdf({ file_url: recUrl })) return;
+
+          if (isStudyMaterialVideo({ file_url: recUrl })) {
             seenUrls.add(recUrl);
             list.push({
               id: `lc-${cls.id}`,
@@ -151,7 +140,10 @@ export default function RecordedClassesModal({
         (legacyMaterials || []).forEach((m) => {
           const url = (m.recordingUrl || m.fileOrUrl || "").trim();
           if (!url || seenUrls.has(url)) return;
-          if (m.type === "VIDEO" || isVideoUrl(url)) {
+
+          if (isStudyMaterialPdf({ type: m.type, file_url: url, pdfUrl: m.pdfUrl })) return;
+
+          if (isStudyMaterialVideo({ type: m.type, file_url: url, recordingUrl: m.recordingUrl })) {
             seenUrls.add(url);
             list.push({
               id: `leg-${m.id}`,

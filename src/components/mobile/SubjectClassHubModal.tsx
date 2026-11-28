@@ -24,7 +24,12 @@ import {
 import { AdaviyyaSubject, getTeacherWhatsApp } from "@/services/subjectService";
 import { getAppSettings, formatWhatsAppLink } from "@/services/settingsService";
 import { recordLiveClassJoinAttendance } from "@/services/attendanceService";
-import { fetchAllStudyMaterials, StudyMaterial } from "@/services/studyMaterialService";
+import {
+  fetchAllStudyMaterials,
+  StudyMaterial,
+  isStudyMaterialPdf,
+  isStudyMaterialVideo,
+} from "@/services/studyMaterialService";
 
 interface SubjectClassHubModalProps {
   isOpen: boolean;
@@ -125,8 +130,8 @@ export default function SubjectClassHubModal({
         ch.recordedLink ||
         (ch as any).recording_url ||
         (ch.videoUrl &&
-        !ch.videoUrl.includes("meet.google.com") &&
-        !ch.videoUrl.includes("zoom.us")
+          !ch.videoUrl.includes("meet.google.com") &&
+          !ch.videoUrl.includes("zoom.us")
           ? ch.videoUrl
           : undefined),
       date: ch.date,
@@ -143,15 +148,15 @@ export default function SubjectClassHubModal({
       if (!url || seenUrls.has(url)) return;
       seenUrls.add(url);
 
-      const isLink = sm.type === "link";
+      const isVideo = isStudyMaterialVideo({ type: sm.type, file_url: url });
       list.push({
         id: `sm-${sm.id}`,
         title: sm.title,
-        duration: isLink ? "Recorded Video" : undefined,
-        pdfTitle: !isLink ? `${sm.title}.pdf` : undefined,
-        pdfSize: !isLink ? "Official PDF" : undefined,
-        pdfUrl: !isLink ? url : undefined,
-        recordedLink: isLink ? url : undefined,
+        duration: isVideo ? "Recorded Video" : undefined,
+        pdfTitle: !isVideo ? `${sm.title}.pdf` : undefined,
+        pdfSize: !isVideo ? "Official PDF" : undefined,
+        pdfUrl: !isVideo ? url : undefined,
+        recordedLink: isVideo ? url : undefined,
         date: sm.created_at ? new Date(sm.created_at).toLocaleDateString() : undefined,
       });
     });
@@ -433,11 +438,10 @@ export default function SubjectClassHubModal({
               Curriculum Lessons & Materials ({combinedLessons.length})
             </h4>
             <span
-              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                isPaid
-                  ? "text-purple-700 bg-purple-100"
-                  : "text-amber-700 bg-amber-50 border border-amber-200"
-              }`}
+              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isPaid
+                ? "text-purple-700 bg-purple-100"
+                : "text-amber-700 bg-amber-50 border border-amber-200"
+                }`}
             >
               {isPaid ? "Full Access" : "Locked (Unverified)"}
             </span>
@@ -483,120 +487,118 @@ export default function SubjectClassHubModal({
                         </div>
                       </div>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!isPaid) {
-                          if (onEnroll) onEnroll();
-                          return;
-                        }
-                        setActivePlayingId(isPlaying ? null : chapter.id);
-                      }}
-                      className={`p-2 rounded-xl transition-colors shrink-0 cursor-pointer ${
-                        isPaid
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!isPaid) {
+                            if (onEnroll) onEnroll();
+                            return;
+                          }
+                          setActivePlayingId(isPlaying ? null : chapter.id);
+                        }}
+                        className={`p-2 rounded-xl transition-colors shrink-0 cursor-pointer ${isPaid
                           ? "bg-purple-100 hover:bg-purple-200 text-purple-700"
                           : "bg-slate-100 text-slate-400 hover:bg-slate-200"
-                      }`}
-                      title={isPaid ? "Stream Video Lesson" : "Enroll to Unlock Lesson"}
-                    >
-                      {isPaid ? (
-                        <PlayCircle className="w-4 h-4" />
-                      ) : (
-                        <Lock className="w-4 h-4 text-slate-400" />
-                      )}
-                    </button>
-                  </div>
-
-                  {isPlaying && isPaid && (
-                    <div className="p-2.5 rounded-xl bg-slate-900 text-white text-xs space-y-1.5 animate-fade-in">
-                      <div className="flex items-center justify-between text-[11px] text-purple-300">
-                        <span>Streaming Lesson Recording</span>
-                        <span className="font-mono text-emerald-400">1080p HD</span>
-                      </div>
-                      <div className="h-16 rounded-lg bg-slate-800 flex items-center justify-center text-slate-400 text-xs">
-                        ▶ Video Player Streaming (Simulated)
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Prominent Recorded Class Link (Google Drive / YouTube) */}
-                  {(() => {
-                    const recordedLink = chapter.recordedLink;
-                    if (!recordedLink) return null;
-
-                    return (
-                      <a
-                        href={recordedLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-full py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-95 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer"
-                        title="Watch Recorded Class Link (Google Drive / YouTube)"
+                          }`}
+                        title={isPaid ? "Stream Video Lesson" : "Enroll to Unlock Lesson"}
                       >
-                        <PlayCircle className="w-3.5 h-3.5" />
-                        <span>▶️ Watch Recorded Class</span>
-                      </a>
-                    );
-                  })()}
+                        {isPaid ? (
+                          <PlayCircle className="w-4 h-4" />
+                        ) : (
+                          <Lock className="w-4 h-4 text-slate-400" />
+                        )}
+                      </button>
+                    </div>
 
-                  {/* PDF Download Button - Only when pdfUrl exists */}
-                  {chapter.pdfUrl && (
-                    <div className="pt-1.5 border-t border-purple-100/60 flex items-center justify-between">
-                      <span className="text-[10px] text-slate-500 font-medium truncate max-w-[190px]">
-                        {chapter.pdfTitle || "Lesson Notes.pdf"}
-                      </span>
+                    {isPlaying && isPaid && (
+                      <div className="p-2.5 rounded-xl bg-slate-900 text-white text-xs space-y-1.5 animate-fade-in">
+                        <div className="flex items-center justify-between text-[11px] text-purple-300">
+                          <span>Streaming Lesson Recording</span>
+                          <span className="font-mono text-emerald-400">1080p HD</span>
+                        </div>
+                        <div className="h-16 rounded-lg bg-slate-800 flex items-center justify-center text-slate-400 text-xs">
+                          ▶ Video Player Streaming (Simulated)
+                        </div>
+                      </div>
+                    )}
 
-                      {isPaid ? (
-                        <button
-                          type="button"
-                          disabled={isDownloading}
-                          onClick={() => handleDownload(chapter.id, chapter.pdfUrl, chapter.pdfTitle)}
-                          className={`py-1 px-2.5 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all ${
-                            isDownloaded
+                    {/* Prominent Recorded Class Link (Google Drive / YouTube) */}
+                    {(() => {
+                      const recordedLink = chapter.recordedLink;
+                      if (!recordedLink) return null;
+
+                      return (
+                        <a
+                          href={recordedLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-95 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                          title="Watch Recorded Class Link (Google Drive / YouTube)"
+                        >
+                          <PlayCircle className="w-3.5 h-3.5" />
+                          <span>▶️ Watch Recorded Class</span>
+                        </a>
+                      );
+                    })()}
+
+                    {/* PDF Download Button - Only when pdfUrl exists */}
+                    {chapter.pdfUrl && (
+                      <div className="pt-1.5 border-t border-purple-100/60 flex items-center justify-between">
+                        <span className="text-[10px] text-slate-500 font-medium truncate max-w-[190px]">
+                          {chapter.pdfTitle || "Lesson Notes.pdf"}
+                        </span>
+
+                        {isPaid ? (
+                          <button
+                            type="button"
+                            disabled={isDownloading}
+                            onClick={() => handleDownload(chapter.id, chapter.pdfUrl, chapter.pdfTitle)}
+                            className={`py-1 px-2.5 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all ${isDownloaded
                               ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                               : "bg-white border border-purple-200 text-purple-700 hover:bg-purple-50"
-                          }`}
-                        >
-                          {isDownloaded ? (
-                            <>
-                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                              <span>Saved</span>
-                            </>
-                          ) : isDownloading ? (
-                            <span>Downloading...</span>
-                          ) : (
-                            <>
-                              <Download className="w-3 h-3" />
-                              <span>PDF</span>
-                            </>
-                          )}
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled
-                          aria-disabled="true"
-                          title="Enroll and get verified to download PDF material"
-                          className="py-1 px-2.5 rounded-lg text-[10px] font-bold flex items-center gap-1 bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed select-none"
-                        >
-                          <Lock className="w-3 h-3 text-slate-400" />
-                          <span>Locked</span>
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                              }`}
+                          >
+                            {isDownloaded ? (
+                              <>
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                <span>Saved</span>
+                              </>
+                            ) : isDownloading ? (
+                              <span>Downloading...</span>
+                            ) : (
+                              <>
+                                <Download className="w-3 h-3" />
+                                <span>PDF</span>
+                              </>
+                            )}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled
+                            aria-disabled="true"
+                            title="Enroll and get verified to download PDF material"
+                            className="py-1 px-2.5 rounded-lg text-[10px] font-bold flex items-center gap-1 bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed select-none"
+                          >
+                            <Lock className="w-3 h-3 text-slate-400" />
+                            <span>Locked</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {/* WhatsApp Doubt clearance */}
         <a
           href={formatWhatsAppLink(
             subject.instructorWhatsApp ||
-              getTeacherWhatsApp(subject.instructor) ||
-              getAppSettings().contactWhatsApp,
+            getTeacherWhatsApp(subject.instructor) ||
+            getAppSettings().contactWhatsApp,
             `Assalamu Alaikum ${subject.instructor}, I am ${studentName}, studying Adaviyya ${subject.name}. I have a doubt regarding today's lesson.`
           )}
           target="_blank"

@@ -47,6 +47,8 @@ import {
   fetchAllStudyMaterials,
   deleteStudyMaterial,
   StudyMaterial,
+  isStudyMaterialPdf,
+  isStudyMaterialVideo,
 } from "@/services/studyMaterialService";
 import { SHOWCASE_COURSES } from "@/components/mobile/ScreenCoursesList";
 
@@ -234,14 +236,14 @@ export default function PdfNotesUploadSection({
 
     try {
       let finalFileUrl = "";
-      let itemType: "pdf" | "link" = "pdf";
+      let itemType: "pdf" = "pdf";
       let finalPdfTitle = pdfFileName || `${pdfChapterTitle.trim()}.pdf`;
       let finalSize = pdfFileSize || "Official PDF";
 
       if (pdfUploadOption === "drive") {
-        itemType = "link";
+        itemType = "pdf";
         finalFileUrl = googleDriveLink.trim();
-        finalSize = "Google Drive Link";
+        finalSize = "Google Drive PDF";
       } else {
         // Option A: PDF File Upload (up to 60MB to 'notes' bucket)
         itemType = "pdf";
@@ -302,7 +304,7 @@ export default function PdfNotesUploadSection({
           pdfSize: finalSize,
           teacherName: currentUserName,
           duration: pdfEstimatedDuration,
-        }).catch(() => {});
+        }).catch(() => { });
       }
 
       // 2. Trigger instant PDF Notes notification to enrolled students
@@ -370,6 +372,16 @@ export default function PdfNotesUploadSection({
         teacherName: currentUserName,
         duration: recEstimatedDuration,
       });
+
+      // 1b. Save strictly to public.study_materials with type = 'video'
+      await createStudyMaterial({
+        title: recClassTitle.trim(),
+        course: recCourseId,
+        subject: subjectName,
+        file_url: cleanRecordedLink,
+        type: "video",
+        uploaded_by: currentUserName || currentUserRole || "Academic Administration",
+      }).catch((e) => console.warn("Could not sync recorded class to study_materials:", e));
 
       if (!saveRes.success) {
         setErrorMessage(saveRes.error || "Failed to save recorded class to Supabase database.");
@@ -444,8 +456,8 @@ export default function PdfNotesUploadSection({
       (item as any).studyMaterialType === "link"
         ? "Google Drive Link"
         : item.type === "PDF"
-        ? "PDF Study Notes"
-        : "Recorded Class Video";
+          ? "PDF Study Notes"
+          : "Recorded Class Video";
 
     if (
       !confirm(
@@ -492,7 +504,7 @@ export default function PdfNotesUploadSection({
   // Convert study_materials into unified display items
   const mappedStudyMaterials: CourseMaterial[] = useMemo(() => {
     return studyMaterials.map((sm) => {
-      const isDriveLink = sm.type === "link";
+      const isVideo = isStudyMaterialVideo({ type: sm.type, file_url: sm.file_url });
       let uploadDateFormatted = "Recent";
       if (sm.created_at) {
         try {
@@ -501,7 +513,7 @@ export default function PdfNotesUploadSection({
             day: "numeric",
             year: "numeric",
           });
-        } catch {}
+        } catch { }
       }
 
       const courseObj = SHOWCASE_COURSES.find((c) => c.id === sm.course);
@@ -513,25 +525,25 @@ export default function PdfNotesUploadSection({
         courseId: sm.course,
         courseName: courseObj?.title || sm.course,
         subjectName: sm.subject || undefined,
-        type: isDriveLink ? ("LINK" as const) : ("PDF" as const),
+        type: isVideo ? ("VIDEO" as const) : ("PDF" as const),
         fileOrUrl: sm.file_url,
-        pdfUrl: !isDriveLink ? sm.file_url : undefined,
-        recordingUrl: isDriveLink ? sm.file_url : undefined,
-        sizeOrDuration: isDriveLink ? "Drive Link" : "PDF Document (notes)",
+        pdfUrl: !isVideo ? sm.file_url : undefined,
+        recordingUrl: isVideo ? sm.file_url : undefined,
+        sizeOrDuration: isVideo ? "Recorded Class" : "PDF Document (notes)",
         uploadedAt: uploadDateFormatted,
         downloadCount: 0,
         teacherName: sm.uploaded_by || "Staff",
-        sourceTable: "study_materials" as const,
+        sourceTable: "study_materials",
         studyMaterialType: sm.type,
-      };
+      } as CourseMaterial;
     });
   }, [studyMaterials]);
 
   // Combined materials with public.study_materials taking precedence at top of list
-  const allHistoryItems: CourseMaterial[] = useMemo(() => {
+  const allHistoryItems = useMemo(() => {
     const combined = [...mappedStudyMaterials];
     const seen = new Set(mappedStudyMaterials.map((s) => s.fileOrUrl));
-    materials.forEach((m: CourseMaterial) => {
+    materials.forEach((m) => {
       if (!seen.has(m.fileOrUrl) && !(m.recordingUrl && seen.has(m.recordingUrl))) {
         combined.push(m);
       }
@@ -539,17 +551,23 @@ export default function PdfNotesUploadSection({
     return combined;
   }, [mappedStudyMaterials, materials]);
 
-  // Filtered materials for full history view
+  // Filtered materials for full history view (strictly mutually exclusive)
   const filteredMaterials = allHistoryItems.filter((m: CourseMaterial) => {
     const matchesCourse = filterCourse === "ALL" || m.courseId === filterCourse;
-    const isVideo =
-      m.type === "VIDEO" ||
-      Boolean(m.recordingUrl || (m as any).recorded_video_link || (m as any).recording_url);
-    const isPdf = m.type === "PDF" || Boolean(m.pdfUrl);
+    const isVideo = isStudyMaterialVideo({
+      type: m.type || (m as any).studyMaterialType,
+      file_url: m.fileOrUrl,
+      recordingUrl: m.recordingUrl,
+    });
+    const isPdf = isStudyMaterialPdf({
+      type: m.type || (m as any).studyMaterialType,
+      file_url: m.fileOrUrl,
+      pdfUrl: m.pdfUrl,
+    });
 
     let matchesType = true;
-    if (filterType === "PDF") matchesType = isPdf || m.studyMaterialType === "pdf";
-    if (filterType === "VIDEO") matchesType = isVideo || m.studyMaterialType === "link";
+    if (filterType === "PDF") matchesType = isPdf;
+    if (filterType === "VIDEO") matchesType = isVideo;
 
     const query = searchQuery.trim().toLowerCase();
     const matchesSearch =
@@ -563,14 +581,20 @@ export default function PdfNotesUploadSection({
     return matchesCourse && matchesType && matchesSearch;
   });
 
-  const pdfCount = allHistoryItems.filter(
-    (m: CourseMaterial) => m.type === "PDF" || Boolean(m.pdfUrl) || m.studyMaterialType === "pdf"
+  const pdfCount = allHistoryItems.filter((m: CourseMaterial) =>
+    isStudyMaterialPdf({
+      type: m.type || (m as any).studyMaterialType,
+      file_url: m.fileOrUrl,
+      pdfUrl: m.pdfUrl,
+    })
   ).length;
-  const recordedCount = allHistoryItems.filter(
-    (m: CourseMaterial) =>
-      m.type === "VIDEO" ||
-      m.studyMaterialType === "link" ||
-      Boolean(m.recordingUrl || (m as any).recorded_video_link || (m as any).recording_url)
+
+  const recordedCount = allHistoryItems.filter((m: CourseMaterial) =>
+    isStudyMaterialVideo({
+      type: m.type || (m as any).studyMaterialType,
+      file_url: m.fileOrUrl,
+      recordingUrl: m.recordingUrl,
+    })
   ).length;
 
   return (
@@ -678,11 +702,10 @@ export default function PdfNotesUploadSection({
                 setActiveActionSection("PDF");
                 setErrorMessage(null);
               }}
-              className={`py-3 px-3 rounded-xl font-extrabold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                activeActionSection === "PDF"
-                  ? "bg-white text-purple-700 shadow-sm border border-purple-200/80"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
+              className={`py-3 px-3 rounded-xl font-extrabold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer ${activeActionSection === "PDF"
+                ? "bg-white text-purple-700 shadow-sm border border-purple-200/80"
+                : "text-slate-600 hover:text-slate-900"
+                }`}
             >
               <FileText className="w-4 h-4 text-purple-600" />
               <span>1. Upload PDF Notes</span>
@@ -693,11 +716,10 @@ export default function PdfNotesUploadSection({
                 setActiveActionSection("RECORDED");
                 setErrorMessage(null);
               }}
-              className={`py-3 px-3 rounded-xl font-extrabold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                activeActionSection === "RECORDED"
-                  ? "bg-white text-rose-700 shadow-sm border border-rose-200/80"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
+              className={`py-3 px-3 rounded-xl font-extrabold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer ${activeActionSection === "RECORDED"
+                ? "bg-white text-rose-700 shadow-sm border border-rose-200/80"
+                : "text-slate-600 hover:text-slate-900"
+                }`}
             >
               <Video className="w-4 h-4 text-rose-600" />
               <span>2. Add Recorded Class</span>
@@ -755,11 +777,10 @@ export default function PdfNotesUploadSection({
                           type="button"
                           key={s.id}
                           onClick={() => setPdfSubjectId(s.id)}
-                          className={`py-2 px-3 rounded-xl text-xs font-bold text-left transition-all border cursor-pointer ${
-                            pdfSubjectId === s.id
-                              ? "bg-purple-600 text-white border-purple-600 shadow-xs"
-                              : "bg-purple-50/50 text-slate-700 border-purple-100 hover:border-purple-300"
-                          }`}
+                          className={`py-2 px-3 rounded-xl text-xs font-bold text-left transition-all border cursor-pointer ${pdfSubjectId === s.id
+                            ? "bg-purple-600 text-white border-purple-600 shadow-xs"
+                            : "bg-purple-50/50 text-slate-700 border-purple-100 hover:border-purple-300"
+                            }`}
                         >
                           <span className="block truncate">{s.name}</span>
                           <span className="text-[10px] block opacity-80 truncate">
@@ -813,11 +834,10 @@ export default function PdfNotesUploadSection({
                     <button
                       type="button"
                       onClick={() => setPdfUploadOption("file")}
-                      className={`py-2 px-3 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                        pdfUploadOption === "file"
-                          ? "bg-white text-purple-700 shadow-xs border border-purple-200"
-                          : "text-slate-600 hover:text-slate-900"
-                      }`}
+                      className={`py-2 px-3 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${pdfUploadOption === "file"
+                        ? "bg-white text-purple-700 shadow-xs border border-purple-200"
+                        : "text-slate-600 hover:text-slate-900"
+                        }`}
                     >
                       <FileUp className="w-3.5 h-3.5" />
                       <span>Upload PDF File</span>
@@ -825,11 +845,10 @@ export default function PdfNotesUploadSection({
                     <button
                       type="button"
                       onClick={() => setPdfUploadOption("drive")}
-                      className={`py-2 px-3 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                        pdfUploadOption === "drive"
-                          ? "bg-white text-blue-700 shadow-xs border border-blue-200"
-                          : "text-slate-600 hover:text-slate-900"
-                      }`}
+                      className={`py-2 px-3 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${pdfUploadOption === "drive"
+                        ? "bg-white text-blue-700 shadow-xs border border-blue-200"
+                        : "text-slate-600 hover:text-slate-900"
+                        }`}
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
                       <span>Paste Drive Link</span>
@@ -1050,11 +1069,10 @@ export default function PdfNotesUploadSection({
                           type="button"
                           key={s.id}
                           onClick={() => setRecSubjectId(s.id)}
-                          className={`py-2 px-3 rounded-xl text-xs font-bold text-left transition-all border cursor-pointer ${
-                            recSubjectId === s.id
-                              ? "bg-rose-600 text-white border-rose-600 shadow-xs"
-                              : "bg-rose-50/40 text-slate-700 border-rose-100 hover:border-rose-300"
-                          }`}
+                          className={`py-2 px-3 rounded-xl text-xs font-bold text-left transition-all border cursor-pointer ${recSubjectId === s.id
+                            ? "bg-rose-600 text-white border-rose-600 shadow-xs"
+                            : "bg-rose-50/40 text-slate-700 border-rose-100 hover:border-rose-300"
+                            }`}
                         >
                           <span className="block truncate">{s.name}</span>
                           <span className="text-[10px] block opacity-80 truncate">
@@ -1231,22 +1249,20 @@ export default function PdfNotesUploadSection({
                   <button
                     type="button"
                     onClick={() => setFilterType("ALL")}
-                    className={`py-1 px-2.5 rounded-lg text-[11px] font-extrabold transition-all cursor-pointer ${
-                      filterType === "ALL"
-                        ? "bg-white text-purple-800 shadow-2xs"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
+                    className={`py-1 px-2.5 rounded-lg text-[11px] font-extrabold transition-all cursor-pointer ${filterType === "ALL"
+                      ? "bg-white text-purple-800 shadow-2xs"
+                      : "text-slate-600 hover:text-slate-900"
+                      }`}
                   >
                     All ({allHistoryItems.length})
                   </button>
                   <button
                     type="button"
                     onClick={() => setFilterType("PDF")}
-                    className={`py-1 px-2.5 rounded-lg text-[11px] font-extrabold flex items-center gap-1 transition-all cursor-pointer ${
-                      filterType === "PDF"
-                        ? "bg-white text-emerald-700 shadow-2xs"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
+                    className={`py-1 px-2.5 rounded-lg text-[11px] font-extrabold flex items-center gap-1 transition-all cursor-pointer ${filterType === "PDF"
+                      ? "bg-white text-emerald-700 shadow-2xs"
+                      : "text-slate-600 hover:text-slate-900"
+                      }`}
                   >
                     <FileText className="w-3 h-3 text-emerald-600" />
                     <span>PDFs ({pdfCount})</span>
@@ -1254,11 +1270,10 @@ export default function PdfNotesUploadSection({
                   <button
                     type="button"
                     onClick={() => setFilterType("VIDEO")}
-                    className={`py-1 px-2.5 rounded-lg text-[11px] font-extrabold flex items-center gap-1 transition-all cursor-pointer ${
-                      filterType === "VIDEO"
-                        ? "bg-white text-rose-700 shadow-2xs"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
+                    className={`py-1 px-2.5 rounded-lg text-[11px] font-extrabold flex items-center gap-1 transition-all cursor-pointer ${filterType === "VIDEO"
+                      ? "bg-white text-rose-700 shadow-2xs"
+                      : "text-slate-600 hover:text-slate-900"
+                      }`}
                   >
                     <Video className="w-3 h-3 text-rose-600" />
                     <span>Videos ({recordedCount})</span>
@@ -1316,11 +1331,10 @@ export default function PdfNotesUploadSection({
                       {/* Left: Info */}
                       <div className="flex items-start gap-3 min-w-0 flex-1">
                         <div
-                          className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                            isVideo
-                              ? "bg-rose-100 text-rose-600"
-                              : "bg-emerald-100 text-emerald-700"
-                          }`}
+                          className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isVideo
+                            ? "bg-rose-100 text-rose-600"
+                            : "bg-emerald-100 text-emerald-700"
+                            }`}
                         >
                           {isVideo ? (
                             <Video className="w-5 h-5" />

@@ -107,7 +107,14 @@ export async function POST(request: NextRequest) {
       course: course ? String(course).trim() : "All Courses",
       subject: subject ? String(subject).trim() : null,
       file_url: String(file_url).trim(),
-      type: type === "link" ? "link" : "pdf",
+      type:
+        type === "video" || type === "recorded"
+          ? "video"
+          : type === "pdf"
+          ? "pdf"
+          : String(type).toLowerCase().includes("video")
+          ? "video"
+          : "pdf",
       uploaded_by: uploaded_by ? String(uploaded_by).trim() : null,
     };
 

@@ -49,7 +49,7 @@ export interface CourseMaterial {
   teacher_id?: string;
   teacherName?: string;
   sourceTable?: "live_classes" | "special_classes" | "local" | "study_materials";
-  studyMaterialType?: "pdf" | "link";
+  studyMaterialType?: "pdf" | "video" | "link";
 }
 
 export interface TeacherStudentItem {

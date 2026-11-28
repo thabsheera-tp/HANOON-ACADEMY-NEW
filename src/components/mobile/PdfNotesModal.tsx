@@ -16,6 +16,8 @@ import { SelectedCourse } from "@/types/app";
 import {
   fetchAllStudyMaterials,
   StudyMaterial,
+  isStudyMaterialPdf,
+  isStudyMaterialVideo,
 } from "@/services/studyMaterialService";
 import {
   fetchCourseMaterialsFromSupabase,
@@ -63,41 +65,20 @@ export default function PdfNotesModal({
           fetchCourseMaterialsFromSupabase(selectedCourse.id),
         ]);
 
-        const isPdfUrl = (url?: string | null, type?: string): boolean => {
-          if (!url) return false;
-          const lower = url.trim().toLowerCase();
-          // Strictly exclude video links
-          if (
-            lower.includes("youtube.com") ||
-            lower.includes("youtu.be") ||
-            lower.includes("meet.google.com") ||
-            lower.includes("zoom.us") ||
-            lower.includes("vimeo.com") ||
-            lower.endsWith(".mp4") ||
-            lower.endsWith(".webm") ||
-            lower.endsWith(".mov")
-          ) {
-            return false;
-          }
-          return (
-            type === "pdf" ||
-            lower.endsWith(".pdf") ||
-            lower.includes(".pdf?") ||
-            lower.includes("/notes/") ||
-            lower.includes("/course-materials/")
-          );
-        };
-
         const list: PdfNoteItem[] = [];
         const seenUrls = new Set<string>();
 
-        // 1. Ingest from study_materials (ONLY PDFs, STRICTLY NO VIDEO LINKS)
+        // 1. Ingest from study_materials (STRICTLY MUTUALLY EXCLUSIVE: ONLY PDFs, ZERO VIDEOS)
         (studyMaterials || []).forEach((sm) => {
-          if (sm.type === "link") return; // Skip external links (reserved for videos)
           const url = (sm.file_url || "").trim();
           if (!url || seenUrls.has(url)) return;
 
-          if (isPdfUrl(url, sm.type)) {
+          // Never display video or recorded class items here
+          if (isStudyMaterialVideo({ type: sm.type, file_url: url })) {
+            return;
+          }
+
+          if (isStudyMaterialPdf({ type: sm.type, file_url: url })) {
             seenUrls.add(url);
             let formattedDate = "Recent";
             if (sm.created_at) {
@@ -126,7 +107,12 @@ export default function PdfNotesModal({
         (legacyMaterials || []).forEach((m) => {
           const url = (m.pdfUrl || m.fileOrUrl || "").trim();
           if (!url || seenUrls.has(url)) return;
-          if (m.type === "PDF" || isPdfUrl(url, "pdf")) {
+
+          if (isStudyMaterialVideo({ type: m.type, file_url: url, recordingUrl: m.recordingUrl })) {
+            return;
+          }
+
+          if (isStudyMaterialPdf({ type: m.type, file_url: url, pdfUrl: m.pdfUrl })) {
             seenUrls.add(url);
             list.push({
               id: `leg-${m.id}`,

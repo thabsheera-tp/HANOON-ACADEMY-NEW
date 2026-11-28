@@ -41,7 +41,7 @@ import {
   triggerClassLiveNotification,
 } from "@/services/notificationService";
 import { uploadPdfToSupabaseStorage } from "@/services/storageService";
-import { createStudyMaterial } from "@/services/studyMaterialService";
+import { createStudyMaterial, isStudyMaterialPdf, isStudyMaterialVideo } from "@/services/studyMaterialService";
 import HanoonLogo from "@/components/brand/HanoonLogo";
 import TeacherEngagementDonut from "@/components/charts/TeacherEngagementDonut";
 import AdminMetricsChart from "@/components/charts/AdminMetricsChart";
@@ -505,13 +505,13 @@ export default function TeacherDashboardPage() {
     let finalPdfTitle = teacherPdfFileName || `${teacherPdfForm.title.trim()}.pdf`;
     let finalSize = teacherPdfFileSize || "Official PDF";
     let finalFileUrl = "";
-    let itemType: "pdf" | "link" = "pdf";
+    let itemType: "pdf" = "pdf";
 
     try {
       if (teacherPdfOption === "drive") {
-        itemType = "link";
+        itemType = "pdf";
         finalFileUrl = teacherDriveLink.trim();
-        finalSize = "Google Drive Link";
+        finalSize = "Google Drive PDF";
       } else {
         itemType = "pdf";
         if (teacherPdfFile) {
@@ -658,6 +658,16 @@ export default function TeacherDashboardPage() {
         teacherName: currentUser?.full_name || "Faculty",
         duration: teacherRecForm.duration,
       });
+
+      // Also strictly save to public.study_materials with type = 'video'
+      createStudyMaterial({
+        title: teacherRecForm.title.trim(),
+        course: teacherRecForm.courseId,
+        subject: courseName,
+        file_url: cleanLink,
+        type: "video",
+        uploaded_by: currentUser?.full_name || "Faculty Instructor",
+      }).catch((e) => console.warn("Failed to sync teacher recorded class to study_materials:", e));
 
       uploadCourseMaterial({
         title: `${teacherRecForm.title.trim()} - Recorded Class`,
@@ -2013,8 +2023,16 @@ export default function TeacherDashboardPage() {
                   </div>
                 ) : (
                   accessibleMaterials.map((mat) => {
-                    const isPdf = mat.type === "PDF";
-                    const isVideo = mat.type === "VIDEO" || Boolean(mat.recordingUrl || (mat as any).recorded_video_link || (mat as any).recording_url);
+                    const isVideo = isStudyMaterialVideo({
+                      type: mat.type,
+                      file_url: mat.fileOrUrl,
+                      recordingUrl: mat.recordingUrl,
+                    });
+                    const isPdf = isStudyMaterialPdf({
+                      type: mat.type,
+                      file_url: mat.fileOrUrl,
+                      pdfUrl: mat.pdfUrl,
+                    });
                     const videoLink = (mat as any).recorded_video_link || mat.recordingUrl || (mat as any).recording_url || (isVideo ? mat.fileOrUrl : null);
 
                     return (

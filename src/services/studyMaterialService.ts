@@ -1,14 +1,98 @@
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 
+export type StudyMaterialType = "pdf" | "video" | "link";
+
 export interface StudyMaterial {
   id: string;
   title: string;
   course: string;
   subject?: string | null;
   file_url: string;
-  type: "pdf" | "link";
+  type: StudyMaterialType;
   uploaded_by?: string | null;
   created_at?: string;
+}
+
+/**
+ * Strict Mutually Exclusive Categorization Helpers:
+ * Guarantees that no single material is ever classified as both PDF and Video.
+ */
+export function isStudyMaterialPdf(item: {
+  type?: string;
+  file_url?: string;
+  pdfUrl?: string;
+  recordingUrl?: string;
+}): boolean {
+  // If explicitly tagged as video, it is NEVER a PDF
+  if (item.type === "video" || item.type === "recorded" || item.type === "VIDEO") {
+    return false;
+  }
+  const url = (item.pdfUrl || item.file_url || "").trim().toLowerCase();
+  // If URL is from a known video hosting provider, it is NEVER a PDF
+  if (
+    url.includes("youtube.com") ||
+    url.includes("youtu.be") ||
+    url.includes("vimeo.com") ||
+    url.endsWith(".mp4") ||
+    url.endsWith(".webm") ||
+    url.endsWith(".mov") ||
+    url.includes("meet.google.com") ||
+    url.includes("zoom.us")
+  ) {
+    return false;
+  }
+  // If explicitly tagged as PDF
+  if (item.type === "pdf" || item.type === "PDF") {
+    return true;
+  }
+  // If file_url ends with .pdf or is stored in the notes/course-materials bucket
+  if (
+    url.endsWith(".pdf") ||
+    url.includes(".pdf?") ||
+    url.includes("/notes/") ||
+    url.includes("/course-materials/")
+  ) {
+    return true;
+  }
+  return false;
+}
+
+export function isStudyMaterialVideo(item: {
+  type?: string;
+  file_url?: string;
+  pdfUrl?: string;
+  recordingUrl?: string;
+}): boolean {
+  // If classified as PDF, it is NEVER a video (strictly mutually exclusive)
+  if (isStudyMaterialPdf(item)) {
+    return false;
+  }
+  // If explicitly tagged as video
+  if (item.type === "video" || item.type === "recorded" || item.type === "VIDEO") {
+    return true;
+  }
+  const url = (item.recordingUrl || item.file_url || "").trim().toLowerCase();
+  if (
+    url.endsWith(".pdf") ||
+    url.includes(".pdf?") ||
+    url.includes("/notes/") ||
+    url.includes("/course-materials/")
+  ) {
+    return false;
+  }
+  if (
+    url.includes("youtube.com") ||
+    url.includes("youtu.be") ||
+    url.includes("drive.google.com") ||
+    url.includes("vimeo.com") ||
+    url.includes("zoom.us/rec") ||
+    url.endsWith(".mp4") ||
+    url.endsWith(".webm") ||
+    url.endsWith(".mov")
+  ) {
+    return true;
+  }
+  return false;
 }
 
 const LOCAL_STORAGE_KEY = "hanoon_study_materials";
@@ -150,7 +234,7 @@ export async function createStudyMaterial(payload: {
   course: string;
   subject?: string | null;
   file_url: string;
-  type: "pdf" | "link";
+  type: StudyMaterialType;
   uploaded_by?: string | null;
 }): Promise<{ success: boolean; data?: StudyMaterial; error?: string }> {
   const cleanPayload = {
