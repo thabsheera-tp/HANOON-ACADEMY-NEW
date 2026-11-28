@@ -24,6 +24,7 @@ import {
 import { AdaviyyaSubject, getTeacherWhatsApp } from "@/services/subjectService";
 import { getAppSettings, formatWhatsAppLink } from "@/services/settingsService";
 import { recordLiveClassJoinAttendance } from "@/services/attendanceService";
+import { fetchAllStudyMaterials, StudyMaterial } from "@/services/studyMaterialService";
 
 interface SubjectClassHubModalProps {
   isOpen: boolean;
@@ -58,7 +59,105 @@ export default function SubjectClassHubModal({
   const [isClassInProgress, setIsClassInProgress] = useState(false);
   const [isMarkingAttendance, setIsMarkingAttendance] = useState(false);
   const [attendanceMarkedAt, setAttendanceMarkedAt] = useState<string | null>(null);
+  const [dynamicMaterials, setDynamicMaterials] = useState<StudyMaterial[]>([]);
+  const [loadingMaterials, setLoadingMaterials] = useState(false);
   const isPaid = Boolean(isPaidProp);
+
+  useEffect(() => {
+    if (!isOpen || !subject) return;
+    setLoadingMaterials(true);
+    let isMounted = true;
+
+    const loadSubjectMaterials = async () => {
+      try {
+        const allMaterials = await fetchAllStudyMaterials(courseId || "adaviyya");
+        const subName = (subject.name || "").toLowerCase();
+        const subId = (subject.id || "").toLowerCase();
+
+        const matched = (allMaterials || []).filter((m) => {
+          const mSub = (m.subject || "").toLowerCase();
+          return (
+            mSub === subName ||
+            mSub === subId ||
+            (mSub && subName.includes(mSub)) ||
+            (mSub && mSub.includes(subName))
+          );
+        });
+
+        if (isMounted) setDynamicMaterials(matched);
+      } catch (err) {
+        console.warn("Error fetching subject materials:", err);
+      } finally {
+        if (isMounted) setLoadingMaterials(false);
+      }
+    };
+
+    loadSubjectMaterials();
+    const handleUpdate = () => loadSubjectMaterials();
+    window.addEventListener("hanoon_study_materials_updated", handleUpdate);
+    window.addEventListener("hanoon_material_uploaded", handleUpdate);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("hanoon_study_materials_updated", handleUpdate);
+      window.removeEventListener("hanoon_material_uploaded", handleUpdate);
+    };
+  }, [isOpen, subject, courseId]);
+
+  const combinedLessons = React.useMemo(() => {
+    const list: {
+      id: string;
+      title: string;
+      duration?: string;
+      pdfTitle?: string;
+      pdfSize?: string;
+      pdfUrl?: string;
+      recordedLink?: string;
+      date?: string;
+    }[] = (subject?.chapters || []).map((ch) => ({
+      id: ch.id,
+      title: ch.title,
+      duration: ch.duration,
+      pdfTitle: ch.pdfTitle,
+      pdfSize: ch.pdfSize,
+      pdfUrl: ch.pdfUrl,
+      recordedLink:
+        (ch as any).recorded_video_link ||
+        ch.recordedLink ||
+        (ch as any).recording_url ||
+        (ch.videoUrl &&
+        !ch.videoUrl.includes("meet.google.com") &&
+        !ch.videoUrl.includes("zoom.us")
+          ? ch.videoUrl
+          : undefined),
+      date: ch.date,
+    }));
+
+    const seenUrls = new Set<string>();
+    list.forEach((it) => {
+      if (it.pdfUrl) seenUrls.add(it.pdfUrl);
+      if (it.recordedLink) seenUrls.add(it.recordedLink);
+    });
+
+    dynamicMaterials.forEach((sm) => {
+      const url = (sm.file_url || "").trim();
+      if (!url || seenUrls.has(url)) return;
+      seenUrls.add(url);
+
+      const isLink = sm.type === "link";
+      list.push({
+        id: `sm-${sm.id}`,
+        title: sm.title,
+        duration: isLink ? "Recorded Video" : undefined,
+        pdfTitle: !isLink ? `${sm.title}.pdf` : undefined,
+        pdfSize: !isLink ? "Official PDF" : undefined,
+        pdfUrl: !isLink ? url : undefined,
+        recordedLink: isLink ? url : undefined,
+        date: sm.created_at ? new Date(sm.created_at).toLocaleDateString() : undefined,
+      });
+    });
+
+    return list;
+  }, [subject?.chapters, dynamicMaterials]);
 
   if (!isOpen || !subject) return null;
 
@@ -331,7 +430,7 @@ export default function SubjectClassHubModal({
         <div className="space-y-2 mb-3">
           <div className="flex items-center justify-between">
             <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-800">
-              Curriculum Lessons & Materials ({subject.chapters.length})
+              Curriculum Lessons & Materials ({combinedLessons.length})
             </h4>
             <span
               className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
@@ -344,19 +443,19 @@ export default function SubjectClassHubModal({
             </span>
           </div>
 
-          {subject.chapters.length === 0 ? (
+          {combinedLessons.length === 0 ? (
             <div className="py-8 px-4 rounded-2xl bg-purple-50/40 border border-purple-100 text-center space-y-2">
               <div className="w-10 h-10 rounded-2xl bg-purple-100/80 text-purple-600 flex items-center justify-center mx-auto">
                 <FileText className="w-5 h-5 text-purple-600" />
               </div>
-              <h4 className="text-xs font-bold text-slate-800">No study materials available</h4>
+              <h4 className="text-xs font-bold text-slate-800">No lessons uploaded yet</h4>
               <p className="text-[11px] text-slate-500 max-w-xs mx-auto leading-relaxed">
                 Curriculum notes, worksheets, and lecture recordings for {subject.name} will appear here once uploaded by your faculty instructor.
               </p>
             </div>
           ) : (
             <div className="space-y-2">
-              {subject.chapters.map((chapter) => {
+              {combinedLessons.map((chapter) => {
                 const isPlaying = activePlayingId === chapter.id;
                 const isDownloaded = downloadedChapters[chapter.id];
                 const isDownloading = downloadingId === chapter.id;
@@ -422,16 +521,7 @@ export default function SubjectClassHubModal({
 
                   {/* Prominent Recorded Class Link (Google Drive / YouTube) */}
                   {(() => {
-                    const recordedLink =
-                      (chapter as any).recorded_video_link ||
-                      chapter.recordedLink ||
-                      (chapter as any).recording_url ||
-                      (chapter.videoUrl &&
-                      !chapter.videoUrl.includes("meet.google.com") &&
-                      !chapter.videoUrl.includes("zoom.us")
-                        ? chapter.videoUrl
-                        : undefined);
-
+                    const recordedLink = chapter.recordedLink;
                     if (!recordedLink) return null;
 
                     return (
@@ -448,50 +538,52 @@ export default function SubjectClassHubModal({
                     );
                   })()}
 
-                  {/* PDF Download Button - Locked when unpaid */}
-                  <div className="pt-1.5 border-t border-purple-100/60 flex items-center justify-between">
-                    <span className="text-[10px] text-slate-500 font-medium truncate max-w-[190px]">
-                      {chapter.pdfTitle}
-                    </span>
+                  {/* PDF Download Button - Only when pdfUrl exists */}
+                  {chapter.pdfUrl && (
+                    <div className="pt-1.5 border-t border-purple-100/60 flex items-center justify-between">
+                      <span className="text-[10px] text-slate-500 font-medium truncate max-w-[190px]">
+                        {chapter.pdfTitle || "Lesson Notes.pdf"}
+                      </span>
 
-                    {isPaid ? (
-                      <button
-                        type="button"
-                        disabled={isDownloading}
-                        onClick={() => handleDownload(chapter.id, chapter.pdfUrl, chapter.pdfTitle)}
-                        className={`py-1 px-2.5 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all ${
-                          isDownloaded
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                            : "bg-white border border-purple-200 text-purple-700 hover:bg-purple-50"
-                        }`}
-                      >
-                        {isDownloaded ? (
-                          <>
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                            <span>Saved</span>
-                          </>
-                        ) : isDownloading ? (
-                          <span>Downloading...</span>
-                        ) : (
-                          <>
-                            <Download className="w-3 h-3" />
-                            <span>PDF</span>
-                          </>
-                        )}
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled
-                        aria-disabled="true"
-                        title="Enroll and get verified to download PDF material"
-                        className="py-1 px-2.5 rounded-lg text-[10px] font-bold flex items-center gap-1 bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed select-none"
-                      >
-                        <Lock className="w-3 h-3 text-slate-400" />
-                        <span>Locked</span>
-                      </button>
-                    )}
-                  </div>
+                      {isPaid ? (
+                        <button
+                          type="button"
+                          disabled={isDownloading}
+                          onClick={() => handleDownload(chapter.id, chapter.pdfUrl, chapter.pdfTitle)}
+                          className={`py-1 px-2.5 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all ${
+                            isDownloaded
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                              : "bg-white border border-purple-200 text-purple-700 hover:bg-purple-50"
+                          }`}
+                        >
+                          {isDownloaded ? (
+                            <>
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>Saved</span>
+                            </>
+                          ) : isDownloading ? (
+                            <span>Downloading...</span>
+                          ) : (
+                            <>
+                              <Download className="w-3 h-3" />
+                              <span>PDF</span>
+                            </>
+                          )}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled
+                          aria-disabled="true"
+                          title="Enroll and get verified to download PDF material"
+                          className="py-1 px-2.5 rounded-lg text-[10px] font-bold flex items-center gap-1 bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed select-none"
+                        >
+                          <Lock className="w-3 h-3 text-slate-400" />
+                          <span>Locked</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}

@@ -135,6 +135,21 @@ export default function StudentNoticeBoard({
     }
   };
 
+  // If 0 notices exist: sleek single-line compact row (zero bulky boxes, zero filter pills)
+  if (announcements.length === 0) {
+    return (
+      <div className="flex items-center justify-between p-3 rounded-2xl bg-white border border-slate-100/90 shadow-2xs text-xs text-slate-500">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+            <Megaphone className="w-3.5 h-3.5" />
+          </div>
+          <span className="font-semibold text-slate-700">Notice Board</span>
+        </div>
+        <span className="text-[11px] text-slate-400">No new announcements</span>
+      </div>
+    );
+  }
+
   // Filtered notices based on category pill
   const displayedNotices = announcements.filter((a) => {
     if (activeFilter === "ALL") return true;

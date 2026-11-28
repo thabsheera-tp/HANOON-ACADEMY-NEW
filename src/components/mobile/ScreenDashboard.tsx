@@ -31,6 +31,8 @@ import { fetchCertificates } from "@/services/certificateService";
 import { DbCertificate } from "@/types/supabase";
 import LiveClassModal from "@/components/mobile/LiveClassModal";
 import CourseMaterialsModal from "@/components/mobile/CourseMaterialsModal";
+import RecordedClassesModal from "@/components/mobile/RecordedClassesModal";
+import PdfNotesModal from "@/components/mobile/PdfNotesModal";
 import TimetableModal from "@/components/mobile/TimetableModal";
 import StudentIDModal from "@/components/mobile/StudentIDModal";
 import SpecialClassModal from "@/components/mobile/SpecialClassModal";
@@ -79,6 +81,8 @@ export default function ScreenDashboard({
 
   const [showLiveModal, setShowLiveModal] = useState(false);
   const [showMaterialsModal, setShowMaterialsModal] = useState(false);
+  const [showRecordedModal, setShowRecordedModal] = useState(false);
+  const [showPdfModal, setShowPdfModal] = useState(false);
   const [showTimetableModal, setShowTimetableModal] = useState(false);
   const [showStudentIDModal, setShowStudentIDModal] = useState(false);
   const [showNotificationToast, setShowNotificationToast] = useState(false);
@@ -693,30 +697,14 @@ export default function ScreenDashboard({
         </div>
       )}
 
-      {/* 1. iOS-STYLE WELCOME HEADLINE (Clean typography, no extra background boxes) */}
-      <div className="pt-1.5 pb-0.5 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Welcome, {studentName}
-          </h1>
-          <p className="text-xs text-slate-400 font-medium mt-0.5">
-            {selectedCourse.title}
-          </p>
-        </div>
-
-        {/* Subtle iOS Notification Bell */}
-        <button
-          type="button"
-          onClick={() => setShowNotificationToast((prev) => !prev)}
-          className="relative p-2 rounded-full text-slate-500 hover:text-slate-800 hover:bg-white active:scale-95 transition-all cursor-pointer"
-          title="Notifications"
-          aria-label="Toggle notifications"
-        >
-          <Bell className="w-4 h-4" />
-          {unreadNotifs > 0 && (
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-[#F8F9FA]" />
-          )}
-        </button>
+      {/* 1. iOS-STYLE WELCOME HEADLINE (Clean typography, no extra background boxes, no duplicate icons) */}
+      <div className="pt-1.5 pb-0.5">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+          Welcome, {studentName}
+        </h1>
+        <p className="text-xs text-slate-400 font-medium mt-0.5">
+          {selectedCourse.title}
+        </p>
       </div>
 
       {/* Notification Toast Dropdown with Real Alerts (Compact iOS-Inspired Design) */}
@@ -876,62 +864,98 @@ export default function ScreenDashboard({
         </div>
       )}
 
-      {/* 2. iOS-STYLE COMPACT QUICK ACCESS (2x2 Neat Square Tiles) */}
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
-        {/* Tile 1: My Courses */}
-        <button
-          type="button"
-          onClick={() => {
-            const el = document.getElementById("enrolled-subjects");
-            if (el) {
-              el.scrollIntoView({ behavior: "smooth" });
-            }
-          }}
-          className="p-3.5 rounded-2xl bg-white border border-slate-100/90 shadow-2xs hover:shadow-xs active:scale-[0.98] transition-all text-left flex flex-col justify-between aspect-square max-h-[105px] cursor-pointer group"
-        >
-          <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center transition-transform group-hover:scale-105">
-            <BookOpen className="w-4 h-4" />
-          </div>
-          <span className="text-xs sm:text-[13px] font-semibold text-slate-800 tracking-tight">
-            My Courses
-          </span>
-        </button>
+      {/* 2. iOS-STYLE SLEEK DARK-MINIMALIST QUICK ACCESS GRID */}
+      <div className="space-y-2.5">
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+          {/* Card 1: Live Classes */}
+          <button
+            type="button"
+            onClick={() => {
+              if (isApproved) {
+                setShowLiveModal(true);
+              } else {
+                setLockedNoticeSubject("Live Classroom");
+              }
+            }}
+            className="p-3.5 rounded-2xl bg-zinc-900/80 backdrop-blur-md border border-white/10 shadow-sm hover:border-rose-500/40 active:scale-[0.98] transition-all text-left flex flex-col justify-between aspect-square max-h-[110px] cursor-pointer group"
+          >
+            <div className="w-8 h-8 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center justify-center transition-transform group-hover:scale-105">
+              <Radio className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="text-xs sm:text-[13px] font-bold text-white tracking-tight block">
+                Live Classes
+              </span>
+              <span className="text-[10px] text-zinc-400 font-medium">
+                Interactive Halls
+              </span>
+            </div>
+          </button>
 
-        {/* Tile 2: Live Classes */}
-        <button
-          type="button"
-          onClick={() => {
-            if (isApproved) {
-              setShowLiveModal(true);
-            } else {
-              setLockedNoticeSubject("Live Classroom");
-            }
-          }}
-          className="p-3.5 rounded-2xl bg-white border border-slate-100/90 shadow-2xs hover:shadow-xs active:scale-[0.98] transition-all text-left flex flex-col justify-between aspect-square max-h-[105px] cursor-pointer group"
-        >
-          <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center transition-transform group-hover:scale-105">
-            <Radio className="w-4 h-4" />
-          </div>
-          <span className="text-xs sm:text-[13px] font-semibold text-slate-800 tracking-tight">
-            Live Classes
-          </span>
-        </button>
+          {/* Card 2: Recorded Classes (Dedicated Option 1) */}
+          <button
+            type="button"
+            onClick={() => setShowRecordedModal(true)}
+            className="p-3.5 rounded-2xl bg-zinc-900/80 backdrop-blur-md border border-white/10 shadow-sm hover:border-purple-500/40 active:scale-[0.98] transition-all text-left flex flex-col justify-between aspect-square max-h-[110px] cursor-pointer group"
+          >
+            <div className="w-8 h-8 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-400 flex items-center justify-center transition-transform group-hover:scale-105">
+              <Video className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="text-xs sm:text-[13px] font-bold text-white tracking-tight block">
+                Recorded Classes
+              </span>
+              <span className="text-[10px] text-zinc-400 font-medium">
+                Video Archive
+              </span>
+            </div>
+          </button>
 
-        {/* Tile 3: Downloads */}
-        <button
-          type="button"
-          onClick={() => setShowMaterialsModal(true)}
-          className="p-3.5 rounded-2xl bg-white border border-slate-100/90 shadow-2xs hover:shadow-xs active:scale-[0.98] transition-all text-left flex flex-col justify-between aspect-square max-h-[105px] cursor-pointer group"
-        >
-          <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center transition-transform group-hover:scale-105">
-            <Download className="w-4 h-4" />
-          </div>
-          <span className="text-xs sm:text-[13px] font-semibold text-slate-800 tracking-tight">
-            Downloads
-          </span>
-        </button>
+          {/* Card 3: PDF Notes (Dedicated Option 2) */}
+          <button
+            type="button"
+            onClick={() => setShowPdfModal(true)}
+            className="p-3.5 rounded-2xl bg-zinc-900/80 backdrop-blur-md border border-white/10 shadow-sm hover:border-emerald-500/40 active:scale-[0.98] transition-all text-left flex flex-col justify-between aspect-square max-h-[110px] cursor-pointer group"
+          >
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center transition-transform group-hover:scale-105">
+              <FileText className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="text-xs sm:text-[13px] font-bold text-white tracking-tight block">
+                PDF Notes
+              </span>
+              <span className="text-[10px] text-zinc-400 font-medium">
+                Study Materials
+              </span>
+            </div>
+          </button>
 
-        {/* Tile 4: Certificates */}
+          {/* Card 4: My Courses */}
+          <button
+            type="button"
+            onClick={() => {
+              const el = document.getElementById("enrolled-subjects");
+              if (el) {
+                el.scrollIntoView({ behavior: "smooth" });
+              }
+            }}
+            className="p-3.5 rounded-2xl bg-zinc-900/80 backdrop-blur-md border border-white/10 shadow-sm hover:border-sky-500/40 active:scale-[0.98] transition-all text-left flex flex-col justify-between aspect-square max-h-[110px] cursor-pointer group"
+          >
+            <div className="w-8 h-8 rounded-xl bg-sky-500/15 border border-sky-500/30 text-sky-400 flex items-center justify-center transition-transform group-hover:scale-105">
+              <BookOpen className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="text-xs sm:text-[13px] font-bold text-white tracking-tight block">
+                My Courses
+              </span>
+              <span className="text-[10px] text-zinc-400 font-medium">
+                Curriculum Hub
+              </span>
+            </div>
+          </button>
+        </div>
+
+        {/* Card 5: Digital Certificates (Sleek Minimalist Tile) */}
         <button
           type="button"
           onClick={() => {
@@ -944,14 +968,22 @@ export default function ScreenDashboard({
               }
             }
           }}
-          className="p-3.5 rounded-2xl bg-white border border-slate-100/90 shadow-2xs hover:shadow-xs active:scale-[0.98] transition-all text-left flex flex-col justify-between aspect-square max-h-[105px] cursor-pointer group"
+          className="w-full p-3 rounded-2xl bg-zinc-900/80 backdrop-blur-md border border-white/10 shadow-sm hover:border-amber-500/40 active:scale-[0.98] transition-all text-left flex items-center justify-between cursor-pointer group"
         >
-          <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center transition-transform group-hover:scale-105">
-            <Award className="w-4 h-4" />
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center transition-transform group-hover:scale-105">
+              <Award className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="text-xs sm:text-[13px] font-bold text-white tracking-tight block">
+                Digital Certificates
+              </span>
+              <span className="text-[10px] text-zinc-400 font-medium">
+                Verified Credentials & Completion Badges
+              </span>
+            </div>
           </div>
-          <span className="text-xs sm:text-[13px] font-semibold text-slate-800 tracking-tight">
-            Certificates
-          </span>
+          <ChevronRight className="w-4 h-4 text-zinc-500 group-hover:text-amber-400 transition-colors" />
         </button>
       </div>
 
@@ -1541,6 +1573,30 @@ export default function ScreenDashboard({
         isPaid={isApproved}
         onEnroll={() => {
           setShowMaterialsModal(false);
+          onChangeCourse();
+        }}
+      />
+
+      {/* 2.1 Dedicated Recorded Classes Modal (Option 1: Video/Play Only) */}
+      <RecordedClassesModal
+        isOpen={showRecordedModal}
+        onClose={() => setShowRecordedModal(false)}
+        selectedCourse={selectedCourse}
+        isPaid={isApproved}
+        onEnroll={() => {
+          setShowRecordedModal(false);
+          onChangeCourse();
+        }}
+      />
+
+      {/* 2.2 Dedicated PDF Notes Modal (Option 2: Document/PDF Only) */}
+      <PdfNotesModal
+        isOpen={showPdfModal}
+        onClose={() => setShowPdfModal(false)}
+        selectedCourse={selectedCourse}
+        isPaid={isApproved}
+        onEnroll={() => {
+          setShowPdfModal(false);
           onChangeCourse();
         }}
       />

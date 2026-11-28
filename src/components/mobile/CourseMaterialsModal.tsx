@@ -136,20 +136,45 @@ export default function CourseMaterialsModal({
 
   if (!isOpen) return null;
 
-  const pdfMaterials = materials.filter(
-    (m) =>
-      m.type === "PDF" ||
-      Boolean(m.pdfUrl) ||
+  const pdfMaterials = materials.filter((m) => {
+    if ((m as any).studyMaterialType === "link") return false;
+    if (m.type === "LINK" || m.type === "VIDEO") return false;
+    const url = (m.pdfUrl || m.fileOrUrl || "").toLowerCase();
+    if (
+      url.includes("youtube.com") ||
+      url.includes("youtu.be") ||
+      url.includes("meet.google.com") ||
+      url.includes("zoom.us")
+    ) {
+      return false;
+    }
+    return (
       (m as any).studyMaterialType === "pdf" ||
+      m.type === "PDF" ||
+      url.endsWith(".pdf") ||
+      url.includes(".pdf?") ||
+      url.includes("/notes/") ||
+      url.includes("/course-materials/")
+    );
+  });
+
+  const videoMaterials = materials.filter((m) => {
+    if ((m as any).studyMaterialType === "pdf") return false;
+    const url = (m.recordingUrl || m.fileOrUrl || "").toLowerCase();
+    if (url.endsWith(".pdf") || url.includes(".pdf?")) return false;
+    return (
       (m as any).studyMaterialType === "link" ||
-      m.sourceTable === "study_materials" ||
-      m.fileOrUrl?.toLowerCase().endsWith(".pdf")
-  );
-  const videoMaterials = materials.filter(
-    (m) =>
+      m.type === "LINK" ||
       m.type === "VIDEO" ||
-      (m.fileOrUrl?.includes("youtube") || m.fileOrUrl?.includes("mp4"))
-  );
+      url.includes("youtube.com") ||
+      url.includes("youtu.be") ||
+      url.includes("drive.google.com") ||
+      url.includes("vimeo.com") ||
+      url.endsWith(".mp4") ||
+      url.endsWith(".webm") ||
+      url.endsWith(".mov")
+    );
+  });
 
   const activeLesson = videoMaterials.find((c) => c.id === activeVideoId) || videoMaterials[0];
 

@@ -22,6 +22,10 @@ import {
   getAdaviyyaSubjects,
 } from "@/services/subjectService";
 import { SpecialClass, getSpecialClasses } from "@/services/specialClassService";
+import {
+  fetchAllStudyMaterials,
+  StudyMaterial,
+} from "@/services/studyMaterialService";
 import SubjectClassHubModal from "@/components/mobile/SubjectClassHubModal";
 import SpecialClassModal from "@/components/mobile/SpecialClassModal";
 
@@ -32,12 +36,6 @@ interface ScreenCourseDetailsProps {
   paymentDetails?: PaymentDetails;
   isPaid?: boolean;
   onGoToDashboard?: () => void;
-}
-
-interface SyllabusModule {
-  number: string;
-  title: string;
-  topics: string[];
 }
 
 export default function ScreenCourseDetails({
@@ -107,155 +105,36 @@ export default function ScreenCourseDetails({
     }
   };
 
-  // Syllabus modules for non-Athaviy courses
-  const getSyllabusModules = (): SyllabusModule[] => {
-    if (
-      selectedCourse.id === "home-tuition" ||
-      selectedCourse.id === "tuition" ||
-      selectedCourse.title.toLowerCase().includes("home tuition") ||
-      selectedCourse.title.toLowerCase().includes("tuition")
-    ) {
-      return [
-        {
-          number: "01",
-          title: "Diagnostic Assessment & Custom Study Roadmap",
-          topics: [
-            "Baseline curriculum evaluation (CBSE / State / ICSE)",
-            "Targeted score milestones & personalized study schedule",
-            "Individual subject mentor assignment",
-          ],
-        },
-        {
-          number: "02",
-          title: "Core Mathematics & Analytical Problem Solving",
-          topics: [
-            "Foundational algebra, geometry & trigonometry",
-            "Step-by-step problem breakdown & speed calculation",
-            "Formula retention & shortcut problem-solving methods",
-          ],
-        },
-        {
-          number: "03",
-          title: "Natural Sciences & Conceptual Clarity",
-          topics: [
-            "Physics mechanics, optics & electricity concepts",
-            "Chemistry equations, organic basics & periodic trends",
-            "Biology diagram labeling, anatomy & processes",
-          ],
-        },
-        {
-          number: "04",
-          title: "Weekly Mock Tests & Exam Mastery",
-          topics: [
-            "Chapter-end timed tests & past paper drills",
-            "Mistake analysis & individual doubt clarification",
-            "Weekly performance dashboard for parents",
-          ],
-        },
-      ];
-    }
+  // Dynamic Study Materials fetched from Supabase (Purged all dummy/hardcoded modules)
+  const [courseMaterials, setCourseMaterials] = useState<StudyMaterial[]>([]);
+  const [materialsLoading, setMaterialsLoading] = useState(true);
 
-    if (selectedCourse.id === "fashion-designing") {
-      return [
-        {
-          number: "01",
-          title: "Pattern Drafting & Body Measurement Science",
-          topics: [
-            "Anatomical measurement techniques & standard charts",
-            "Basic sloper drafting (bodice, sleeve, skirt)",
-            "Drafting tools, darts, pleats & grading basics",
-          ],
-        },
-        {
-          number: "02",
-          title: "Fabric Science & Precision Cutting",
-          topics: [
-            "Textile properties (cotton, linen, crepe, silk)",
-            "Grainline alignment & precision fabric cutting",
-            "Interfacing, lining & seam allowance allowances",
-          ],
-        },
-        {
-          number: "03",
-          title: "Modest Apparel Construction & Stitching",
-          topics: [
-            "Abaya, jilbab, kaftan & modest tunic tailored drafting",
-            "Industrial machine operation & French seams",
-            "Neckline facings, concealed zippers & piping finishes",
-          ],
-        },
-        {
-          number: "04",
-          title: "Boutique Entrepreneurship & Studio Launch",
-          topics: [
-            "Garment costing, fabric sourcing & pricing models",
-            "Digital catalogue & client lookbook creation",
-            "Setting up your home atelier or boutique studio",
-          ],
-        },
-      ];
-    }
+  useEffect(() => {
+    let isMounted = true;
+    const loadMaterials = async () => {
+      setMaterialsLoading(true);
+      try {
+        const data = await fetchAllStudyMaterials(selectedCourse.id);
+        if (isMounted) {
+          setCourseMaterials(data);
+        }
+      } catch (err) {
+        console.warn("Failed to load course materials:", err);
+      } finally {
+        if (isMounted) setMaterialsLoading(false);
+      }
+    };
 
-    if (
-      selectedCourse.id === "shamail-muhammadiyya" ||
-      selectedCourse.title.includes("الشمائل") ||
-      selectedCourse.title.toLowerCase().includes("shamail")
-    ) {
-      return [
-        {
-          number: "01",
-          title: "Introduction to Hadith Methodology & al-Tirmidhi",
-          topics: [
-            "Biographical sketch of Imam al-Tirmidhi and his compilation",
-            "Significance of knowing the Prophetic Shamail",
-            "Chains of narration and classical commentaries",
-          ],
-        },
-        {
-          number: "02",
-          title: "Noble Physical Description & Comportment (الخلقة الشريفة)",
-          topics: [
-            "Features, blessed hair, seal of prophethood, and complexion",
-            "Manner of walking, sitting, speech, and laughter",
-            "Attire, turban, rings, footwear, and personal effects",
-          ],
-        },
-        {
-          number: "03",
-          title: "Daily Life, Etiquette & Nourishment (المعيشة والأخلاق)",
-          topics: [
-            "Food, drink, table manners, and hospitality",
-            "Fragrance, sleep habits, and nightly devotions",
-            "Interactions with family, companions, and the youth",
-          ],
-        },
-        {
-          number: "04",
-          title: "Sublime Character & Spiritual Emulation (الأخلاق والعبادة)",
-          topics: [
-            "Humility, compassion, modesty, and courage",
-            "Worship, supplications, fasting, and weeping in prayer",
-            "Final days, legacy, and practical daily emulation",
-          ],
-        },
-      ];
-    }
-
-    return [
-      {
-        number: "01",
-        title: "Foundations & Theory",
-        topics: ["Core principles", "Terminology and definitions", "Historical context"],
-      },
-      {
-        number: "02",
-        title: "Advanced Practical Application",
-        topics: ["Applied techniques", "Case studies", "Guided project work"],
-      },
-    ];
-  };
-
-  const syllabusModules = getSyllabusModules();
+    loadMaterials();
+    const handleUpdate = () => loadMaterials();
+    window.addEventListener("hanoon_study_materials_updated", handleUpdate);
+    window.addEventListener("hanoon_material_uploaded", handleUpdate);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("hanoon_study_materials_updated", handleUpdate);
+      window.removeEventListener("hanoon_material_uploaded", handleUpdate);
+    };
+  }, [selectedCourse.id]);
 
   return (
     <div className="w-full max-w-md mx-auto px-5 py-5 flex-1 flex flex-col justify-start space-y-5 select-none font-['Plus_Jakarta_Sans'] bg-purple-50/40">
@@ -396,79 +275,84 @@ export default function ScreenCourseDetails({
             </button>
           ))}
         </div>
-      ) : isHomeTuition ? (
-        /* HOME TUITION: Clean module overview cards without bullet points or secondary fluff */
-        <div className="space-y-3">
-          <div className="flex items-center justify-between px-1">
-            <div className="flex items-center gap-2">
-              <Layers className="w-4 h-4 text-purple-600" />
-              <h2 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
-                Curriculum Modules
-              </h2>
-            </div>
-            <span className="text-[10px] font-bold text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full">
-              Full Term
-            </span>
-          </div>
-
-          <div className="space-y-2">
-            {syllabusModules.map((mod) => (
-              <div
-                key={mod.number}
-                className="neumorphic-card p-3.5 rounded-2xl flex items-center justify-between"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-black text-purple-600 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-100">
-                    Module {mod.number}
-                  </span>
-                  <h3 className="text-xs font-extrabold text-slate-900">
-                    {mod.title}
-                  </h3>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
       ) : (
-        /* Non-Adaviyya / Non-HomeTuition: Structured Syllabus Modules */
+        /* Non-Athaviy Dynamic Curriculum Lessons & Materials (Purged all dummy modules) */
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-2">
               <Layers className="w-4 h-4 text-purple-600" />
               <h2 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
-                Detailed Course Syllabus
+                Curriculum Lessons & Materials
               </h2>
             </div>
             <span className="text-[10px] font-bold text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full">
-              Full Term
+              {materialsLoading
+                ? "Checking..."
+                : `${courseMaterials.length} Item${courseMaterials.length === 1 ? "" : "s"}`}
             </span>
           </div>
 
-          <div className="space-y-2.5">
-            {syllabusModules.map((mod) => (
-              <div
-                key={mod.number}
-                className="neumorphic-card p-4 rounded-2xl space-y-2"
-              >
-                <div className="flex items-center gap-2.5">
-                  <span className="text-xs font-black text-purple-600 bg-purple-50 px-2 py-0.5 rounded-lg border border-purple-100">
-                    Module {mod.number}
-                  </span>
-                  <h3 className="text-xs font-extrabold text-slate-900">
-                    {mod.title}
-                  </h3>
-                </div>
-                <ul className="space-y-1 pl-1">
-                  {mod.topics.map((topic, i) => (
-                    <li key={i} className="text-[11px] text-slate-600 flex items-start gap-1.5">
-                      <span className="text-purple-500 font-bold">•</span>
-                      <span>{topic}</span>
-                    </li>
-                  ))}
-                </ul>
+          {materialsLoading ? (
+            <div className="py-8 text-center text-xs text-purple-600 space-y-2">
+              <span className="inline-block w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
+              <p className="font-semibold text-slate-500">Loading lessons & materials...</p>
+            </div>
+          ) : courseMaterials.length === 0 ? (
+            <div className="py-8 px-4 rounded-2xl bg-white border border-purple-100 text-center space-y-2">
+              <div className="w-10 h-10 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mx-auto">
+                <BookOpen className="w-5 h-5 text-purple-600" />
               </div>
-            ))}
-          </div>
+              <h4 className="text-xs font-bold text-slate-800">No lessons uploaded yet</h4>
+              <p className="text-[11px] text-slate-500 max-w-xs mx-auto leading-relaxed">
+                Curriculum notes, lecture recordings, and syllabus materials will appear here once uploaded by your instructors.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {courseMaterials.map((mat) => (
+                <div
+                  key={mat.id}
+                  className="neumorphic-card p-3.5 rounded-2xl flex items-center justify-between gap-3"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 border border-purple-100">
+                      {mat.type === "link" ? (
+                        <Radio className="w-4 h-4 text-purple-600" />
+                      ) : (
+                        <BookOpen className="w-4 h-4 text-purple-600" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-xs font-extrabold text-slate-900 truncate">
+                        {mat.title}
+                      </h3>
+                      <p className="text-[10px] text-slate-500 font-medium">
+                        {mat.subject ? `${mat.subject} • ` : ""}
+                        {mat.type === "link" ? "Recorded Class Link" : "Official PDF Notes"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {isPaid ? (
+                    <a
+                      href={mat.file_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="py-1.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-95 text-white font-bold text-[11px] shrink-0 transition-all cursor-pointer flex items-center gap-1 shadow-xs"
+                    >
+                      <span>{mat.type === "link" ? "Watch" : "View"}</span>
+                      <ChevronRight className="w-3 h-3" />
+                    </a>
+                  ) : (
+                    <span className="py-1 px-2.5 rounded-xl bg-slate-100 text-slate-400 font-bold text-[10px] shrink-0 border border-slate-200 flex items-center gap-1">
+                      <Lock className="w-3 h-3 text-slate-400" />
+                      <span>Locked</span>
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

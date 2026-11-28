@@ -74,31 +74,22 @@ export default function StudentOfTheMonthWidget({
   const mySummary = data?.mySummary;
 
   return (
-    <div className="bg-white rounded-3xl border border-purple-100 shadow-sm p-4 sm:p-5 space-y-4 animate-fade-in relative overflow-hidden">
-      {/* Decorative top accent badge */}
+    <div className="bg-white rounded-3xl border border-purple-100 shadow-sm p-4 space-y-3.5 animate-fade-in relative overflow-hidden">
+      {/* Clean Minimal Header (No overlapping badges) */}
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-2xl bg-gradient-to-tr from-amber-400 to-amber-500 text-white flex items-center justify-center shadow-xs">
-            <Trophy className="w-4 h-4 text-white" />
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-amber-400/20 text-amber-700 border border-amber-400/30 flex items-center justify-center shrink-0">
+            <Trophy className="w-4 h-4 text-amber-600" />
           </div>
           <div>
-            <div className="flex items-center gap-1.5">
-              <h3 className="text-xs sm:text-sm font-black text-slate-900 tracking-tight">
-                🏆 Student of the Month
-              </h3>
-              <span className="text-[9.5px] font-black uppercase tracking-wider text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100">
-                {monthLabel}
-              </span>
-            </div>
+            <h3 className="text-xs sm:text-sm font-bold text-slate-900 tracking-tight">
+              Student of the Month
+            </h3>
             <p className="text-[10.5px] text-slate-500 font-medium">
-              Top Attendees • {courseName}
+              {monthLabel} • Top Attendees
             </p>
           </div>
         </div>
-
-        <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-          Leaderboard
-        </span>
       </div>
 
       {/* Top 3 Attendees List (Strict Privacy: Only Rank, Name, Percentage) */}
